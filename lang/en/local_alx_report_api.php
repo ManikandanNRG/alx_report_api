@@ -46,8 +46,8 @@ $string['maxrecords'] = 'Maximum records per request';
 $string['maxrecords_desc'] = 'Set the maximum number of records that can be returned in a single API request (1-1000)';
 $string['logretention'] = 'Log retention (days)';
 $string['logretention_desc'] = 'Number of days to keep API access logs (0 = keep forever)';
-$string['ratelimit'] = 'Rate limit (requests per hour)';
-$string['ratelimit_desc'] = 'Maximum number of API requests per hour per token (0 = no limit)';
+$string['ratelimit'] = 'Rate limit (requests per day)';
+$string['ratelimit_desc'] = 'Maximum number of API requests per day per user (0 = no limit)';
 $string['allow_get_method'] = 'Allow GET Method (Development Only)';
 $string['allow_get_method_desc'] = 'Enable GET method for API requests (for testing/development). DISABLE this for production use - only POST method should be used for security.';
 $string['apistatus'] = 'API Status';
@@ -121,4 +121,8 @@ $string['missingauthheader'] = 'Authorization header is required';
 $string['missingtoken'] = 'Authorization token is required';
 $string['invalidtokenformat'] = 'Invalid token format';
 $string['invalidtoken'] = 'Invalid or expired token';
-$string['expiredtoken'] = 'Token has expired'; 
+$string['expiredtoken'] = 'Token has expired';
+
+// Rate limiting and validation error messages
+$string['ratelimitexceeded'] = 'Daily rate limit exceeded';
+$string['limittoolarge'] = 'Requested limit is too large. Maximum allowed records per request is {$a}. Please reduce your limit parameter and try again.'; 

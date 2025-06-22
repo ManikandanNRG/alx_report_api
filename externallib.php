@@ -167,6 +167,38 @@ class local_alx_report_api_external extends external_api {
     }
 
     /**
+     * Check rate limiting for the user (global daily limit).
+     *
+     * @param int $userid User ID
+     * @throws moodle_exception If rate limit exceeded
+     */
+    private static function check_rate_limit($userid) {
+        global $DB;
+        
+        // Get rate limit from settings (default 100 requests per day)
+        $rate_limit = get_config('local_alx_report_api', 'rate_limit') ?: 100;
+        
+        // Calculate start of today (midnight)
+        $today_start = mktime(0, 0, 0, date('n'), date('j'), date('Y'));
+        
+        // Count requests from this user today
+        $request_count = 0;
+        if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
+            $request_count = $DB->count_records_select(
+                'local_alx_api_logs', 
+                'userid = ? AND timecreated >= ?', 
+                [$userid, $today_start]
+            );
+        }
+        
+        // Check if limit exceeded
+        if ($request_count >= $rate_limit) {
+            throw new moodle_exception('ratelimitexceeded', 'local_alx_report_api', '', null, 
+                "Daily rate limit exceeded. You have made {$request_count} requests today. Limit is {$rate_limit} requests per day. Try again tomorrow.");
+        }
+    }
+
+    /**
      * Get the service ID for alx_report_api_custom.
      *
      * @return int Service ID
@@ -272,9 +304,11 @@ class local_alx_report_api_external extends external_api {
             'offset' => $offset
         ]);
 
-        // 2. Validate limit
-        if ($params['limit'] > 1000) {
-            $params['limit'] = 1000;
+        // 2. Validate limit against configured maximum
+        $max_records = get_config('local_alx_report_api', 'max_records') ?: 1000;
+        if ($params['limit'] > $max_records) {
+            throw new moodle_exception('limittoolarge', 'local_alx_report_api', '', $max_records, 
+                "Requested limit ({$params['limit']}) exceeds maximum allowed ({$max_records}) records per request.");
         }
 
         // 3. Get current authenticated user
@@ -283,14 +317,27 @@ class local_alx_report_api_external extends external_api {
                 'User must be authenticated to access this service');
         }
 
-        // 4. Get company association for the authenticated user
+        // 4. Check rate limiting (global daily limit)
+        self::check_rate_limit($USER->id);
+
+        // 5. Check GET method restriction (if enabled in settings)
+        $allow_get_method = get_config('local_alx_report_api', 'allow_get_method');
+        if (!$allow_get_method && $_SERVER['REQUEST_METHOD'] === 'GET') {
+            throw new moodle_exception('invalidrequestmethod', 'local_alx_report_api', '', null, 
+                'GET method is disabled. Only POST method is allowed for security reasons. Enable GET method in plugin settings for development/testing.');
+        }
+
+        // 4. Check rate limiting (global daily limit)
+        self::check_rate_limit($USER->id);
+
+        // 5. Get company association for the authenticated user
         $companyid = self::get_user_company($USER->id);
         if (!$companyid) {
             throw new moodle_exception('nocompanyassociation', 'local_alx_report_api', '', null, 
                 'User is not associated with any company');
         }
 
-        // 5. Log API access
+        // 6. Log API access
         self::log_api_access($USER->id, $companyid, 'get_course_progress');
 
         // Get course progress data.
