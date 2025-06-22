@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<XMLDB PATH="local/alx_report_api/db" VERSION="20240115" COMMENT="XMLDB file for Moodle local/alx_report_api"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:noNamespaceSchemaLocation="../../../lib/xmldb/xmldb.xsd"
+>
+  <TABLES>
+    <TABLE NAME="local_alx_api_logs" COMMENT="API access logs for the ALX Report API plugin">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="userid" TYPE="int" LENGTH="10" NOTNULL="true" COMMENT="ID of the user making the API request"/>
+        <FIELD NAME="companyid" TYPE="int" LENGTH="10" NOTNULL="true" COMMENT="ID of the company the user belongs to"/>
+        <FIELD NAME="endpoint" TYPE="char" LENGTH="255" NOTNULL="true" COMMENT="API endpoint that was called"/>
+        <FIELD NAME="ipaddress" TYPE="char" LENGTH="45" NOTNULL="false" COMMENT="IP address of the request"/>
+        <FIELD NAME="useragent" TYPE="text" NOTNULL="false" COMMENT="User agent string"/>
+        <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" COMMENT="Timestamp when the request was made"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="userid" UNIQUE="false" FIELDS="userid"/>
+        <INDEX NAME="companyid" UNIQUE="false" FIELDS="companyid"/>
+        <INDEX NAME="timecreated" UNIQUE="false" FIELDS="timecreated"/>
+      </INDEXES>
+    </TABLE>
+    <TABLE NAME="local_alx_api_settings" COMMENT="Company-specific API settings for the ALX Report API plugin">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="companyid" TYPE="int" LENGTH="10" NOTNULL="true" COMMENT="ID of the company"/>
+        <FIELD NAME="setting_name" TYPE="char" LENGTH="100" NOTNULL="true" COMMENT="Name of the setting (field_email, course_10, etc.)"/>
+        <FIELD NAME="setting_value" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="0" COMMENT="Value of the setting (1=enabled, 0=disabled)"/>
+        <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" COMMENT="Timestamp when the setting was created"/>
+        <FIELD NAME="timemodified" TYPE="int" LENGTH="10" NOTNULL="true" COMMENT="Timestamp when the setting was last modified"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+        <KEY NAME="unique_company_setting" TYPE="unique" FIELDS="companyid,setting_name"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="companyid" UNIQUE="false" FIELDS="companyid"/>
+        <INDEX NAME="setting_name" UNIQUE="false" FIELDS="setting_name"/>
+      </INDEXES>
+    </TABLE>
+  </TABLES>
+</XMLDB> 
