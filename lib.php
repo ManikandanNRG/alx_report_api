@@ -381,4 +381,592 @@ function local_alx_report_api_get_enabled_courses($companyid) {
 function local_alx_report_api_is_course_enabled($companyid, $courseid) {
     $setting_name = 'course_' . $courseid;
     return local_alx_report_api_get_company_setting($companyid, $setting_name, 1) == 1;
+}
+
+// ===================================================================
+// COMBINED APPROACH: REPORTING TABLE & INCREMENTAL SYNC FUNCTIONS
+// ===================================================================
+
+/**
+ * Populate the reporting table with initial data from main database.
+ * This is run once during setup to create the baseline reporting data.
+ *
+ * @param int $companyid Specific company ID (0 for all companies)
+ * @param int $batch_size Number of records to process per batch
+ * @return array Status information with counts and timing
+ */
+function local_alx_report_api_populate_reporting_table($companyid = 0, $batch_size = 1000) {
+    global $DB;
+    
+    $start_time = time();
+    $total_processed = 0;
+    $total_inserted = 0;
+    $errors = [];
+    
+    try {
+        // Get companies to process
+        if ($companyid > 0) {
+            $companies = [$DB->get_record('company', ['id' => $companyid])];
+        } else {
+            $companies = $DB->get_records('company', null, 'id ASC');
+        }
+        
+        foreach ($companies as $company) {
+            if (!$company) continue;
+            
+            // Get enabled courses for this company
+            $enabled_courses = local_alx_report_api_get_enabled_courses($company->id);
+            if (empty($enabled_courses)) {
+                // If no courses enabled, enable all company courses
+                $company_courses = local_alx_report_api_get_company_courses($company->id);
+                $enabled_courses = array_column($company_courses, 'id');
+            }
+            
+            if (empty($enabled_courses)) {
+                continue; // Skip if no courses available
+            }
+            
+            // Build the complex query to get all user-course data
+            list($course_sql, $course_params) = $DB->get_in_or_equal($enabled_courses, SQL_PARAMS_NAMED, 'course');
+            
+            $sql = "
+                SELECT DISTINCT
+                    u.id as userid,
+                    u.firstname,
+                    u.lastname,
+                    u.email,
+                    c.id as courseid,
+                    c.fullname as coursename,
+                    COALESCE(cc.timecompleted, 
+                        (SELECT MAX(cmc.timemodified) 
+                         FROM {course_modules_completion} cmc
+                         JOIN {course_modules} cm ON cm.id = cmc.coursemoduleid
+                         WHERE cm.course = c.id AND cmc.userid = u.id AND cmc.completionstate = 1), 0) as timecompleted,
+                    COALESCE(cc.timestarted, ue.timecreated, 0) as timestarted,
+                    COALESCE(
+                        CASE 
+                            WHEN cc.timecompleted > 0 THEN 100.0
+                            ELSE COALESCE(
+                                (SELECT AVG(CASE WHEN cmc.completionstate = 1 THEN 100.0 ELSE 0.0 END)
+                                 FROM {course_modules_completion} cmc
+                                 JOIN {course_modules} cm ON cm.id = cmc.coursemoduleid
+                                 WHERE cm.course = c.id AND cmc.userid = u.id), 0.0)
+                        END, 0.0) as percentage,
+                    CASE 
+                        WHEN cc.timecompleted > 0 THEN 'completed'
+                        WHEN EXISTS(
+                            SELECT 1 FROM {course_modules_completion} cmc
+                            JOIN {course_modules} cm ON cm.id = cmc.coursemoduleid
+                            WHERE cm.course = c.id AND cmc.userid = u.id AND cmc.completionstate = 1
+                        ) THEN 'completed'
+                        WHEN EXISTS(
+                            SELECT 1 FROM {course_modules_completion} cmc
+                            JOIN {course_modules} cm ON cm.id = cmc.coursemoduleid
+                            WHERE cm.course = c.id AND cmc.userid = u.id AND cmc.completionstate > 0
+                        ) THEN 'in_progress'
+                        WHEN ue.id IS NOT NULL THEN 'not_started'
+                        ELSE 'not_enrolled'
+                    END as status
+                FROM {user} u
+                JOIN {company_users} cu ON cu.userid = u.id
+                JOIN {user_enrolments} ue ON ue.userid = u.id
+                JOIN {enrol} e ON e.id = ue.enrolid
+                JOIN {course} c ON c.id = e.courseid
+                LEFT JOIN {course_completions} cc ON cc.userid = u.id AND cc.course = c.id
+                WHERE cu.companyid = :companyid
+                    AND u.deleted = 0
+                    AND u.suspended = 0
+                    AND c.visible = 1
+                    AND c.id $course_sql
+                    AND ue.status = 0
+                ORDER BY u.id, c.id";
+            
+            $params = array_merge(['companyid' => $company->id], $course_params);
+            
+            // Process in batches
+            $offset = 0;
+            while (true) {
+                $records = $DB->get_records_sql($sql, $params, $offset, $batch_size);
+                if (empty($records)) {
+                    break;
+                }
+                
+                $batch_inserted = 0;
+                $current_time = time();
+                
+                foreach ($records as $record) {
+                    // Check if record already exists
+                    $existing = $DB->get_record('local_alx_api_reporting', [
+                        'userid' => $record->userid,
+                        'courseid' => $record->courseid,
+                        'companyid' => $company->id
+                    ]);
+                    
+                    if (!$existing) {
+                        // Insert new record
+                        $reporting_record = new stdClass();
+                        $reporting_record->userid = $record->userid;
+                        $reporting_record->companyid = $company->id;
+                        $reporting_record->courseid = $record->courseid;
+                        $reporting_record->firstname = $record->firstname;
+                        $reporting_record->lastname = $record->lastname;
+                        $reporting_record->email = $record->email;
+                        $reporting_record->coursename = $record->coursename;
+                        $reporting_record->timecompleted = $record->timecompleted;
+                        $reporting_record->timestarted = $record->timestarted;
+                        $reporting_record->percentage = $record->percentage;
+                        $reporting_record->status = $record->status;
+                        $reporting_record->last_updated = $current_time;
+                        $reporting_record->is_deleted = 0;
+                        $reporting_record->created_at = $current_time;
+                        $reporting_record->updated_at = $current_time;
+                        
+                        $DB->insert_record('local_alx_api_reporting', $reporting_record);
+                        $batch_inserted++;
+                    }
+                }
+                
+                $total_processed += count($records);
+                $total_inserted += $batch_inserted;
+                $offset += $batch_size;
+                
+                // Break if we got fewer records than batch size (end of data)
+                if (count($records) < $batch_size) {
+                    break;
+                }
+            }
+        }
+        
+    } catch (Exception $e) {
+        $errors[] = 'Population error: ' . $e->getMessage();
+    }
+    
+    $end_time = time();
+    $duration = $end_time - $start_time;
+    
+    return [
+        'success' => empty($errors),
+        'total_processed' => $total_processed,
+        'total_inserted' => $total_inserted,
+        'duration_seconds' => $duration,
+        'errors' => $errors,
+        'companies_processed' => count($companies ?? [])
+    ];
+}
+
+/**
+ * Update a single record in the reporting table.
+ *
+ * @param int $userid User ID
+ * @param int $companyid Company ID
+ * @param int $courseid Course ID
+ * @return bool True on success
+ */
+function local_alx_report_api_update_reporting_record($userid, $companyid, $courseid) {
+    global $DB;
+    
+    try {
+        // Get fresh data from main database
+        $sql = "
+            SELECT DISTINCT
+                u.id as userid,
+                u.firstname,
+                u.lastname,
+                u.email,
+                c.id as courseid,
+                c.fullname as coursename,
+                COALESCE(cc.timecompleted, 
+                    (SELECT MAX(cmc.timemodified) 
+                     FROM {course_modules_completion} cmc
+                     JOIN {course_modules} cm ON cm.id = cmc.coursemoduleid
+                     WHERE cm.course = c.id AND cmc.userid = u.id AND cmc.completionstate = 1), 0) as timecompleted,
+                COALESCE(cc.timestarted, ue.timecreated, 0) as timestarted,
+                COALESCE(
+                    CASE 
+                        WHEN cc.timecompleted > 0 THEN 100.0
+                        ELSE COALESCE(
+                            (SELECT AVG(CASE WHEN cmc.completionstate = 1 THEN 100.0 ELSE 0.0 END)
+                             FROM {course_modules_completion} cmc
+                             JOIN {course_modules} cm ON cm.id = cmc.coursemoduleid
+                             WHERE cm.course = c.id AND cmc.userid = u.id), 0.0)
+                    END, 0.0) as percentage,
+                CASE 
+                    WHEN cc.timecompleted > 0 THEN 'completed'
+                    WHEN EXISTS(
+                        SELECT 1 FROM {course_modules_completion} cmc
+                        JOIN {course_modules} cm ON cm.id = cmc.coursemoduleid
+                        WHERE cm.course = c.id AND cmc.userid = u.id AND cmc.completionstate = 1
+                    ) THEN 'completed'
+                    WHEN EXISTS(
+                        SELECT 1 FROM {course_modules_completion} cmc
+                        JOIN {course_modules} cm ON cm.id = cmc.coursemoduleid
+                        WHERE cm.course = c.id AND cmc.userid = u.id AND cmc.completionstate > 0
+                    ) THEN 'in_progress'
+                    WHEN ue.id IS NOT NULL THEN 'not_started'
+                    ELSE 'not_enrolled'
+                END as status
+            FROM {user} u
+            JOIN {company_users} cu ON cu.userid = u.id
+            LEFT JOIN {user_enrolments} ue ON ue.userid = u.id
+            LEFT JOIN {enrol} e ON e.id = ue.enrolid AND e.courseid = :courseid
+            JOIN {course} c ON c.id = :courseid2
+            LEFT JOIN {course_completions} cc ON cc.userid = u.id AND cc.course = c.id
+            WHERE u.id = :userid
+                AND cu.companyid = :companyid
+                AND u.deleted = 0
+                AND u.suspended = 0
+                AND c.visible = 1";
+        
+        $params = [
+            'userid' => $userid,
+            'companyid' => $companyid,
+            'courseid' => $courseid,
+            'courseid2' => $courseid
+        ];
+        
+        $record = $DB->get_record_sql($sql, $params);
+        
+        if (!$record) {
+            // User not found or not enrolled, mark as deleted
+            return local_alx_report_api_soft_delete_reporting_record($userid, $companyid, $courseid);
+        }
+        
+        // Check if reporting record exists
+        $existing = $DB->get_record('local_alx_api_reporting', [
+            'userid' => $userid,
+            'courseid' => $courseid,
+            'companyid' => $companyid
+        ]);
+        
+        $current_time = time();
+        
+        if ($existing) {
+            // Update existing record
+            $existing->firstname = $record->firstname;
+            $existing->lastname = $record->lastname;
+            $existing->email = $record->email;
+            $existing->coursename = $record->coursename;
+            $existing->timecompleted = $record->timecompleted;
+            $existing->timestarted = $record->timestarted;
+            $existing->percentage = $record->percentage;
+            $existing->status = $record->status;
+            $existing->last_updated = $current_time;
+            $existing->is_deleted = 0;
+            $existing->updated_at = $current_time;
+            
+            return $DB->update_record('local_alx_api_reporting', $existing);
+        } else {
+            // Insert new record
+            $reporting_record = new stdClass();
+            $reporting_record->userid = $record->userid;
+            $reporting_record->companyid = $companyid;
+            $reporting_record->courseid = $record->courseid;
+            $reporting_record->firstname = $record->firstname;
+            $reporting_record->lastname = $record->lastname;
+            $reporting_record->email = $record->email;
+            $reporting_record->coursename = $record->coursename;
+            $reporting_record->timecompleted = $record->timecompleted;
+            $reporting_record->timestarted = $record->timestarted;
+            $reporting_record->percentage = $record->percentage;
+            $reporting_record->status = $record->status;
+            $reporting_record->last_updated = $current_time;
+            $reporting_record->is_deleted = 0;
+            $reporting_record->created_at = $current_time;
+            $reporting_record->updated_at = $current_time;
+            
+            return $DB->insert_record('local_alx_api_reporting', $reporting_record);
+        }
+        
+    } catch (Exception $e) {
+        debugging('Error updating reporting record: ' . $e->getMessage(), DEBUG_DEVELOPER);
+        return false;
+    }
+}
+
+/**
+ * Soft delete a reporting record (mark as deleted instead of removing).
+ *
+ * @param int $userid User ID
+ * @param int $companyid Company ID
+ * @param int $courseid Course ID
+ * @return bool True on success
+ */
+function local_alx_report_api_soft_delete_reporting_record($userid, $companyid, $courseid) {
+    global $DB;
+    
+    $existing = $DB->get_record('local_alx_api_reporting', [
+        'userid' => $userid,
+        'courseid' => $courseid,
+        'companyid' => $companyid
+    ]);
+    
+    if ($existing) {
+        $existing->is_deleted = 1;
+        $existing->last_updated = time();
+        $existing->updated_at = time();
+        return $DB->update_record('local_alx_api_reporting', $existing);
+    }
+    
+    return true; // Already doesn't exist
+}
+
+/**
+ * Sync user data across all their courses for a specific company.
+ *
+ * @param int $userid User ID
+ * @param int $companyid Company ID
+ * @return int Number of records updated
+ */
+function local_alx_report_api_sync_user_data($userid, $companyid) {
+    global $DB;
+    
+    $updated_count = 0;
+    
+    // Get all courses for this company
+    $enabled_courses = local_alx_report_api_get_enabled_courses($companyid);
+    
+    foreach ($enabled_courses as $courseid) {
+        if (local_alx_report_api_update_reporting_record($userid, $companyid, $courseid)) {
+            $updated_count++;
+        }
+    }
+    
+    return $updated_count;
+}
+
+/**
+ * Get sync status for a company and token combination.
+ *
+ * @param int $companyid Company ID
+ * @param string $token API token
+ * @return object|false Sync status object or false if not found
+ */
+function local_alx_report_api_get_sync_status($companyid, $token) {
+    global $DB;
+    
+    $token_hash = hash('sha256', $token);
+    
+    return $DB->get_record('local_alx_api_sync_status', [
+        'companyid' => $companyid,
+        'token_hash' => $token_hash
+    ]);
+}
+
+/**
+ * Update sync status after an API call.
+ *
+ * @param int $companyid Company ID
+ * @param string $token API token
+ * @param int $records_count Number of records returned
+ * @param string $status Sync status (success/failed)
+ * @param string $error_message Error message if failed
+ * @return bool True on success
+ */
+function local_alx_report_api_update_sync_status($companyid, $token, $records_count, $status = 'success', $error_message = null) {
+    global $DB;
+    
+    $token_hash = hash('sha256', $token);
+    $current_time = time();
+    
+    $existing = $DB->get_record('local_alx_api_sync_status', [
+        'companyid' => $companyid,
+        'token_hash' => $token_hash
+    ]);
+    
+    if ($existing) {
+        // Update existing record
+        $existing->last_sync_timestamp = $current_time;
+        $existing->last_sync_records = $records_count;
+        $existing->last_sync_status = $status;
+        $existing->last_sync_error = $error_message;
+        $existing->total_syncs = $existing->total_syncs + 1;
+        $existing->updated_at = $current_time;
+        
+        return $DB->update_record('local_alx_api_sync_status', $existing);
+    } else {
+        // Create new record
+        $sync_status = new stdClass();
+        $sync_status->companyid = $companyid;
+        $sync_status->token_hash = $token_hash;
+        $sync_status->last_sync_timestamp = $current_time;
+        $sync_status->sync_mode = 'auto';
+        $sync_status->sync_window_hours = 24;
+        $sync_status->last_sync_records = $records_count;
+        $sync_status->last_sync_status = $status;
+        $sync_status->last_sync_error = $error_message;
+        $sync_status->total_syncs = 1;
+        $sync_status->created_at = $current_time;
+        $sync_status->updated_at = $current_time;
+        
+        return $DB->insert_record('local_alx_api_sync_status', $sync_status);
+    }
+}
+
+/**
+ * Determine sync mode for a company/token combination.
+ *
+ * @param int $companyid Company ID
+ * @param string $token API token
+ * @return string Sync mode: 'full', 'incremental', or 'first'
+ */
+function local_alx_report_api_determine_sync_mode($companyid, $token) {
+    $sync_status = local_alx_report_api_get_sync_status($companyid, $token);
+    
+    if (!$sync_status) {
+        return 'first'; // First time sync
+    }
+    
+    if ($sync_status->sync_mode === 'disabled') {
+        return 'full'; // Always full sync if disabled
+    }
+    
+    if ($sync_status->last_sync_status === 'failed') {
+        return 'full'; // Full sync after failure
+    }
+    
+    // Check if last sync was too long ago
+    $sync_window_seconds = $sync_status->sync_window_hours * 3600;
+    $time_since_last_sync = time() - $sync_status->last_sync_timestamp;
+    
+    if ($time_since_last_sync > $sync_window_seconds) {
+        return 'full'; // Full sync if too much time passed
+    }
+    
+    return 'incremental'; // Normal incremental sync
+}
+
+/**
+ * Get cached data.
+ *
+ * @param string $cache_key Cache key
+ * @param int $companyid Company ID
+ * @return mixed Cached data or false if not found/expired
+ */
+function local_alx_report_api_cache_get($cache_key, $companyid) {
+    global $DB;
+    
+    $cache_record = $DB->get_record('local_alx_api_cache', [
+        'cache_key' => $cache_key,
+        'companyid' => $companyid
+    ]);
+    
+    if (!$cache_record) {
+        return false;
+    }
+    
+    // Check if expired
+    if ($cache_record->expires_at < time()) {
+        // Delete expired cache
+        $DB->delete_records('local_alx_api_cache', ['id' => $cache_record->id]);
+        return false;
+    }
+    
+    // Update hit count and last accessed
+    $cache_record->hit_count++;
+    $cache_record->last_accessed = time();
+    $DB->update_record('local_alx_api_cache', $cache_record);
+    
+    return json_decode($cache_record->cache_data, true);
+}
+
+/**
+ * Set cached data.
+ *
+ * @param string $cache_key Cache key
+ * @param int $companyid Company ID
+ * @param mixed $data Data to cache
+ * @param int $ttl Time to live in seconds (default: 1 hour)
+ * @return bool True on success
+ */
+function local_alx_report_api_cache_set($cache_key, $companyid, $data, $ttl = 3600) {
+    global $DB;
+    
+    $current_time = time();
+    $expires_at = $current_time + $ttl;
+    
+    $existing = $DB->get_record('local_alx_api_cache', [
+        'cache_key' => $cache_key,
+        'companyid' => $companyid
+    ]);
+    
+    if ($existing) {
+        // Update existing cache
+        $existing->cache_data = json_encode($data);
+        $existing->cache_timestamp = $current_time;
+        $existing->expires_at = $expires_at;
+        $existing->last_accessed = $current_time;
+        
+        return $DB->update_record('local_alx_api_cache', $existing);
+    } else {
+        // Create new cache entry
+        $cache_record = new stdClass();
+        $cache_record->cache_key = $cache_key;
+        $cache_record->companyid = $companyid;
+        $cache_record->cache_data = json_encode($data);
+        $cache_record->cache_timestamp = $current_time;
+        $cache_record->expires_at = $expires_at;
+        $cache_record->hit_count = 0;
+        $cache_record->last_accessed = $current_time;
+        
+        return $DB->insert_record('local_alx_api_cache', $cache_record);
+    }
+}
+
+/**
+ * Clean up expired cache entries.
+ *
+ * @param int $max_age_hours Maximum age in hours (default: 24)
+ * @return int Number of entries cleaned up
+ */
+function local_alx_report_api_cache_cleanup($max_age_hours = 24) {
+    global $DB;
+    
+    $cutoff_time = time() - ($max_age_hours * 3600);
+    
+    return $DB->delete_records_select('local_alx_api_cache', 'expires_at < ?', [$cutoff_time]);
+}
+
+/**
+ * Get reporting table statistics.
+ *
+ * @param int $companyid Company ID (0 for all companies)
+ * @return array Statistics array
+ */
+function local_alx_report_api_get_reporting_stats($companyid = 0) {
+    global $DB;
+    
+    $stats = [];
+    
+    if ($companyid > 0) {
+        $where = 'companyid = ?';
+        $params = [$companyid];
+    } else {
+        $where = '1=1';
+        $params = [];
+    }
+    
+    // Total records
+    $stats['total_records'] = $DB->count_records_select('local_alx_api_reporting', $where, $params);
+    
+    // Active records (not deleted)
+    $stats['active_records'] = $DB->count_records_select('local_alx_api_reporting', 
+        $where . ' AND is_deleted = 0', $params);
+    
+    // Deleted records
+    $stats['deleted_records'] = $DB->count_records_select('local_alx_api_reporting', 
+        $where . ' AND is_deleted = 1', $params);
+    
+    // Completed courses
+    $stats['completed_courses'] = $DB->count_records_select('local_alx_api_reporting', 
+        $where . ' AND status = ? AND is_deleted = 0', array_merge($params, ['completed']));
+    
+    // In progress courses
+    $stats['in_progress_courses'] = $DB->count_records_select('local_alx_api_reporting', 
+        $where . ' AND status = ? AND is_deleted = 0', array_merge($params, ['in_progress']));
+    
+    // Last update time
+    $last_update = $DB->get_field_select('local_alx_api_reporting', 'MAX(last_updated)', $where, $params);
+    $stats['last_update'] = $last_update ?: 0;
+    
+    return $stats;
 } 

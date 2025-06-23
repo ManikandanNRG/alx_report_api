@@ -25,7 +25,7 @@
 defined('MOODLE_INTERNAL') || die();
 
 $plugin->component = 'local_alx_report_api';
-$plugin->version = 2024011526; // YYYYMMDDHH - Implemented rate limiting and max records validation
+$plugin->version = 2024011530; // YYYYMMDDHH - Combined approach: separate reporting table + incremental sync
 $plugin->requires = 2022112800; // Moodle 4.2.6
 $plugin->maturity = MATURITY_STABLE;
 $plugin->release = '1.0.0'; 

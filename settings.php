@@ -42,6 +42,14 @@ if ($hassiteconfig) {
         'moodle/site:config'
     ));
 
+    // Add monitoring dashboard as a separate admin page
+    $ADMIN->add('localplugins', new admin_externalpage(
+        'local_alx_report_api_monitoring',
+        'ALX Report API - Monitoring Dashboard',
+        new moodle_url('/local/alx_report_api/monitoring_dashboard.php'),
+        'moodle/site:config'
+    ));
+
     // Plugin configuration settings.
     $settings->add(new admin_setting_heading(
         'local_alx_report_api/generalheading',

@@ -63,6 +63,20 @@ if ($action === 'save' && $companyid && confirm_sesskey()) {
         local_alx_report_api_set_company_setting($companyid, $course_setting, $value);
     }
     
+    // Save incremental sync settings
+    $sync_settings = [
+        'sync_mode', 'sync_window_hours', 'cache_enabled', 'cache_ttl_minutes'
+    ];
+    
+    foreach ($sync_settings as $setting) {
+        if ($setting === 'sync_mode') {
+            $value = optional_param($setting, 'auto', PARAM_ALPHA);
+        } else {
+            $value = optional_param($setting, 0, PARAM_INT);
+        }
+        local_alx_report_api_set_company_setting($companyid, $setting, $value);
+    }
+    
     redirect($PAGE->url->out(false, ['companyid' => $companyid]), 
              get_string('settings_saved', 'local_alx_report_api'), null, \core\output\notification::NOTIFY_SUCCESS);
 }
@@ -444,6 +458,101 @@ if ($companyid && isset($companies[$companyid])) {
         echo '<h4 class="section-title">📚 ' . get_string('course_controls', 'local_alx_report_api') . '</h4>';
         echo '<div class="alert alert-info">ℹ️ ' . get_string('no_courses_for_company', 'local_alx_report_api') . '</div>';
     }
+    
+    // Incremental Sync Settings
+    echo '<h4 class="section-title">🔄 Incremental Sync Settings</h4>';
+    echo '<p class="text-muted">Configure how the API handles incremental updates for this company.</p>';
+    
+    echo '<div class="sync-settings-grid">';
+    
+    // Sync Mode
+    $sync_mode = isset($current_settings['sync_mode']) ? $current_settings['sync_mode'] : 'auto';
+    echo '<div class="setting-item">';
+    echo '<label for="sync_mode"><strong>Sync Mode:</strong></label>';
+    echo '<select name="sync_mode" id="sync_mode" class="form-control">';
+    echo '<option value="auto"' . ($sync_mode === 'auto' ? ' selected' : '') . '>Auto (Recommended)</option>';
+    echo '<option value="incremental"' . ($sync_mode === 'incremental' ? ' selected' : '') . '>Always Incremental</option>';
+    echo '<option value="full"' . ($sync_mode === 'full' ? ' selected' : '') . '>Always Full Sync</option>';
+    echo '<option value="disabled"' . ($sync_mode === 'disabled' ? ' selected' : '') . '>Disabled</option>';
+    echo '</select>';
+    echo '<small class="form-text text-muted">Auto mode switches between incremental and full sync based on conditions.</small>';
+    echo '</div>';
+    
+    // Sync Window Hours
+    $sync_window_hours = isset($current_settings['sync_window_hours']) ? $current_settings['sync_window_hours'] : 24;
+    echo '<div class="setting-item">';
+    echo '<label for="sync_window_hours"><strong>Sync Window (Hours):</strong></label>';
+    echo '<input type="number" name="sync_window_hours" id="sync_window_hours" class="form-control" value="' . $sync_window_hours . '" min="1" max="168">';
+    echo '<small class="form-text text-muted">Time window for incremental sync. If last sync was longer ago, full sync will be performed.</small>';
+    echo '</div>';
+    
+    // Cache Enabled
+    $cache_enabled = isset($current_settings['cache_enabled']) ? $current_settings['cache_enabled'] : 1;
+    echo '<div class="setting-item">';
+    echo '<input type="checkbox" name="cache_enabled" value="1" id="cache_enabled" ' . ($cache_enabled ? 'checked' : '') . '>';
+    echo '<label for="cache_enabled"><strong>Enable Caching</strong></label>';
+    echo '<small class="form-text text-muted">Cache API responses to improve performance.</small>';
+    echo '</div>';
+    
+    // Cache TTL Minutes
+    $cache_ttl_minutes = isset($current_settings['cache_ttl_minutes']) ? $current_settings['cache_ttl_minutes'] : 30;
+    echo '<div class="setting-item">';
+    echo '<label for="cache_ttl_minutes"><strong>Cache Duration (Minutes):</strong></label>';
+    echo '<input type="number" name="cache_ttl_minutes" id="cache_ttl_minutes" class="form-control" value="' . $cache_ttl_minutes . '" min="5" max="1440">';
+    echo '<small class="form-text text-muted">How long to cache API responses (5-1440 minutes).</small>';
+    echo '</div>';
+    
+    echo '</div>';
+    
+    // Add CSS for sync settings
+    echo '<style>
+    .sync-settings-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 20px;
+        margin: 20px 0;
+        padding: 20px;
+        background: #f8f9fa;
+        border-radius: 8px;
+        border: 2px solid #e9ecef;
+    }
+    
+    .setting-item {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+    
+    .setting-item label {
+        font-weight: 600;
+        color: #495057;
+        margin-bottom: 5px;
+    }
+    
+    .setting-item input[type="checkbox"] {
+        width: auto;
+        margin-right: 10px;
+    }
+    
+    .setting-item input[type="checkbox"] + label {
+        display: flex;
+        align-items: center;
+        margin-bottom: 0;
+    }
+    
+    .setting-item .form-control {
+        padding: 8px 12px;
+        border: 1px solid #ced4da;
+        border-radius: 4px;
+        font-size: 14px;
+    }
+    
+    .setting-item .form-text {
+        font-size: 12px;
+        color: #6c757d;
+        margin-top: 5px;
+    }
+    </style>';
     
     // Action buttons
     echo '<div class="form-actions">';

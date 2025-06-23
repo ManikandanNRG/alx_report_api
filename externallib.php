@@ -391,10 +391,10 @@ class local_alx_report_api_external extends external_api {
     }
 
     /**
-     * Get course progress data for all users in a company.
+     * Get course progress data for a company using reporting table and incremental sync.
      *
      * @param int $companyid Company ID
-     * @param int $limit Number of records to return
+     * @param int $limit Maximum number of records to return
      * @param int $offset Offset for pagination
      * @return array Course progress data
      */
@@ -402,13 +402,29 @@ class local_alx_report_api_external extends external_api {
         global $DB;
 
         // Debug logging
-        self::debug_log("=== API Request Start ===");
+        self::debug_log("=== API Request Start (Combined Approach) ===");
         self::debug_log("Company ID: $companyid, Limit: $limit, Offset: $offset");
+
+        // Get the API token for sync tracking
+        $token = self::get_authorization_token();
+        $token_hash = hash('sha256', $token);
+        
+        // Determine sync mode (full, incremental, or first)
+        $sync_mode = local_alx_report_api_determine_sync_mode($companyid, $token);
+        self::debug_log("Sync mode determined: $sync_mode");
+        
+        // Check cache first for incremental syncs
+        $cache_key = "api_response_{$companyid}_{$limit}_{$offset}_{$sync_mode}";
+        if ($sync_mode === 'incremental') {
+            $cached_data = local_alx_report_api_cache_get($cache_key, $companyid);
+            if ($cached_data !== false) {
+                self::debug_log("Cache hit - returning cached data");
+                return $cached_data;
+            }
+        }
 
         // Get enabled courses for this company
         $enabled_courses = local_alx_report_api_get_enabled_courses($companyid);
-        
-        // Debug: Log enabled courses
         self::debug_log("Enabled courses for company $companyid: " . implode(',', $enabled_courses));
         
         // If no courses are enabled, check if any settings exist for this company
@@ -422,17 +438,15 @@ class local_alx_report_api_external extends external_api {
                 }
             }
             
-            // If no course settings exist, show all courses (default behavior)
-            // If course settings exist but none are enabled, show no courses
             if ($has_course_settings) {
                 self::debug_log("Course settings exist but no courses enabled - returning empty array");
-                return []; // No courses enabled, return empty array
-            } else {
-                self::debug_log("No course settings found - using default behavior (all courses)");
+                // Update sync status even for empty results
+                local_alx_report_api_update_sync_status($companyid, $token, 0, 'success');
+                return [];
             }
         }
 
-        // Get company field settings once at the beginning
+        // Get company field settings
         $field_settings = [];
         $field_names = ['userid', 'firstname', 'lastname', 'email', 'courseid', 'coursename', 
                        'timecompleted', 'timecompleted_unix', 'timestarted', 'timestarted_unix', 
@@ -441,210 +455,103 @@ class local_alx_report_api_external extends external_api {
         foreach ($field_names as $field) {
             $field_settings[$field] = local_alx_report_api_get_company_setting($companyid, 'field_' . $field, 1);
         }
-        
-        // Debug: Log field settings
         self::debug_log("Field settings for company $companyid: " . json_encode($field_settings));
 
-        $sql = "
-            SELECT 
-                u.id as userid,
-                u.firstname,
-                u.lastname,
-                u.email,
-                c.id as courseid,
-                c.fullname as coursename,
-                COALESCE(cc.timecompleted, 
-                    (SELECT MAX(cmc.timemodified) 
-                     FROM {course_modules_completion} cmc
-                     JOIN {course_modules} cm ON cm.id = cmc.coursemoduleid
-                     WHERE cm.course = c.id AND cmc.userid = u.id AND cmc.completionstate = 1), 0) as timecompleted,
-                COALESCE(cc.timestarted, ue.timecreated, 0) as timestarted,
-                CASE 
-                    WHEN cc.timecompleted > 0 THEN 100.0
-                    WHEN EXISTS(
-                        SELECT 1 FROM {course_modules_completion} cmc
-                        JOIN {course_modules} cm ON cm.id = cmc.coursemoduleid
-                        WHERE cm.course = c.id AND cmc.userid = u.id AND cmc.completionstate = 1
-                    ) THEN 100.0
-                    WHEN EXISTS(
-                        SELECT 1 FROM {course_modules_completion} cmc
-                        JOIN {course_modules} cm ON cm.id = cmc.coursemoduleid
-                        WHERE cm.course = c.id AND cmc.userid = u.id AND cmc.completionstate > 0
-                    ) THEN 
-                        COALESCE(
-                            (SELECT ROUND(AVG(CASE WHEN cmc.completionstate > 0 THEN 100.0 ELSE 0.0 END), 1)
-                             FROM {course_modules_completion} cmc
-                             JOIN {course_modules} cm ON cm.id = cmc.coursemoduleid
-                             WHERE cm.course = c.id AND cmc.userid = u.id), 0
-                        )
-                    WHEN ue.id IS NOT NULL THEN 0.0
-                    ELSE 0.0
-                END as percentage,
-                CASE 
-                    WHEN cc.timecompleted > 0 THEN 'completed'
-                    WHEN EXISTS(
-                        SELECT 1 FROM {course_modules_completion} cmc
-                        JOIN {course_modules} cm ON cm.id = cmc.coursemoduleid
-                        WHERE cm.course = c.id AND cmc.userid = u.id AND cmc.completionstate = 1
-                    ) THEN 'completed'
-                    WHEN EXISTS(
-                        SELECT 1 FROM {course_modules_completion} cmc
-                        JOIN {course_modules} cm ON cm.id = cmc.coursemoduleid
-                        WHERE cm.course = c.id AND cmc.userid = u.id AND cmc.completionstate > 0
-                    ) THEN 'in_progress'
-                    WHEN ue.id IS NOT NULL THEN 'not_started'
-                    ELSE 'not_enrolled'
-                END as status
-            FROM {user} u
-            JOIN {company_users} cu ON cu.userid = u.id
-            JOIN {company_course} ccourse ON ccourse.companyid = cu.companyid
-            JOIN {course} c ON c.id = ccourse.courseid
-            LEFT JOIN {user_enrolments} ue ON ue.userid = u.id
-            LEFT JOIN {enrol} e ON e.id = ue.enrolid AND e.courseid = c.id
-            LEFT JOIN {course_completions} cc ON cc.userid = u.id AND cc.course = c.id
-            WHERE cu.companyid = :companyid
-                AND u.deleted = 0
-                AND u.suspended = 0
-                AND c.visible = 1";
-
-        $params = ['companyid' => $companyid];
-        
-        // Add course filtering if specific courses are enabled
-        if (!empty($enabled_courses)) {
-            list($course_sql, $course_params) = $DB->get_in_or_equal($enabled_courses, SQL_PARAMS_NAMED, 'course');
-            $sql .= " AND c.id $course_sql";
-            $params = array_merge($params, $course_params);
-            
-            // Debug: Log the course filtering SQL
-            self::debug_log("Course filter SQL: AND c.id $course_sql");
-            self::debug_log("Course params: " . json_encode($course_params));
-        }
-        
-        // SOLUTION: Execute separate queries for each course to ensure both appear
+        // Build query based on sync mode
         $records = [];
         
-        if (!empty($enabled_courses)) {
-            $per_course_limit = max(1, floor($limit / count($enabled_courses)));
-            self::debug_log("Per course limit: $per_course_limit for " . count($enabled_courses) . " courses");
-            
-            foreach ($enabled_courses as $courseid) {
-                self::debug_log("Processing course: $courseid");
+        try {
+            if ($sync_mode === 'incremental') {
+                // Get sync status to determine last sync time
+                $sync_status = local_alx_report_api_get_sync_status($companyid, $token);
+                $last_sync_time = $sync_status ? $sync_status->last_sync_timestamp : 0;
                 
-                // Build clean SQL - ONLY show users who are ACTUALLY ENROLLED in the course
-                $course_sql = "
-                SELECT DISTINCT
-                    u.id as userid,
-                    u.firstname,
-                    u.lastname,
-                    u.email,
-                    c.id as courseid,
-                    c.fullname as coursename,
-                    COALESCE(cc.timecompleted, 
-                        (SELECT MAX(cmc.timemodified) 
-                         FROM {course_modules_completion} cmc
-                         JOIN {course_modules} cm ON cm.id = cmc.coursemoduleid
-                         WHERE cm.course = c.id AND cmc.userid = u.id AND cmc.completionstate = 1), 0) as timecompleted,
-                    COALESCE(cc.timestarted, ue.timecreated, 0) as timestarted,
-                    CASE 
-                        WHEN cc.timecompleted > 0 THEN 100.0
-                        WHEN EXISTS(
-                            SELECT 1 FROM {course_modules_completion} cmc
-                            JOIN {course_modules} cm ON cm.id = cmc.coursemoduleid
-                            WHERE cm.course = c.id AND cmc.userid = u.id AND cmc.completionstate = 1
-                        ) THEN 100.0
-                        WHEN EXISTS(
-                            SELECT 1 FROM {course_modules_completion} cmc
-                            JOIN {course_modules} cm ON cm.id = cmc.coursemoduleid
-                            WHERE cm.course = c.id AND cmc.userid = u.id AND cmc.completionstate > 0
-                        ) THEN 
-                            COALESCE(
-                                (SELECT ROUND(AVG(CASE WHEN cmc.completionstate > 0 THEN 100.0 ELSE 0.0 END), 1)
-                                 FROM {course_modules_completion} cmc
-                                 JOIN {course_modules} cm ON cm.id = cmc.coursemoduleid
-                                 WHERE cm.course = c.id AND cmc.userid = u.id), 0
-                            )
-                        ELSE 0.0
-                    END as percentage,
-                    CASE 
-                        WHEN cc.timecompleted > 0 THEN 'completed'
-                        WHEN EXISTS(
-                            SELECT 1 FROM {course_modules_completion} cmc
-                            JOIN {course_modules} cm ON cm.id = cmc.coursemoduleid
-                            WHERE cm.course = c.id AND cmc.userid = u.id AND cmc.completionstate = 1
-                        ) THEN 'completed'
-                        WHEN EXISTS(
-                            SELECT 1 FROM {course_modules_completion} cmc
-                            JOIN {course_modules} cm ON cm.id = cmc.coursemoduleid
-                            WHERE cm.course = c.id AND cmc.userid = u.id AND cmc.completionstate > 0
-                        ) THEN 'in_progress'
-                        ELSE 'not_started'
-                    END as status
-                FROM {user} u
-                JOIN {company_users} cu ON cu.userid = u.id
-                JOIN {user_enrolments} ue ON ue.userid = u.id
-                JOIN {enrol} e ON e.id = ue.enrolid
-                JOIN {course} c ON c.id = e.courseid
-                LEFT JOIN {course_completions} cc ON cc.userid = u.id AND cc.course = c.id
-                WHERE cu.companyid = :companyid
-                    AND u.deleted = 0
-                    AND u.suspended = 0
-                    AND c.visible = 1
-                    AND c.id = :courseid
-                    AND ue.status = 0
-                ORDER BY u.lastname, u.firstname";
+                self::debug_log("Incremental sync - last sync time: " . date('Y-m-d H:i:s', $last_sync_time));
                 
-                $course_params = [
+                // Query only changed records since last sync
+                $sql = "SELECT *
+                        FROM {local_alx_api_reporting}
+                        WHERE companyid = :companyid
+                            AND is_deleted = 0
+                            AND last_updated > :last_sync_time";
+                
+                $params = [
                     'companyid' => $companyid,
-                    'courseid' => $courseid
+                    'last_sync_time' => $last_sync_time
                 ];
                 
-                self::debug_log("Executing query for course $courseid with limit $per_course_limit");
-                self::debug_log("Course SQL params: " . json_encode($course_params));
+                // Add course filtering if enabled courses specified
+                if (!empty($enabled_courses)) {
+                    list($course_sql, $course_params) = $DB->get_in_or_equal($enabled_courses, SQL_PARAMS_NAMED, 'course');
+                    $sql .= " AND courseid $course_sql";
+                    $params = array_merge($params, $course_params);
+                }
                 
-                $course_records = $DB->get_records_sql($course_sql, $course_params, 0, $per_course_limit);
-                self::debug_log("Found " . count($course_records) . " ACTUAL records for course $courseid");
+                $sql .= " ORDER BY last_updated DESC, userid, courseid";
                 
-                // Add course records to main results
-                foreach ($course_records as $record) {
-                    $records[] = $record;
+                self::debug_log("Incremental SQL: " . $sql);
+                $records = $DB->get_records_sql($sql, $params, $offset, $limit);
+                
+            } else {
+                // Full sync or first sync - get all data from reporting table
+                self::debug_log("Full/First sync - querying all data from reporting table");
+                
+                $sql = "SELECT *
+                        FROM {local_alx_api_reporting}
+                        WHERE companyid = :companyid
+                            AND is_deleted = 0";
+                
+                $params = ['companyid' => $companyid];
+                
+                // Add course filtering if enabled courses specified
+                if (!empty($enabled_courses)) {
+                    list($course_sql, $course_params) = $DB->get_in_or_equal($enabled_courses, SQL_PARAMS_NAMED, 'course');
+                    $sql .= " AND courseid $course_sql";
+                    $params = array_merge($params, $course_params);
+                }
+                
+                $sql .= " ORDER BY userid, courseid";
+                
+                self::debug_log("Full sync SQL: " . $sql);
+                $records = $DB->get_records_sql($sql, $params, $offset, $limit);
+            }
+            
+            self::debug_log("Found " . count($records) . " records from reporting table");
+            
+            // If no records found and this is not the first sync, fall back to full sync
+            if (empty($records) && $sync_mode === 'incremental') {
+                self::debug_log("No incremental changes found - checking if reporting table is populated");
+                
+                $total_records = $DB->count_records('local_alx_api_reporting', [
+                    'companyid' => $companyid,
+                    'is_deleted' => 0
+                ]);
+                
+                if ($total_records === 0) {
+                    self::debug_log("Reporting table is empty - falling back to complex query");
+                    // Fall back to the original complex query if reporting table is empty
+                    return self::get_company_course_progress_fallback($companyid, $limit, $offset);
                 }
             }
-        } else {
-            // Default behavior when no specific courses are enabled
-            $sql .= " ORDER BY c.id, u.lastname, u.firstname";
-            $records = $DB->get_records_sql($sql, $params, $offset, $limit);
+            
+        } catch (Exception $e) {
+            self::debug_log("Error querying reporting table: " . $e->getMessage());
+            // Fall back to original complex query on error
+            local_alx_report_api_update_sync_status($companyid, $token, 0, 'failed', $e->getMessage());
+            return self::get_company_course_progress_fallback($companyid, $limit, $offset);
         }
-        
-        // Debug: Log final results
-        self::debug_log("Combined results from all courses: " . count($records) . " records");
-        
-        // Debug: Log record count and course IDs found
-        self::debug_log("Found " . count($records) . " database records (with limit $limit)");
-        $found_courses = [];
-        foreach ($records as $record) {
-            if (!in_array($record->courseid, $found_courses)) {
-                $found_courses[] = $record->courseid;
-            }
-        }
-        self::debug_log("Courses found in results: " . implode(',', $found_courses));
 
+        // Process records and build response
         $result = [];
-        $record_index = 0;
         
         foreach ($records as $record) {
-            $record_index++;
-            
-            // Debug: Log processing of each record
-            self::debug_log("Processing record $record_index: User {$record->userid} in Course {$record->courseid}");
-            
-            // Convert Unix timestamps to readable format (or empty string if 0)
+            // Convert Unix timestamps to readable format
             $timecompleted = $record->timecompleted > 0 ? date('Y-m-d H:i:s', $record->timecompleted) : '';
             $timestarted = $record->timestarted > 0 ? date('Y-m-d H:i:s', $record->timestarted) : '';
             
-            // Build response dynamically based on company-specific settings
+            // Build response dynamically based on company-specific field settings
             $response_item = [];
             
-            // Check each field setting and include only enabled fields for this company
             if ($field_settings['userid']) {
                 $response_item['userid'] = (int)$record->userid;
             }
@@ -667,13 +574,13 @@ class local_alx_report_api_external extends external_api {
                 $response_item['timecompleted'] = $timecompleted;
             }
             if ($field_settings['timecompleted_unix']) {
-                $response_item['timecompleted_unix'] = (int)($record->timecompleted ?? 0);
+                $response_item['timecompleted_unix'] = (int)$record->timecompleted;
             }
             if ($field_settings['timestarted']) {
                 $response_item['timestarted'] = $timestarted;
             }
             if ($field_settings['timestarted_unix']) {
-                $response_item['timestarted_unix'] = (int)($record->timestarted ?? 0);
+                $response_item['timestarted_unix'] = (int)$record->timestarted;
             }
             if ($field_settings['percentage']) {
                 $response_item['percentage'] = (float)$record->percentage;
@@ -682,15 +589,163 @@ class local_alx_report_api_external extends external_api {
                 $response_item['status'] = $record->status;
             }
             
-            // Debug: Log which fields are included for this record
-            self::debug_log("Record $record_index fields included: " . implode(', ', array_keys($response_item)));
+            $result[] = $response_item;
+        }
+
+        // Update sync status
+        local_alx_report_api_update_sync_status($companyid, $token, count($result), 'success');
+        
+        // Cache the result for incremental syncs
+        if ($sync_mode === 'incremental' && !empty($result)) {
+            local_alx_report_api_cache_set($cache_key, $companyid, $result, 1800); // 30 minutes cache
+        }
+        
+        self::debug_log("Final result count: " . count($result));
+        self::debug_log("=== API Request End (Combined Approach) ===");
+
+        return $result;
+    }
+
+    /**
+     * Fallback method using original complex query when reporting table is not available.
+     *
+     * @param int $companyid Company ID
+     * @param int $limit Maximum number of records to return
+     * @param int $offset Offset for pagination
+     * @return array Course progress data
+     */
+    private static function get_company_course_progress_fallback($companyid, $limit, $offset) {
+        global $DB;
+
+        self::debug_log("=== FALLBACK: Using original complex query ===");
+
+        // Get enabled courses for this company
+        $enabled_courses = local_alx_report_api_get_enabled_courses($companyid);
+        
+        // Get company field settings
+        $field_settings = [];
+        $field_names = ['userid', 'firstname', 'lastname', 'email', 'courseid', 'coursename', 
+                       'timecompleted', 'timecompleted_unix', 'timestarted', 'timestarted_unix', 
+                       'percentage', 'status'];
+        
+        foreach ($field_names as $field) {
+            $field_settings[$field] = local_alx_report_api_get_company_setting($companyid, 'field_' . $field, 1);
+        }
+
+        // Use the original complex query logic
+        $sql = "
+            SELECT DISTINCT
+                u.id as userid,
+                u.firstname,
+                u.lastname,
+                u.email,
+                c.id as courseid,
+                c.fullname as coursename,
+                COALESCE(cc.timecompleted, 
+                    (SELECT MAX(cmc.timemodified) 
+                     FROM {course_modules_completion} cmc
+                     JOIN {course_modules} cm ON cm.id = cmc.coursemoduleid
+                     WHERE cm.course = c.id AND cmc.userid = u.id AND cmc.completionstate = 1), 0) as timecompleted,
+                COALESCE(cc.timestarted, ue.timecreated, 0) as timestarted,
+                COALESCE(
+                    CASE 
+                        WHEN cc.timecompleted > 0 THEN 100.0
+                        ELSE COALESCE(
+                            (SELECT AVG(CASE WHEN cmc.completionstate = 1 THEN 100.0 ELSE 0.0 END)
+                             FROM {course_modules_completion} cmc
+                             JOIN {course_modules} cm ON cm.id = cmc.coursemoduleid
+                             WHERE cm.course = c.id AND cmc.userid = u.id), 0.0)
+                    END, 0.0) as percentage,
+                CASE 
+                    WHEN cc.timecompleted > 0 THEN 'completed'
+                    WHEN EXISTS(
+                        SELECT 1 FROM {course_modules_completion} cmc
+                        JOIN {course_modules} cm ON cm.id = cmc.coursemoduleid
+                        WHERE cm.course = c.id AND cmc.userid = u.id AND cmc.completionstate = 1
+                    ) THEN 'completed'
+                    WHEN EXISTS(
+                        SELECT 1 FROM {course_modules_completion} cmc
+                        JOIN {course_modules} cm ON cm.id = cmc.coursemoduleid
+                        WHERE cm.course = c.id AND cmc.userid = u.id AND cmc.completionstate > 0
+                    ) THEN 'in_progress'
+                    WHEN ue.id IS NOT NULL THEN 'not_started'
+                    ELSE 'not_enrolled'
+                END as status
+            FROM {user} u
+            JOIN {company_users} cu ON cu.userid = u.id
+            JOIN {user_enrolments} ue ON ue.userid = u.id
+            JOIN {enrol} e ON e.id = ue.enrolid
+            JOIN {course} c ON c.id = e.courseid
+            LEFT JOIN {course_completions} cc ON cc.userid = u.id AND cc.course = c.id
+            WHERE cu.companyid = :companyid
+                AND u.deleted = 0
+                AND u.suspended = 0
+                AND c.visible = 1
+                AND ue.status = 0";
+
+        $params = ['companyid' => $companyid];
+        
+        // Add course filtering if enabled courses specified
+        if (!empty($enabled_courses)) {
+            list($course_sql, $course_params) = $DB->get_in_or_equal($enabled_courses, SQL_PARAMS_NAMED, 'course');
+            $sql .= " AND c.id $course_sql";
+            $params = array_merge($params, $course_params);
+        }
+        
+        $sql .= " ORDER BY u.lastname, u.firstname, c.fullname";
+        
+        $records = $DB->get_records_sql($sql, $params, $offset, $limit);
+        
+        // Process records same as original logic
+        $result = [];
+        
+        foreach ($records as $record) {
+            $timecompleted = $record->timecompleted > 0 ? date('Y-m-d H:i:s', $record->timecompleted) : '';
+            $timestarted = $record->timestarted > 0 ? date('Y-m-d H:i:s', $record->timestarted) : '';
+            
+            $response_item = [];
+            
+            if ($field_settings['userid']) {
+                $response_item['userid'] = (int)$record->userid;
+            }
+            if ($field_settings['firstname']) {
+                $response_item['firstname'] = $record->firstname;
+            }
+            if ($field_settings['lastname']) {
+                $response_item['lastname'] = $record->lastname;
+            }
+            if ($field_settings['email']) {
+                $response_item['email'] = $record->email;
+            }
+            if ($field_settings['courseid']) {
+                $response_item['courseid'] = (int)$record->courseid;
+            }
+            if ($field_settings['coursename']) {
+                $response_item['coursename'] = $record->coursename;
+            }
+            if ($field_settings['timecompleted']) {
+                $response_item['timecompleted'] = $timecompleted;
+            }
+            if ($field_settings['timecompleted_unix']) {
+                $response_item['timecompleted_unix'] = (int)$record->timecompleted;
+            }
+            if ($field_settings['timestarted']) {
+                $response_item['timestarted'] = $timestarted;
+            }
+            if ($field_settings['timestarted_unix']) {
+                $response_item['timestarted_unix'] = (int)$record->timestarted;
+            }
+            if ($field_settings['percentage']) {
+                $response_item['percentage'] = (float)$record->percentage;
+            }
+            if ($field_settings['status']) {
+                $response_item['status'] = $record->status;
+            }
             
             $result[] = $response_item;
         }
 
-        self::debug_log("Final result count: " . count($result));
-        self::debug_log("=== API Request End ===");
-
+        self::debug_log("Fallback result count: " . count($result));
         return $result;
     }
 

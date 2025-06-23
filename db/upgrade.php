@@ -299,5 +299,99 @@ function xmldb_local_alx_report_api_upgrade($oldversion) {
         upgrade_plugin_savepoint(true, 2024011523, 'local', 'alx_report_api');
     }
 
+    if ($oldversion < 2024011530) {
+        // Create reporting table for combined approach (separate table + incremental sync)
+        $table = new xmldb_table('local_alx_api_reporting');
+        
+        if (!$dbman->table_exists($table)) {
+            $table->add_field('id', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE, null);
+            $table->add_field('userid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
+            $table->add_field('companyid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
+            $table->add_field('courseid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
+            $table->add_field('firstname', XMLDB_TYPE_CHAR, '100', null, XMLDB_NOTNULL, null, null);
+            $table->add_field('lastname', XMLDB_TYPE_CHAR, '100', null, XMLDB_NOTNULL, null, null);
+            $table->add_field('email', XMLDB_TYPE_CHAR, '100', null, XMLDB_NOTNULL, null, null);
+            $table->add_field('coursename', XMLDB_TYPE_CHAR, '255', null, XMLDB_NOTNULL, null, null);
+            $table->add_field('timecompleted', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+            $table->add_field('timestarted', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+            $table->add_field('percentage', XMLDB_TYPE_NUMBER, '5,2', null, XMLDB_NOTNULL, null, '0');
+            $table->add_field('status', XMLDB_TYPE_CHAR, '20', null, XMLDB_NOTNULL, null, 'not_started');
+            $table->add_field('last_updated', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
+            $table->add_field('is_deleted', XMLDB_TYPE_INTEGER, '1', null, XMLDB_NOTNULL, null, '0');
+            $table->add_field('created_at', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
+            $table->add_field('updated_at', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
+
+            $table->add_key('primary', XMLDB_KEY_PRIMARY, ['id']);
+            $table->add_key('unique_user_course', XMLDB_KEY_UNIQUE, ['userid', 'courseid', 'companyid']);
+            
+            $table->add_index('companyid', XMLDB_INDEX_NOTUNIQUE, ['companyid']);
+            $table->add_index('last_updated', XMLDB_INDEX_NOTUNIQUE, ['last_updated']);
+            $table->add_index('userid_courseid', XMLDB_INDEX_NOTUNIQUE, ['userid', 'courseid']);
+            $table->add_index('timecompleted', XMLDB_INDEX_NOTUNIQUE, ['timecompleted']);
+            $table->add_index('status', XMLDB_INDEX_NOTUNIQUE, ['status']);
+            $table->add_index('is_deleted', XMLDB_INDEX_NOTUNIQUE, ['is_deleted']);
+
+            $dbman->create_table($table);
+        }
+
+        // Create sync status table for incremental updates
+        $table = new xmldb_table('local_alx_api_sync_status');
+        
+        if (!$dbman->table_exists($table)) {
+            $table->add_field('id', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE, null);
+            $table->add_field('companyid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
+            $table->add_field('token_hash', XMLDB_TYPE_CHAR, '64', null, XMLDB_NOTNULL, null, null);
+            $table->add_field('last_sync_timestamp', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+            $table->add_field('sync_mode', XMLDB_TYPE_CHAR, '20', null, XMLDB_NOTNULL, null, 'auto');
+            $table->add_field('sync_window_hours', XMLDB_TYPE_INTEGER, '3', null, XMLDB_NOTNULL, null, '24');
+            $table->add_field('last_sync_records', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+            $table->add_field('last_sync_status', XMLDB_TYPE_CHAR, '20', null, XMLDB_NOTNULL, null, 'success');
+            $table->add_field('last_sync_error', XMLDB_TYPE_TEXT, null, null, null, null, null);
+            $table->add_field('total_syncs', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+            $table->add_field('created_at', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
+            $table->add_field('updated_at', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
+
+            $table->add_key('primary', XMLDB_KEY_PRIMARY, ['id']);
+            $table->add_key('unique_company_token', XMLDB_KEY_UNIQUE, ['companyid', 'token_hash']);
+            
+            $table->add_index('companyid', XMLDB_INDEX_NOTUNIQUE, ['companyid']);
+            $table->add_index('token_hash', XMLDB_INDEX_NOTUNIQUE, ['token_hash']);
+            $table->add_index('last_sync_timestamp', XMLDB_INDEX_NOTUNIQUE, ['last_sync_timestamp']);
+            $table->add_index('sync_mode', XMLDB_INDEX_NOTUNIQUE, ['sync_mode']);
+
+            $dbman->create_table($table);
+        }
+
+        // Create cache table for performance optimization
+        $table = new xmldb_table('local_alx_api_cache');
+        
+        if (!$dbman->table_exists($table)) {
+            $table->add_field('id', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE, null);
+            $table->add_field('cache_key', XMLDB_TYPE_CHAR, '255', null, XMLDB_NOTNULL, null, null);
+            $table->add_field('companyid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
+            $table->add_field('cache_data', XMLDB_TYPE_TEXT, null, null, XMLDB_NOTNULL, null, null);
+            $table->add_field('cache_timestamp', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
+            $table->add_field('expires_at', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
+            $table->add_field('hit_count', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+            $table->add_field('last_accessed', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
+
+            $table->add_key('primary', XMLDB_KEY_PRIMARY, ['id']);
+            $table->add_key('unique_cache_key', XMLDB_KEY_UNIQUE, ['cache_key', 'companyid']);
+            
+            $table->add_index('cache_key', XMLDB_INDEX_NOTUNIQUE, ['cache_key']);
+            $table->add_index('companyid', XMLDB_INDEX_NOTUNIQUE, ['companyid']);
+            $table->add_index('expires_at', XMLDB_INDEX_NOTUNIQUE, ['expires_at']);
+            $table->add_index('cache_timestamp', XMLDB_INDEX_NOTUNIQUE, ['cache_timestamp']);
+
+            $dbman->create_table($table);
+        }
+
+        // Clear all caches
+        cache_helper::purge_all();
+        
+        // Savepoint reached.
+        upgrade_plugin_savepoint(true, 2024011530, 'local', 'alx_report_api');
+    }
+
     return true;
 } 
