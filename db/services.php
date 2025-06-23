@@ -35,6 +35,6 @@ $functions = array(
         'loginrequired' => true,  // Must be true for custom services
         'requiredcapability' => ''
     )
-);
+);  
 
 // NO SERVICES DEFINED HERE - This prevents built-in service creation  

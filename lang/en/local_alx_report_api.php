@@ -121,7 +121,7 @@ $string['missingauthheader'] = 'Authorization header is required';
 $string['missingtoken'] = 'Authorization token is required';
 $string['invalidtokenformat'] = 'Invalid token format';
 $string['invalidtoken'] = 'Invalid or expired token';
-$string['expiredtoken'] = 'Token has expired';
+$string['expiredtoken'] = 'Token has expired'; 
 
 // Rate limiting and validation error messages
 $string['ratelimitexceeded'] = 'Daily rate limit exceeded';

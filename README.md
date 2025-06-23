@@ -482,7 +482,4 @@ This plugin is released under the GNU GPL v3 license.
   - Multi-tenant course progress API
   - Token-based authentication
   - Audit logging
-  - Power BI integration support 
-
-
-  
+  - Power BI integration support
