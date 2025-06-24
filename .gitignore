@@ -1,0 +1,29 @@
+# Moodle Plugin Development .gitignore
+
+# Release files (generated)
+releases/*.zip
+
+# Temporary files
+*.tmp
+*.temp
+*~
+
+# OS specific files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE files
+.vscode/
+.idea/
+*.sublime-*
+
+# Backup files
+*.bak
+*.backup
+
+# Log files
+*.log
+
+# Windows specific
+*.lnk 
