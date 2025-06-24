@@ -42,43 +42,89 @@ $companies = local_alx_report_api_get_companies();
 
 // Handle form submission
 if ($action === 'save' && $companyid && confirm_sesskey()) {
-    $field_settings = [
-        'field_userid', 'field_firstname', 'field_lastname', 'field_email',
-        'field_courseid', 'field_coursename', 'field_timecompleted', 
-        'field_timecompleted_unix', 'field_timestarted', 'field_timestarted_unix',
-        'field_percentage', 'field_status'
-    ];
+    $errors = [];
+    $success_count = 0;
     
-    // Save field settings
-    foreach ($field_settings as $setting) {
-        $value = optional_param($setting, 0, PARAM_INT);
-        local_alx_report_api_set_company_setting($companyid, $setting, $value);
-    }
-    
-    // Save course settings
-    $company_courses = local_alx_report_api_get_company_courses($companyid);
-    foreach ($company_courses as $course) {
-        $course_setting = 'course_' . $course->id;
-        $value = optional_param($course_setting, 0, PARAM_INT);
-        local_alx_report_api_set_company_setting($companyid, $course_setting, $value);
-    }
-    
-    // Save incremental sync settings
-    $sync_settings = [
-        'sync_mode', 'sync_window_hours', 'first_sync_hours', 'cache_enabled', 'cache_ttl_minutes'
-    ];
-    
-    foreach ($sync_settings as $setting) {
-        if ($setting === 'sync_mode') {
-            $value = optional_param($setting, 'auto', PARAM_ALPHA);
-        } else {
+    try {
+        $field_settings = [
+            'field_userid', 'field_firstname', 'field_lastname', 'field_email',
+            'field_courseid', 'field_coursename', 'field_timecompleted', 
+            'field_timecompleted_unix', 'field_timestarted', 'field_timestarted_unix',
+            'field_percentage', 'field_status'
+        ];
+        
+        // Save field settings
+        foreach ($field_settings as $setting) {
             $value = optional_param($setting, 0, PARAM_INT);
+            $result = local_alx_report_api_set_company_setting($companyid, $setting, $value);
+            if ($result === false) {
+                $errors[] = "Failed to save field setting: $setting";
+            } else {
+                $success_count++;
+            }
         }
-        local_alx_report_api_set_company_setting($companyid, $setting, $value);
+        
+        // Save course settings
+        $company_courses = local_alx_report_api_get_company_courses($companyid);
+        foreach ($company_courses as $course) {
+            $course_setting = 'course_' . $course->id;
+            $value = optional_param($course_setting, 0, PARAM_INT);
+            $result = local_alx_report_api_set_company_setting($companyid, $course_setting, $value);
+            if ($result === false) {
+                $errors[] = "Failed to save course setting for: " . $course->fullname;
+            } else {
+                $success_count++;
+            }
+        }
+        
+        // Save incremental sync settings
+        $sync_settings = [
+            'sync_mode', 'sync_window_hours', 'first_sync_hours', 'cache_enabled', 'cache_ttl_minutes'
+        ];
+        
+        foreach ($sync_settings as $setting) {
+            if ($setting === 'sync_mode') {
+                $value = optional_param($setting, 0, PARAM_INT);
+                // Validate sync_mode values: 0=Auto, 1=Always Incremental, 2=Always Full, 3=Disabled
+                if (!in_array($value, [0, 1, 2, 3])) {
+                    $value = 0; // Default to Auto if invalid value
+                }
+            } else {
+                $value = optional_param($setting, 0, PARAM_INT);
+                // Ensure positive values for numeric settings
+                if ($value < 0) {
+                    $value = 0;
+                }
+            }
+            
+            $result = local_alx_report_api_set_company_setting($companyid, $setting, $value);
+            if ($result === false) {
+                $errors[] = "Failed to save sync setting: $setting";
+            } else {
+                $success_count++;
+            }
+        }
+        
+        // Display results
+        if (!empty($errors)) {
+            $error_message = "Some settings could not be saved:\n" . implode("\n", $errors);
+            $error_message .= "\n\nSuccessfully saved: $success_count settings";
+            redirect($PAGE->url->out(false, ['companyid' => $companyid]), 
+                     $error_message, null, \core\output\notification::NOTIFY_ERROR);
+        } else {
+            redirect($PAGE->url->out(false, ['companyid' => $companyid]), 
+                     "All settings saved successfully! ($success_count settings)", null, \core\output\notification::NOTIFY_SUCCESS);
+        }
+        
+    } catch (Exception $e) {
+        // Catch any unexpected errors
+        $error_message = "Error saving settings: " . $e->getMessage();
+        if ($success_count > 0) {
+            $error_message .= "\n\nSuccessfully saved: $success_count settings before error occurred";
+        }
+        redirect($PAGE->url->out(false, ['companyid' => $companyid]), 
+                 $error_message, null, \core\output\notification::NOTIFY_ERROR);
     }
-    
-    redirect($PAGE->url->out(false, ['companyid' => $companyid]), 
-             get_string('settings_saved', 'local_alx_report_api'), null, \core\output\notification::NOTIFY_SUCCESS);
 }
 
 // Handle copy from template
@@ -484,16 +530,16 @@ if ($companyid && isset($companies[$companyid])) {
     echo '<div class="sync-settings-grid">';
     
     // Sync Mode
-    $sync_mode = isset($current_settings['sync_mode']) ? $current_settings['sync_mode'] : 'auto';
+    $sync_mode = isset($current_settings['sync_mode']) ? $current_settings['sync_mode'] : 0;
     echo '<div class="setting-item">';
     echo '<label for="sync_mode"><strong>Sync Mode:</strong></label>';
     echo '<select name="sync_mode" id="sync_mode" class="form-control">';
-    echo '<option value="auto"' . ($sync_mode === 'auto' ? ' selected' : '') . '>Auto (Recommended)</option>';
-    echo '<option value="incremental"' . ($sync_mode === 'incremental' ? ' selected' : '') . '>Always Incremental</option>';
-    echo '<option value="full"' . ($sync_mode === 'full' ? ' selected' : '') . '>Always Full Sync</option>';
-    echo '<option value="disabled"' . ($sync_mode === 'disabled' ? ' selected' : '') . '>Disabled</option>';
+    echo '<option value="0"' . ($sync_mode === 0 ? ' selected' : '') . '>Auto (Intelligent Switching)</option>';
+    echo '<option value="1"' . ($sync_mode === 1 ? ' selected' : '') . '>Always Incremental</option>';
+    echo '<option value="2"' . ($sync_mode === 2 ? ' selected' : '') . '>Always Full Sync</option>';
+    echo '<option value="3"' . ($sync_mode === 3 ? ' selected' : '') . '>Disabled</option>';
     echo '</select>';
-    echo '<small class="form-text text-muted">Auto mode switches between incremental and full sync based on conditions.</small>';
+    echo '<small class="form-text text-muted">Choose sync strategy: Auto (smart switching), Always Incremental (performance), Always Full (consistency), or Disabled.</small>';
     echo '</div>';
     
     // Sync Window Hours

@@ -230,27 +230,49 @@ function local_alx_report_api_get_company_setting($companyid, $setting_name, $de
 function local_alx_report_api_set_company_setting($companyid, $setting_name, $setting_value) {
     global $DB;
     
-    $existing = $DB->get_record('local_alx_api_settings', [
-        'companyid' => $companyid,
-        'setting_name' => $setting_name
-    ]);
-    
-    $time = time();
-    
-    if ($existing) {
-        // Update existing setting
-        $existing->setting_value = $setting_value;
-        $existing->timemodified = $time;
-        return $DB->update_record('local_alx_api_settings', $existing);
-    } else {
-        // Create new setting
-        $setting = new stdClass();
-        $setting->companyid = $companyid;
-        $setting->setting_name = $setting_name;
-        $setting->setting_value = $setting_value;
-        $setting->timecreated = $time;
-        $setting->timemodified = $time;
-        return $DB->insert_record('local_alx_api_settings', $setting);
+    try {
+        // Check if tables exist
+        if (!$DB->get_manager()->table_exists('local_alx_api_settings')) {
+            throw new Exception('Settings table does not exist. Please run plugin installation.');
+        }
+        
+        $existing = $DB->get_record('local_alx_api_settings', [
+            'companyid' => $companyid,
+            'setting_name' => $setting_name
+        ]);
+        
+        $time = time();
+        
+        if ($existing) {
+            // Update existing setting
+            $existing->setting_value = $setting_value;
+            $existing->timemodified = $time;
+            $result = $DB->update_record('local_alx_api_settings', $existing);
+            if (!$result) {
+                throw new Exception("Failed to update setting: $setting_name");
+            }
+            return $result;
+        } else {
+            // Create new setting
+            $setting = new stdClass();
+            $setting->companyid = $companyid;
+            $setting->setting_name = $setting_name;
+            $setting->setting_value = $setting_value;
+            $setting->timecreated = $time;
+            $setting->timemodified = $time;
+            $result = $DB->insert_record('local_alx_api_settings', $setting);
+            if (!$result) {
+                throw new Exception("Failed to insert setting: $setting_name");
+            }
+            return $result;
+        }
+    } catch (Exception $e) {
+        // Log the error
+        error_log("ALX Report API - Error saving company setting: " . $e->getMessage());
+        error_log("ALX Report API - Company ID: $companyid, Setting: $setting_name, Value: $setting_value");
+        
+        // Return false to indicate failure
+        return false;
     }
 }
 
@@ -810,29 +832,44 @@ function local_alx_report_api_update_sync_status($companyid, $token, $records_co
  * @return string Sync mode: 'full', 'incremental', or 'first'
  */
 function local_alx_report_api_determine_sync_mode($companyid, $token) {
-    $sync_status = local_alx_report_api_get_sync_status($companyid, $token);
+    // Get company-specific sync mode setting
+    $company_sync_mode = local_alx_report_api_get_company_setting($companyid, 'sync_mode', 0);
     
-    if (!$sync_status) {
-        return 'first'; // First time sync
+    // Handle sync modes according to finalized specification
+    switch ($company_sync_mode) {
+        case 1: // Always Incremental
+            return 'incremental';
+            
+        case 2: // Always Full Sync
+            return 'full';
+            
+        case 3: // Disabled
+            return 'full'; // Return full sync but don't update sync status
+            
+        case 0: // Auto (Intelligent Switching)
+        default:
+            // Auto mode: Check sync status for intelligent switching
+            $sync_status = local_alx_report_api_get_sync_status($companyid, $token);
+            
+            if (!$sync_status) {
+                return 'full'; // First time sync
+            }
+            
+            if ($sync_status->last_sync_status === 'failed') {
+                return 'full'; // Full sync after failure
+            }
+            
+            // Check if last sync was too long ago
+            $sync_window_hours = local_alx_report_api_get_company_setting($companyid, 'sync_window_hours', 24);
+            $sync_window_seconds = $sync_window_hours * 3600;
+            $time_since_last_sync = time() - $sync_status->last_sync_timestamp;
+            
+            if ($time_since_last_sync > $sync_window_seconds) {
+                return 'full'; // Full sync if too much time passed
+            }
+            
+            return 'incremental'; // Normal incremental sync
     }
-    
-    if ($sync_status->sync_mode === 'disabled') {
-        return 'full'; // Always full sync if disabled
-    }
-    
-    if ($sync_status->last_sync_status === 'failed') {
-        return 'full'; // Full sync after failure
-    }
-    
-    // Check if last sync was too long ago
-    $sync_window_seconds = $sync_status->sync_window_hours * 3600;
-    $time_since_last_sync = time() - $sync_status->last_sync_timestamp;
-    
-    if ($time_since_last_sync > $sync_window_seconds) {
-        return 'full'; // Full sync if too much time passed
-    }
-    
-    return 'incremental'; // Normal incremental sync
 }
 
 /**

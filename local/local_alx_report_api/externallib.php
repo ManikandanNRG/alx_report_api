@@ -443,6 +443,26 @@ class local_alx_report_api_external extends external_api {
                 // Update sync status even for empty results
                 local_alx_report_api_update_sync_status($companyid, $token, 0, 'success');
                 return [];
+            } else {
+                // No course settings exist - auto-enable all company courses
+                self::debug_log("No course settings found - auto-enabling all company courses");
+                $company_courses = local_alx_report_api_get_company_courses($companyid);
+                $enabled_courses = array_column($company_courses, 'id');
+                
+                // Save the auto-enabled course settings
+                foreach ($company_courses as $course) {
+                    $course_setting = 'course_' . $course->id;
+                    local_alx_report_api_set_company_setting($companyid, $course_setting, 1);
+                }
+                
+                self::debug_log("Auto-enabled courses: " . implode(',', $enabled_courses));
+                
+                // If still no courses available, return empty
+                if (empty($enabled_courses)) {
+                    self::debug_log("No courses available for company - returning empty array");
+                    local_alx_report_api_update_sync_status($companyid, $token, 0, 'success');
+                    return [];
+                }
             }
         }
 
@@ -593,8 +613,11 @@ class local_alx_report_api_external extends external_api {
             $result[] = $response_item;
         }
 
-        // Update sync status
-        local_alx_report_api_update_sync_status($companyid, $token, count($result), 'success');
+        // Update sync status (skip if disabled mode)
+        $company_sync_mode = local_alx_report_api_get_company_setting($companyid, 'sync_mode', 0);
+        if ($company_sync_mode !== 3) { // Don't update sync status if disabled mode
+            local_alx_report_api_update_sync_status($companyid, $token, count($result), 'success');
+        }
         
         // Cache the result for incremental syncs
         if ($sync_mode === 'incremental' && !empty($result)) {
