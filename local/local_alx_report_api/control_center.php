@@ -37,81 +37,6 @@ $PAGE->set_url('/local/alx_report_api/control_center.php');
 $PAGE->set_title('ALX Report API - Control Center');
 $PAGE->set_heading('ALX Report API Control Center');
 
-// Handle AJAX requests
-$action = optional_param('action', '', PARAM_ALPHA);
-$ajax = optional_param('ajax', 0, PARAM_INT);
-
-if ($ajax && $action) {
-    header('Content-Type: application/json');
-    
-    switch ($action) {
-        case 'get_system_stats':
-            $stats = [
-                'total_records' => 0,
-                'total_companies' => 0,
-                'api_calls_today' => 0,
-                'health_status' => 'healthy'
-            ];
-            
-            try {
-                // Get companies using the same function as monitoring dashboard
-                $companies = local_alx_report_api_get_companies();
-                $stats['total_companies'] = count($companies);
-                
-                // Get total records from reporting table (same as monitoring dashboard)
-                if ($DB->get_manager()->table_exists('local_alx_api_reporting')) {
-                    $stats['total_records'] = $DB->count_records('local_alx_api_reporting', ['is_deleted' => 0]); // Only active records
-                }
-                
-                // Get API calls today
-                if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
-                    $today_start = mktime(0, 0, 0);
-                    $stats['api_calls_today'] = $DB->count_records_select('local_alx_api_logs', 'timecreated >= ?', [$today_start]);
-                }
-                
-                // Determine system health
-                $health_issues = [];
-                
-                if (!$DB->get_manager()->table_exists('local_alx_api_reporting')) {
-                    $health_issues[] = 'Reporting table missing';
-                } elseif ($stats['total_records'] == 0) {
-                    $health_issues[] = 'No reporting data';
-                }
-                
-                if ($stats['total_companies'] == 0) {
-                    $health_issues[] = 'No companies configured';
-                }
-                
-                if (empty($CFG->enablewebservices)) {
-                    $health_issues[] = 'Web services disabled';
-                }
-                
-                // Set health status
-                if (empty($health_issues)) {
-                    $stats['health_status'] = 'healthy';
-                    $stats['health_icon'] = '✅';
-                } elseif (count($health_issues) <= 2) {
-                    $stats['health_status'] = 'warning';
-                    $stats['health_icon'] = '⚠️';
-                } else {
-                    $stats['health_status'] = 'error';
-                    $stats['health_icon'] = '❌';
-                }
-                
-            } catch (Exception $e) {
-                $stats['health_status'] = 'error';
-                $stats['health_icon'] = '❌';
-                error_log('ALX Report API Stats Error: ' . $e->getMessage());
-            }
-            
-            echo json_encode($stats);
-            break;
-        default:
-            echo json_encode(['error' => 'Unknown action']);
-    }
-    exit;
-}
-
 // Get initial data with error handling
 $companies = [];
 $total_records = 0;
@@ -910,7 +835,11 @@ function safeUpdateElement(elementId, value) {
 // Auto-refresh system stats every 30 seconds with error handling
 function refreshSystemStats() {
     console.log('Refreshing system stats via AJAX...');
-    fetch('control_center.php?ajax=1&action=get_system_stats')
+    
+    // Use dedicated AJAX endpoint
+    const url = 'ajax_stats.php?t=' + Date.now();
+    
+    fetch(url)
         .then(response => {
             console.log('AJAX response status:', response.status);
             if (!response.ok) {
@@ -920,7 +849,7 @@ function refreshSystemStats() {
         })
         .then(data => {
             console.log('AJAX data received:', data);
-            if (data && typeof data === 'object') {
+            if (data && typeof data === 'object' && !data.error) {
                 console.log('Updating elements with:', {
                     records: data.total_records,
                     companies: data.total_companies,
@@ -943,7 +872,10 @@ function refreshSystemStats() {
                 }
                 console.log('Stats updated successfully');
             } else {
-                console.error('Invalid data format received:', data);
+                console.error('Invalid data format received or error:', data);
+                if (data && data.error) {
+                    console.error('Server error:', data.error);
+                }
             }
         })
         .catch(error => {
@@ -959,15 +891,14 @@ function refreshSystemStats() {
 // Initialize dashboard when page loads
 document.addEventListener('DOMContentLoaded', function() {
     // Don't do initial refresh since PHP already loaded correct data
-    // Only start auto-refresh after first interval (30 seconds)
     console.log('Control Center loaded with initial data');
     
-    // Set up auto-refresh every 30 seconds (but not immediately)
+    // Set up auto-refresh every 30 seconds, starting after 10 seconds
     setTimeout(function() {
         console.log('Starting auto-refresh...');
         refreshSystemStats();
         setInterval(refreshSystemStats, 30000);
-    }, 30000); // Wait 30 seconds before first AJAX call
+    }, 10000); // Start after 10 seconds instead of 30
 });
 </script>
 
