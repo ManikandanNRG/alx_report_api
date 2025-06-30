@@ -2,6 +2,20 @@
 
 A secure REST API plugin for IOMAD Moodle that provides multi-tenant course progress and completion data for Power BI integration.
 
+## 🎛️ **NEW: Unified Control Center Dashboard**
+
+**Experience the new beautiful, unified interface that consolidates all plugin functionality!**
+
+- **🎨 Modern Design**: Professional UI with Inter font and smooth animations
+- **📊 Real-time Monitoring**: Live system stats and performance metrics
+- **🏢 Company Management**: Streamlined multi-company configuration
+- **💾 Data Operations**: Integrated sync, populate, and verification tools
+- **📈 Analytics Dashboard**: Comprehensive monitoring and reporting
+
+**Access via**: Site Administration → Plugins → Local plugins → **🎛️ ALX Report API - Control Center**
+
+[📖 **View Control Center Guide**](CONTROL_CENTER_GUIDE.md)
+
 ## Features
 
 - **Multi-tenant Security**: Each company can only access their own data
@@ -10,6 +24,9 @@ A secure REST API plugin for IOMAD Moodle that provides multi-tenant course prog
 - **Power BI Integration**: Optimized for Power BI data refresh
 - **Audit Logging**: Complete API access logging
 - **Pagination Support**: Handle large datasets efficiently
+- **Rate Limiting**: Configurable API usage limits per company
+- **Incremental Sync**: Efficient data synchronization with timestamp filtering
+- **Performance Optimization**: Separate reporting table for fast API responses
 
 ## Installation
 

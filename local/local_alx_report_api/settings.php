@@ -34,6 +34,14 @@ if ($hassiteconfig) {
     // Add to the local plugins category.
     $ADMIN->add('localplugins', $settings);
 
+    // Add the new Control Center as the main dashboard
+    $ADMIN->add('localplugins', new admin_externalpage(
+        'local_alx_report_api_control_center',
+        '🎛️ ALX Report API - Control Center',
+        new moodle_url('/local/alx_report_api/control_center.php'),
+        'moodle/site:config'
+    ));
+
     // Add company settings as a separate admin page
     $ADMIN->add('localplugins', new admin_externalpage(
         'local_alx_report_api_company_settings',
