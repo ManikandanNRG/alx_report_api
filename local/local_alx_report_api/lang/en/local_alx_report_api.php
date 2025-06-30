@@ -132,4 +132,16 @@ $string['sync_reporting_data_task'] = 'Sync reporting data incrementally';
 $string['auto_sync_hours'] = 'Auto sync hours';
 $string['auto_sync_hours_desc'] = 'Number of hours to look back for changes during automatic sync (default: 1 hour)';
 $string['max_sync_time'] = 'Maximum sync execution time';
-$string['max_sync_time_desc'] = 'Maximum time in seconds for sync task execution (default: 300 seconds)'; 
+$string['max_sync_time_desc'] = 'Maximum time in seconds for sync task execution (default: 300 seconds)';
+
+// API Response Status Messages
+$string['api_no_data_full_sync'] = 'No course progress data found for this company. This could mean: 1) No users are enrolled in courses, 2) No course completions have occurred yet, 3) Reporting table needs to be populated with historical data, or 4) Company course settings exclude all courses.';
+$string['api_no_data_incremental'] = 'No new course progress changes since last sync at {$a->last_sync_time}. This is normal when there are no recent course completions or user activity. Your dashboard will continue showing existing data.';
+$string['api_no_data_reporting_empty'] = 'Reporting table is empty for this company. Please run the historical data population process first, or check if users are properly assigned to this company and enrolled in courses.';
+$string['api_no_data_courses_filtered'] = 'No data available because all courses are disabled in company settings. Please enable at least one course in the Company Settings page to see course progress data.';
+$string['api_no_data_first_sync'] = 'No course activity found in the specified time window (last {$a->hours} hours). This is normal for new companies or during periods of low activity. Try increasing the first sync time window or check if users are enrolled in courses.';
+$string['api_status_incremental_success'] = 'Incremental sync completed successfully. Found {$a->count} changes since {$a->last_sync_time}.';
+$string['api_status_full_sync_success'] = 'Full sync completed successfully. Retrieved {$a->count} total course progress records.';
+$string['api_status_fallback_used'] = 'Used fallback query method due to reporting table issues. Performance may be slower than normal.';
+$string['api_debug_sync_mode'] = 'Sync mode: {$a->mode}, Company: {$a->company}, Last sync: {$a->last_sync}';
+$string['api_debug_no_changes'] = 'No changes detected since last sync. This is expected behavior when there are no new course completions or user activities.'; 

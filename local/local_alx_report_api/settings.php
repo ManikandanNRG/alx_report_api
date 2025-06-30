@@ -50,6 +50,14 @@ if ($hassiteconfig) {
         'moodle/site:config'
     ));
 
+    // Add auto sync status as a separate admin page
+    $ADMIN->add('localplugins', new admin_externalpage(
+        'local_alx_report_api_auto_sync_status',
+        'ALX Report API - Auto Sync Status',
+        new moodle_url('/local/alx_report_api/auto_sync_status.php'),
+        'moodle/site:config'
+    ));
+
     // Plugin configuration settings.
     $settings->add(new admin_setting_heading(
         'local_alx_report_api/generalheading',

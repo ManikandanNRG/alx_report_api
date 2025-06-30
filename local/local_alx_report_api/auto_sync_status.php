@@ -27,7 +27,7 @@ require_once($CFG->libdir.'/adminlib.php');
 require_once($CFG->dirroot.'/local/alx_report_api/lib.php');
 
 // Check permissions.
-admin_externalpage_setup('local_alx_report_api');
+admin_externalpage_setup('local_alx_report_api_auto_sync_status');
 require_capability('moodle/site:config', context_system::instance());
 
 $PAGE->set_url('/local/alx_report_api/auto_sync_status.php');

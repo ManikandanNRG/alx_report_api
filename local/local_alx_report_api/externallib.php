@@ -624,6 +624,14 @@ class local_alx_report_api_external extends external_api {
             local_alx_report_api_cache_set($cache_key, $companyid, $result, 1800); // 30 minutes cache
         }
         
+        // Handle empty results with detailed status messages
+        if (empty($result)) {
+            $status_response = self::generate_empty_result_status($sync_mode, $companyid, $token, $enabled_courses);
+            self::debug_log("Returning status message for empty result: " . $status_response['message']);
+            self::debug_log("=== API Request End (Empty Result with Status) ===");
+            return $status_response;
+        }
+
         self::debug_log("Final result count: " . count($result));
         self::debug_log("=== API Request End (Combined Approach) ===");
 
@@ -784,8 +792,79 @@ class local_alx_report_api_external extends external_api {
             $result[] = $response_item;
         }
 
+        // Handle empty results with detailed status messages for fallback
+        if (empty($result)) {
+            $status_response = self::generate_empty_result_status($sync_mode, $companyid, $token, $enabled_courses);
+            $status_response['fallback_used'] = true;
+            $status_response['message'] = get_string('api_status_fallback_used', 'local_alx_report_api') . ' ' . $status_response['message'];
+            self::debug_log("Fallback returning status message for empty result: " . $status_response['message']);
+            return $status_response;
+        }
+
         self::debug_log("Fallback result count: " . count($result) . " (sync_mode: $sync_mode, time_filter: " . ($first_sync_hours > 0 && $sync_mode === 'first' ? 'YES' : 'NO') . ")");
         return $result;
+    }
+
+    /**
+     * Generate detailed status message for empty API results.
+     *
+     * @param string $sync_mode Current sync mode
+     * @param int $companyid Company ID
+     * @param string $token API token
+     * @param array $enabled_courses Enabled courses for company
+     * @return array Status response with detailed message
+     */
+    private static function generate_empty_result_status($sync_mode, $companyid, $token, $enabled_courses) {
+        global $DB;
+
+        $status_response = [
+            'data' => [],
+            'status' => 'no_data',
+            'sync_mode' => $sync_mode,
+            'timestamp' => date('Y-m-d H:i:s'),
+            'company_id' => $companyid
+        ];
+
+        // Check different scenarios for empty results
+        if ($sync_mode === 'incremental') {
+            $sync_status = local_alx_report_api_get_sync_status($companyid, $token);
+            $last_sync_time = $sync_status ? date('Y-m-d H:i:s', $sync_status->last_sync_timestamp) : 'Never';
+            
+            $status_response['message'] = get_string('api_no_data_incremental', 'local_alx_report_api', 
+                (object)['last_sync_time' => $last_sync_time]);
+            $status_response['last_sync'] = $last_sync_time;
+            $status_response['explanation'] = get_string('api_debug_no_changes', 'local_alx_report_api');
+            
+        } else if (empty($enabled_courses)) {
+            $status_response['message'] = get_string('api_no_data_courses_filtered', 'local_alx_report_api');
+            $status_response['action_required'] = 'Enable courses in Company Settings';
+            
+        } else {
+            // Check if reporting table has any data for this company
+            $total_records = $DB->count_records('local_alx_api_reporting', [
+                'companyid' => $companyid,
+                'is_deleted' => 0
+            ]);
+            
+            if ($total_records === 0) {
+                $status_response['message'] = get_string('api_no_data_reporting_empty', 'local_alx_report_api');
+                $status_response['action_required'] = 'Run historical data population';
+                $status_response['help_url'] = '/local/alx_report_api/populate_reporting_table.php';
+            } else {
+                $status_response['message'] = get_string('api_no_data_full_sync', 'local_alx_report_api');
+                $status_response['total_records_in_table'] = $total_records;
+                $status_response['action_required'] = 'Check course assignments and user enrollments';
+            }
+        }
+
+        // Add helpful debug information
+        $status_response['debug_info'] = [
+            'enabled_courses_count' => count($enabled_courses),
+            'sync_mode' => $sync_mode,
+            'company_id' => $companyid
+        ];
+
+        return $status_response;
     }
 
     /**
