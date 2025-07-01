@@ -46,51 +46,51 @@ if ($action === 'save' && $companyid && confirm_sesskey()) {
     $success_count = 0;
     
     try {
-        $field_settings = [
-            'field_userid', 'field_firstname', 'field_lastname', 'field_email',
-            'field_courseid', 'field_coursename', 'field_timecompleted', 
-            'field_timecompleted_unix', 'field_timestarted', 'field_timestarted_unix',
-            'field_percentage', 'field_status'
-        ];
-        
-        // Save field settings
-        foreach ($field_settings as $setting) {
-            $value = optional_param($setting, 0, PARAM_INT);
+    $field_settings = [
+        'field_userid', 'field_firstname', 'field_lastname', 'field_email',
+        'field_courseid', 'field_coursename', 'field_timecompleted', 
+        'field_timecompleted_unix', 'field_timestarted', 'field_timestarted_unix',
+        'field_percentage', 'field_status'
+    ];
+    
+    // Save field settings
+    foreach ($field_settings as $setting) {
+        $value = optional_param($setting, 0, PARAM_INT);
             $result = local_alx_report_api_set_company_setting($companyid, $setting, $value);
             if ($result === false) {
                 $errors[] = "Failed to save field setting: $setting";
             } else {
                 $success_count++;
             }
-        }
-        
-        // Save course settings
-        $company_courses = local_alx_report_api_get_company_courses($companyid);
-        foreach ($company_courses as $course) {
-            $course_setting = 'course_' . $course->id;
-            $value = optional_param($course_setting, 0, PARAM_INT);
+    }
+    
+    // Save course settings
+    $company_courses = local_alx_report_api_get_company_courses($companyid);
+    foreach ($company_courses as $course) {
+        $course_setting = 'course_' . $course->id;
+        $value = optional_param($course_setting, 0, PARAM_INT);
             $result = local_alx_report_api_set_company_setting($companyid, $course_setting, $value);
             if ($result === false) {
                 $errors[] = "Failed to save course setting for: " . $course->fullname;
             } else {
                 $success_count++;
             }
-        }
-        
-        // Save incremental sync settings
-        $sync_settings = [
-            'sync_mode', 'sync_window_hours', 'first_sync_hours', 'cache_enabled', 'cache_ttl_minutes'
-        ];
-        
-        foreach ($sync_settings as $setting) {
-            if ($setting === 'sync_mode') {
+    }
+    
+    // Save incremental sync settings
+    $sync_settings = [
+        'sync_mode', 'sync_window_hours', 'first_sync_hours', 'cache_enabled', 'cache_ttl_minutes'
+    ];
+    
+    foreach ($sync_settings as $setting) {
+        if ($setting === 'sync_mode') {
                 $value = optional_param($setting, 0, PARAM_INT);
                 // Validate sync_mode values: 0=Auto, 1=Always Incremental, 2=Always Full, 3=Disabled
                 if (!in_array($value, [0, 1, 2, 3])) {
                     $value = 0; // Default to Auto if invalid value
                 }
-            } else {
-                $value = optional_param($setting, 0, PARAM_INT);
+        } else {
+            $value = optional_param($setting, 0, PARAM_INT);
                 // Ensure positive values for numeric settings
                 if ($value < 0) {
                     $value = 0;
@@ -122,7 +122,7 @@ if ($action === 'save' && $companyid && confirm_sesskey()) {
         if ($success_count > 0) {
             $error_message .= "\n\nSuccessfully saved: $success_count settings before error occurred";
         }
-        redirect($PAGE->url->out(false, ['companyid' => $companyid]), 
+    redirect($PAGE->url->out(false, ['companyid' => $companyid]), 
                  $error_message, null, \core\output\notification::NOTIFY_ERROR);
     }
 }

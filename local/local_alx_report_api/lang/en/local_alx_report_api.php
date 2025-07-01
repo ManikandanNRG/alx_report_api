@@ -132,7 +132,7 @@ $string['sync_reporting_data_task'] = 'Sync reporting data incrementally';
 $string['auto_sync_hours'] = 'Auto sync hours';
 $string['auto_sync_hours_desc'] = 'Number of hours to look back for changes during automatic sync (default: 1 hour)';
 $string['max_sync_time'] = 'Maximum sync execution time';
-$string['max_sync_time_desc'] = 'Maximum time in seconds for sync task execution (default: 300 seconds)';
+$string['max_sync_time_desc'] = 'Maximum time in seconds for sync task execution (default: 300 seconds)'; 
 
 // API Response Status Messages
 $string['api_no_data_full_sync'] = 'No course progress data found for this company. This could mean: 1) No users are enrolled in courses, 2) No course completions have occurred yet, 3) Reporting table needs to be populated with historical data, or 4) Company course settings exclude all courses.';

@@ -410,20 +410,22 @@ function local_alx_report_api_is_course_enabled($companyid, $courseid) {
 // ===================================================================
 
 /**
- * Populate the reporting table with initial data from main database.
- * This is run once during setup to create the baseline reporting data.
+ * Populate the reporting table with existing data from the main database.
+ * Enhanced version with better progress reporting.
  *
- * @param int $companyid Specific company ID (0 for all companies)
+ * @param int $companyid Company ID (0 for all companies)
  * @param int $batch_size Number of records to process per batch
- * @return array Status information with counts and timing
+ * @param bool $output_progress Whether to output progress information
+ * @return array Result array with statistics
  */
-function local_alx_report_api_populate_reporting_table($companyid = 0, $batch_size = 1000) {
+function local_alx_report_api_populate_reporting_table($companyid = 0, $batch_size = 1000, $output_progress = false) {
     global $DB;
     
     $start_time = time();
     $total_processed = 0;
     $total_inserted = 0;
     $errors = [];
+    $companies_processed = 0;
     
     try {
         // Get companies to process
@@ -433,8 +435,22 @@ function local_alx_report_api_populate_reporting_table($companyid = 0, $batch_si
             $companies = $DB->get_records('company', null, 'id ASC');
         }
         
+        $total_companies = count($companies);
+        $current_company = 0;
+        
         foreach ($companies as $company) {
             if (!$company) continue;
+            
+            $current_company++;
+            $companies_processed++;
+            
+            if ($output_progress && !defined('CLI_SCRIPT')) {
+                $is_cli = (php_sapi_name() === 'cli');
+                if (!$is_cli) {
+                    echo '<script>addLogEntry("🏢 Processing company: ' . htmlspecialchars($company->name) . ' (' . $current_company . '/' . $total_companies . ')...", "company");</script>';
+                    flush();
+                }
+            }
             
             // Get enabled courses for this company
             $enabled_courses = local_alx_report_api_get_enabled_courses($company->id);
@@ -445,8 +461,18 @@ function local_alx_report_api_populate_reporting_table($companyid = 0, $batch_si
             }
             
             if (empty($enabled_courses)) {
+                if ($output_progress && !defined('CLI_SCRIPT')) {
+                    $is_cli = (php_sapi_name() === 'cli');
+                    if (!$is_cli) {
+                        echo '<script>addLogEntry("  ⚠️ No courses found for ' . htmlspecialchars($company->name) . ' - skipping", "warning");</script>';
+                        flush();
+                    }
+                }
                 continue; // Skip if no courses available
             }
+            
+            $company_processed = 0;
+            $company_inserted = 0;
             
             // Build the complex query to get all user-course data
             list($course_sql, $course_params) = $DB->get_in_or_equal($enabled_courses, SQL_PARAMS_NAMED, 'course');
@@ -545,16 +571,30 @@ function local_alx_report_api_populate_reporting_table($companyid = 0, $batch_si
                         
                         $DB->insert_record('local_alx_api_reporting', $reporting_record);
                         $batch_inserted++;
+                        $company_inserted++;
                     }
                 }
                 
-                $total_processed += count($records);
-                $total_inserted += $batch_inserted;
+                $company_processed += count($records);
                 $offset += $batch_size;
                 
                 // Break if we got fewer records than batch size (end of data)
                 if (count($records) < $batch_size) {
                     break;
+                }
+            }
+            
+            $total_processed += $company_processed;
+            $total_inserted += $company_inserted;
+            
+            if ($output_progress && !defined('CLI_SCRIPT')) {
+                $is_cli = (php_sapi_name() === 'cli');
+                if (!$is_cli) {
+                    echo '<script>addLogEntry("  ✅ ' . htmlspecialchars($company->name) . ' - Processed: ' . number_format($company_processed) . ', Inserted: ' . number_format($company_inserted) . '", "success");</script>';
+                    // Update progress
+                    $percentage = round(($current_company / $total_companies) * 100);
+                    echo '<script>updateProgress(' . $total_processed . ', ' . $total_inserted . ', ' . $companies_processed . ', ' . $percentage . ');</script>';
+                    flush();
                 }
             }
         }
@@ -572,7 +612,7 @@ function local_alx_report_api_populate_reporting_table($companyid = 0, $batch_si
         'total_inserted' => $total_inserted,
         'duration_seconds' => $duration,
         'errors' => $errors,
-        'companies_processed' => count($companies ?? [])
+        'companies_processed' => $companies_processed
     ];
 }
 

@@ -109,7 +109,7 @@ if ($cleanup_action === 'clear' && $cleanup_confirm) {
         }
         
         $duration = time() - $start_time;
-        echo "\n" . str_repeat('-', 50) . "\n";
+    echo "\n" . str_repeat('-', 50) . "\n";
         echo "Cleanup completed!\n";
         echo "Records deleted: $deleted_count\n";
         echo "Duration: $duration seconds\n";
@@ -145,21 +145,227 @@ if ($cleanup_action === 'clear' && $cleanup_confirm) {
 if ($action === 'populate' && $confirm) {
     if (!$is_cli) {
         echo $OUTPUT->header();
-        echo $OUTPUT->heading('Populating Reporting Table...');
-        echo '<div class="alert alert-info">This may take several minutes depending on your data size. Please wait...</div>';
-        echo '<pre id="progress-log">';
+        
+        // Modern population interface with real-time updates
+        echo '<div style="max-width: 1200px; margin: 0 auto; padding: 20px;">';
+        echo '<div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; border-radius: 12px; margin-bottom: 30px; box-shadow: 0 8px 32px rgba(0,0,0,0.1);">';
+        echo '<h1 style="margin: 0; font-size: 2rem; font-weight: 700;"><i class="fas fa-database"></i> Data Population in Progress</h1>';
+        echo '<p style="margin: 10px 0 0 0; opacity: 0.9; font-size: 1.1rem;">Processing your data - please wait while we populate the reporting table...</p>';
+        echo '</div>';
+        
+        // Progress container
+        echo '<div class="progress-container" style="background: white; border-radius: 12px; padding: 30px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); margin-bottom: 20px;">';
+        
+        // Progress header
+        echo '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px;">';
+        echo '<h3 style="margin: 0; color: #2d3748;"><i class="fas fa-chart-line"></i> Population Progress</h3>';
+        echo '<div id="status-badge" style="background: #3182ce; color: white; padding: 8px 16px; border-radius: 20px; font-weight: 600; font-size: 14px;">🔄 Processing...</div>';
+        echo '</div>';
+        
+        // Progress bars
+        echo '<div style="margin-bottom: 30px;">';
+        echo '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">';
+        echo '<span style="font-weight: 600; color: #4a5568;">Overall Progress</span>';
+        echo '<span id="progress-percentage" style="font-weight: 700; color: #3182ce;">0%</span>';
+        echo '</div>';
+        echo '<div style="background: #e2e8f0; border-radius: 10px; height: 12px; overflow: hidden; margin-bottom: 20px;">';
+        echo '<div id="progress-bar" style="background: linear-gradient(90deg, #3182ce 0%, #63b3ed 100%); width: 0%; height: 100%; transition: width 0.3s ease; border-radius: 10px;"></div>';
+        echo '</div>';
+        echo '</div>';
+        
+        // Stats grid
+        echo '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 30px;">';
+        
+        // Processed records
+        echo '<div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; border-radius: 10px; text-align: center;">';
+        echo '<div style="font-size: 2rem; font-weight: 700; margin-bottom: 5px;" id="processed-count">0</div>';
+        echo '<div style="opacity: 0.9; font-size: 14px;">Records Processed</div>';
+        echo '</div>';
+        
+        // Inserted records
+        echo '<div style="background: linear-gradient(135deg, #48bb78 0%, #38a169 100%); color: white; padding: 20px; border-radius: 10px; text-align: center;">';
+        echo '<div style="font-size: 2rem; font-weight: 700; margin-bottom: 5px;" id="inserted-count">0</div>';
+        echo '<div style="opacity: 0.9; font-size: 14px;">Records Inserted</div>';
+        echo '</div>';
+        
+        // Companies processed
+        echo '<div style="background: linear-gradient(135deg, #ed8936 0%, #dd6b20 100%); color: white; padding: 20px; border-radius: 10px; text-align: center;">';
+        echo '<div style="font-size: 2rem; font-weight: 700; margin-bottom: 5px;" id="companies-count">0</div>';
+        echo '<div style="opacity: 0.9; font-size: 14px;">Companies Processed</div>';
+        echo '</div>';
+        
+        // Duration
+        echo '<div style="background: linear-gradient(135deg, #9f7aea 0%, #805ad5 100%); color: white; padding: 20px; border-radius: 10px; text-align: center;">';
+        echo '<div style="font-size: 2rem; font-weight: 700; margin-bottom: 5px;" id="duration-count">0s</div>';
+        echo '<div style="opacity: 0.9; font-size: 14px;">Duration</div>';
+        echo '</div>';
+        
+        echo '</div>';
+        
+        // Live log container
+        echo '<div style="background: #1a202c; color: #e2e8f0; border-radius: 10px; padding: 20px; font-family: \'Courier New\', monospace; font-size: 14px; line-height: 1.6; max-height: 400px; overflow-y: auto;" id="live-log">';
+        echo '<div style="color: #68d391; font-weight: 600;">📊 Population Log - ' . date('Y-m-d H:i:s') . '</div>';
+        echo '<div style="color: #90cdf4;">═══════════════════════════════════════════════════════════════</div>';
+        echo '</div>';
+        
+        echo '</div>'; // Close progress container
+        
+        // Completion container (hidden initially)
+        echo '<div id="completion-container" style="display: none; background: white; border-radius: 12px; padding: 30px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); text-align: center;">';
+        echo '<div style="font-size: 4rem; color: #48bb78; margin-bottom: 20px;">✅</div>';
+        echo '<h2 style="color: #2d3748; margin-bottom: 15px;">Population Complete!</h2>';
+        echo '<div id="final-summary" style="background: #f7fafc; padding: 20px; border-radius: 8px; margin-bottom: 20px;"></div>';
+        echo '<a href="' . $CFG->wwwroot . '/local/alx_report_api/control_center.php" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 600; display: inline-block; margin-right: 10px;">📊 View Control Center</a>';
+        echo '<a href="' . $CFG->wwwroot . '/local/alx_report_api/populate_reporting_table.php" style="background: #e2e8f0; color: #4a5568; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 600; display: inline-block;">🔄 Run Again</a>';
+        echo '</div>';
+        
+        echo '</div>'; // Close main container
+        
+        // JavaScript for real-time updates
+        echo '<script>
+        let startTime = Date.now();
+        let updateInterval;
+        
+        function updateDuration() {
+            const elapsed = Math.floor((Date.now() - startTime) / 1000);
+            document.getElementById("duration-count").textContent = elapsed + "s";
+        }
+        
+        function addLogEntry(message, type = "info") {
+            const log = document.getElementById("live-log");
+            const colors = {
+                info: "#e2e8f0",
+                success: "#68d391", 
+                warning: "#fbb649",
+                error: "#f56565",
+                company: "#90cdf4"
+            };
+            
+            const timestamp = new Date().toLocaleTimeString();
+            const entry = `<div style="color: ${colors[type]}; margin: 2px 0; padding: 2px 0; border-left: 3px solid ${colors[type]}; padding-left: 8px;">[${timestamp}] ${message}</div>`;
+            log.innerHTML += entry;
+            log.scrollTop = log.scrollHeight;
+        }
+        
+        function updateProgress(processed, inserted, companies, percentage) {
+            document.getElementById("processed-count").textContent = processed.toLocaleString();
+            document.getElementById("inserted-count").textContent = inserted.toLocaleString();
+            document.getElementById("companies-count").textContent = companies;
+            document.getElementById("progress-percentage").textContent = percentage + "%";
+            document.getElementById("progress-bar").style.width = percentage + "%";
+            
+            // Add visual feedback for progress
+            if (percentage >= 100) {
+                document.getElementById("progress-bar").style.background = "linear-gradient(90deg, #48bb78 0%, #68d391 100%)";
+                document.getElementById("status-badge").innerHTML = "🎉 Processing Complete";
+                document.getElementById("status-badge").style.background = "#48bb78";
+            } else if (percentage >= 75) {
+                document.getElementById("progress-bar").style.background = "linear-gradient(90deg, #ed8936 0%, #fbb649 100%)";
+            } else if (percentage >= 50) {
+                document.getElementById("progress-bar").style.background = "linear-gradient(90deg, #667eea 0%, #764ba2 100%)";
+            }
+        }
+        
+        function showCompletion(summary) {
+            document.getElementById("status-badge").innerHTML = "✅ Complete";
+            document.getElementById("status-badge").style.background = "#48bb78";
+            document.getElementById("final-summary").innerHTML = summary;
+            document.getElementById("completion-container").style.display = "block";
+            
+            // Add celebration animation
+            document.getElementById("completion-container").style.animation = "fadeInUp 0.5s ease-out";
+            
+            // Hide progress container
+            document.querySelector(".progress-container").style.display = "none";
+            
+            clearInterval(updateInterval);
+            
+            // Add confetti effect (simple)
+            setTimeout(() => {
+                addLogEntry("🎊 Population process completed successfully! 🎊", "success");
+            }, 500);
+        }
+        
+        // Start duration timer
+        updateInterval = setInterval(updateDuration, 1000);
+        
+        // Add CSS animations
+        const style = document.createElement("style");
+        style.textContent = `
+            @keyframes fadeInUp {
+                from {
+                    opacity: 0;
+                    transform: translateY(30px);
+                }
+                to {
+                    opacity: 1;
+                    transform: translateY(0);
+                }
+            }
+            
+            @keyframes pulse {
+                0% { transform: scale(1); }
+                50% { transform: scale(1.05); }
+                100% { transform: scale(1); }
+            }
+            
+            .progress-container {
+                animation: fadeInUp 0.3s ease-out;
+            }
+            
+            #status-badge {
+                animation: pulse 2s infinite;
+            }
+            
+            #live-log {
+                font-family: "Consolas", "Monaco", "Courier New", monospace !important;
+                background: linear-gradient(135deg, #1a202c 0%, #2d3748 100%) !important;
+                border: 1px solid #4a5568;
+            }
+            
+            #live-log::-webkit-scrollbar {
+                width: 8px;
+            }
+            
+            #live-log::-webkit-scrollbar-track {
+                background: #2d3748;
+                border-radius: 4px;
+            }
+            
+            #live-log::-webkit-scrollbar-thumb {
+                background: #4a5568;
+                border-radius: 4px;
+            }
+            
+            #live-log::-webkit-scrollbar-thumb:hover {
+                background: #718096;
+            }
+        `;
+        document.head.appendChild(style);
+        </script>';
+        
+        echo '<div style="display: none;" id="progress-data">';
         flush();
     }
     
     $start_time = time();
-    echo "Starting data population at " . date('Y-m-d H:i:s') . "\n";
+    
+    if (!$is_cli) {
+        echo '<script>addLogEntry("🚀 Starting data population process...", "success");</script>';
+        flush();
+    } else {
+        echo "Starting data population at " . date('Y-m-d H:i:s') . "\n";
+    }
     
     // Display selected companies
     if ($company_all || empty($company_ids)) {
-        echo "Companies: All companies\n";
+        if (!$is_cli) {
+            echo '<script>addLogEntry("📋 Target: All companies", "info");</script>';
+        } else {
+            echo "Companies: All companies\n";
+        }
         $companies_to_process = [0]; // 0 means all companies
     } else {
-        echo "Companies: ";
         $company_names = [];
         foreach ($company_ids as $cid) {
             $company_name = $DB->get_field('company', 'name', ['id' => $cid]);
@@ -167,12 +373,22 @@ if ($action === 'populate' && $confirm) {
                 $company_names[] = $company_name;
             }
         }
-        echo implode(', ', $company_names) . "\n";
+        if (!$is_cli) {
+            echo '<script>addLogEntry("📋 Target: ' . implode(', ', $company_names) . '", "info");</script>';
+        } else {
+            echo "Companies: " . implode(', ', $company_names) . "\n";
+        }
         $companies_to_process = $company_ids;
     }
     
-    echo "Batch size: $batch_size\n";
-    echo str_repeat('-', 50) . "\n";
+    if (!$is_cli) {
+        echo '<script>addLogEntry("⚙️ Batch size: ' . $batch_size . ' records", "info");</script>';
+        echo '<script>addLogEntry("═══════════════════════════════════════════════════════════════", "info");</script>';
+        flush();
+    } else {
+        echo "Batch size: $batch_size\n";
+        echo str_repeat('-', 50) . "\n";
+    }
     flush();
     
     // Process each company
@@ -187,9 +403,15 @@ if ($action === 'populate' && $confirm) {
     
     if (in_array(0, $companies_to_process)) {
         // Process all companies
-        echo "Processing all companies...\n";
-        flush();
-        $result = local_alx_report_api_populate_reporting_table(0, $batch_size);
+        if (!$is_cli) {
+            echo '<script>addLogEntry("🏢 Processing all companies...", "info");</script>';
+            flush();
+        } else {
+            echo "Processing all companies...\n";
+            flush();
+        }
+        
+        $result = local_alx_report_api_populate_reporting_table(0, $batch_size, true);
         $total_results['total_processed'] += $result['total_processed'];
         $total_results['total_inserted'] += $result['total_inserted'];
         $total_results['companies_processed'] += $result['companies_processed'];
@@ -197,14 +419,30 @@ if ($action === 'populate' && $confirm) {
         if (!$result['success']) {
             $total_results['success'] = false;
         }
+        
+        if (!$is_cli) {
+            $percentage = 100; // All companies processed
+            echo '<script>updateProgress(' . $total_results['total_processed'] . ', ' . $total_results['total_inserted'] . ', ' . $total_results['companies_processed'] . ', ' . $percentage . ');</script>';
+            echo '<script>addLogEntry("✅ All companies processed - ' . number_format($total_results['total_processed']) . ' records processed, ' . number_format($total_results['total_inserted']) . ' inserted", "success");</script>';
+            flush();
+        }
     } else {
         // Process selected companies individually
+        $total_companies = count($companies_to_process);
+        $processed_companies = 0;
+        
         foreach ($companies_to_process as $company_id) {
             $company_name = $DB->get_field('company', 'name', ['id' => $company_id]);
-            echo "Processing company: $company_name (ID: $company_id)...\n";
-            flush();
             
-            $result = local_alx_report_api_populate_reporting_table($company_id, $batch_size);
+            if (!$is_cli) {
+                echo '<script>addLogEntry("🏢 Processing company: ' . htmlspecialchars($company_name) . ' (ID: ' . $company_id . ')...", "company");</script>';
+                flush();
+            } else {
+                echo "Processing company: $company_name (ID: $company_id)...\n";
+                flush();
+            }
+            
+            $result = local_alx_report_api_populate_reporting_table($company_id, $batch_size, true);
             $total_results['total_processed'] += $result['total_processed'];
             $total_results['total_inserted'] += $result['total_inserted'];
             $total_results['companies_processed'] += $result['companies_processed'];
@@ -213,50 +451,74 @@ if ($action === 'populate' && $confirm) {
                 $total_results['success'] = false;
             }
             
-            echo "  - Processed: {$result['total_processed']}, Inserted: {$result['total_inserted']}\n";
-            flush();
+            $processed_companies++;
+            $percentage = round(($processed_companies / $total_companies) * 100);
+            
+            if (!$is_cli) {
+                echo '<script>updateProgress(' . $total_results['total_processed'] . ', ' . $total_results['total_inserted'] . ', ' . $total_results['companies_processed'] . ', ' . $percentage . ');</script>';
+                echo '<script>addLogEntry("  ✅ ' . htmlspecialchars($company_name) . ' - Processed: ' . number_format($result['total_processed']) . ', Inserted: ' . number_format($result['total_inserted']) . '", "success");</script>';
+                flush();
+            } else {
+                echo "  - Processed: {$result['total_processed']}, Inserted: {$result['total_inserted']}\n";
+                flush();
+            }
         }
     }
     
     $total_results['duration_seconds'] = time() - $start_time;
     
-    echo "\n" . str_repeat('-', 50) . "\n";
-    echo "Population completed!\n";
-    echo "Total processed: " . $total_results['total_processed'] . "\n";
-    echo "Total inserted: " . $total_results['total_inserted'] . "\n";
-    echo "Companies processed: " . $total_results['companies_processed'] . "\n";
-    echo "Duration: " . $total_results['duration_seconds'] . " seconds\n";
-    echo "Success: " . ($total_results['success'] ? 'YES' : 'NO') . "\n";
-    
-    if (!empty($total_results['errors'])) {
-        echo "\nErrors encountered:\n";
-        foreach ($total_results['errors'] as $error) {
-            echo "- $error\n";
-        }
-    }
-    
     if (!$is_cli) {
-        echo '</pre>';
-        echo '<div class="alert alert-success mt-3">';
-        echo '<h4>Population Complete!</h4>';
-        echo '<p><strong>Total Records Processed:</strong> ' . $total_results['total_processed'] . '</p>';
-        echo '<p><strong>Total Records Inserted:</strong> ' . $total_results['total_inserted'] . '</p>';
-        echo '<p><strong>Duration:</strong> ' . $total_results['duration_seconds'] . ' seconds</p>';
-        echo '</div>';
+        // Show completion with modern interface
+        echo '<script>addLogEntry("═══════════════════════════════════════════════════════════════", "info");</script>';
+        echo '<script>addLogEntry("🎉 Population completed successfully!", "success");</script>';
+        echo '<script>addLogEntry("📊 Total processed: ' . number_format($total_results['total_processed']) . ' records", "info");</script>';
+        echo '<script>addLogEntry("✅ Total inserted: ' . number_format($total_results['total_inserted']) . ' records", "success");</script>';
+        echo '<script>addLogEntry("🏢 Companies processed: ' . $total_results['companies_processed'] . '", "info");</script>';
+        echo '<script>addLogEntry("⏱️ Duration: ' . $total_results['duration_seconds'] . ' seconds", "info");</script>';
         
         if (!empty($total_results['errors'])) {
-            echo '<div class="alert alert-warning">';
-            echo '<h4>Errors Encountered:</h4>';
-            echo '<ul>';
+            echo '<script>addLogEntry("⚠️ Errors encountered:", "warning");</script>';
             foreach ($total_results['errors'] as $error) {
-                echo '<li>' . htmlspecialchars($error) . '</li>';
+                echo '<script>addLogEntry("  - ' . htmlspecialchars($error) . '", "error");</script>';
             }
-            echo '</ul>';
-            echo '</div>';
         }
         
-        echo '<p><a href="' . $CFG->wwwroot . '/local/alx_report_api/populate_reporting_table.php" class="btn btn-primary">Back to Population Tool</a></p>';
+        // Build completion summary
+        $summary = '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; text-align: center;">';
+        $summary .= '<div><div style="font-size: 2rem; font-weight: 700; color: #667eea; margin-bottom: 5px;">' . number_format($total_results['total_processed']) . '</div><div style="color: #4a5568;">Records Processed</div></div>';
+        $summary .= '<div><div style="font-size: 2rem; font-weight: 700; color: #48bb78; margin-bottom: 5px;">' . number_format($total_results['total_inserted']) . '</div><div style="color: #4a5568;">Records Inserted</div></div>';
+        $summary .= '<div><div style="font-size: 2rem; font-weight: 700; color: #ed8936; margin-bottom: 5px;">' . $total_results['companies_processed'] . '</div><div style="color: #4a5568;">Companies</div></div>';
+        $summary .= '<div><div style="font-size: 2rem; font-weight: 700; color: #9f7aea; margin-bottom: 5px;">' . $total_results['duration_seconds'] . 's</div><div style="color: #4a5568;">Duration</div></div>';
+        $summary .= '</div>';
+        
+        if (!empty($total_results['errors'])) {
+            $summary .= '<div style="background: #fed7d7; color: #c53030; padding: 15px; border-radius: 8px; margin-top: 15px;">';
+            $summary .= '<h4 style="margin: 0 0 10px 0; color: #c53030;">⚠️ Errors Encountered:</h4>';
+            $summary .= '<ul style="margin: 0; padding-left: 20px;">';
+            foreach ($total_results['errors'] as $error) {
+                $summary .= '<li>' . htmlspecialchars($error) . '</li>';
+            }
+            $summary .= '</ul></div>';
+        }
+        
+        echo '<script>showCompletion(`' . $summary . '`);</script>';
+        echo '</div>'; // Close progress-data div
         echo $OUTPUT->footer();
+    } else {
+        echo "\n" . str_repeat('-', 50) . "\n";
+        echo "Population completed!\n";
+        echo "Total processed: " . $total_results['total_processed'] . "\n";
+        echo "Total inserted: " . $total_results['total_inserted'] . "\n";
+        echo "Companies processed: " . $total_results['companies_processed'] . "\n";
+        echo "Duration: " . $total_results['duration_seconds'] . " seconds\n";
+        echo "Success: " . ($total_results['success'] ? 'YES' : 'NO') . "\n";
+        
+        if (!empty($total_results['errors'])) {
+            echo "\nErrors encountered:\n";
+            foreach ($total_results['errors'] as $error) {
+                echo "- $error\n";
+            }
+        }
     }
     
     exit;
@@ -291,7 +553,7 @@ if ($is_cli) {
     fgets(STDIN);
     
     // Run population
-    $result = local_alx_report_api_populate_reporting_table($cli_companyid, $cli_batch_size);
+    $result = local_alx_report_api_populate_reporting_table($cli_companyid, $cli_batch_size, true);
     
     echo "\nPopulation Results:\n";
     echo "==================\n";
