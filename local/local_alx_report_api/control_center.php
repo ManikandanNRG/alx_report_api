@@ -1336,17 +1336,13 @@ document.addEventListener('DOMContentLoaded', function() {
     // Check URL parameters to determine active tab
     const urlParams = new URLSearchParams(window.location.search);
     const activeTab = urlParams.get('tab');
-    const companyId = urlParams.get('companyid');
     
     // Determine which tab should be active
     let targetTab = 'overview'; // default
     
     if (activeTab) {
-        // If tab parameter is explicitly set, use it
+        // ONLY switch tabs when explicitly requested via tab parameter
         targetTab = activeTab;
-    } else if (companyId && companyId !== '0') {
-        // If company is selected but no tab specified, show companies tab
-        targetTab = 'companies';
     }
     
     // Switch to the determined tab (if not already overview)
@@ -1386,21 +1382,24 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     // Handle company selection scroll position - only for companies tab with valid company
-    if (targetTab === 'companies' && companyId && companyId !== '0' && companyId !== '' && companyId !== null) {
-        // Additional check: make sure company settings form is actually visible on the page
-        setTimeout(function() {
-            const companySettingsForm = document.querySelector('form[action=""] input[name="settings_action"][value="save"]');
-            const companySelector = document.querySelector('.company-selector');
-            
-            // Only scroll if both company selector exists AND company settings form exists (meaning a valid company is selected)
-            if (companySelector && companySettingsForm) {
-                companySelector.scrollIntoView({ 
-                    behavior: 'smooth', 
-                    block: 'start',
-                    inline: 'nearest'
-                });
-            }
-        }, 100); // Small delay to ensure page is fully loaded
+    if (targetTab === 'companies') {
+        const companyId = urlParams.get('companyid');
+        if (companyId && companyId !== '0' && companyId !== '' && companyId !== null) {
+            // Additional check: make sure company settings form is actually visible on the page
+            setTimeout(function() {
+                const companySettingsForm = document.querySelector('form[action=""] input[name="settings_action"][value="save"]');
+                const companySelector = document.querySelector('.company-selector');
+                
+                // Only scroll if both company selector exists AND company settings form exists (meaning a valid company is selected)
+                if (companySelector && companySettingsForm) {
+                    companySelector.scrollIntoView({ 
+                        behavior: 'smooth', 
+                        block: 'start',
+                        inline: 'nearest'
+                    });
+                }
+            }, 100); // Small delay to ensure page is fully loaded
+        }
     }
 });
 
