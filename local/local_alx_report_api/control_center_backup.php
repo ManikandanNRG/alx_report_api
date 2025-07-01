@@ -37,13 +37,6 @@ $PAGE->set_url('/local/alx_report_api/control_center.php');
 $PAGE->set_title('ALX Report API - Control Center');
 $PAGE->set_heading('ALX Report API Control Center');
 
-// Force browser cache refresh - add timestamp to ensure new version loads
-$cache_buster = time();
-$PAGE->requires->js_amd_inline("
-    // Force refresh of cached content - version: {$cache_buster}
-    console.log('Control Center Enhanced Version Loading: " . $cache_buster . "');
-");
-
 // Get initial data with error handling
 $companies = [];
 $total_records = 0;
@@ -108,13 +101,13 @@ echo $OUTPUT->header();
 echo '<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">';
 echo '<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">';
 
-// Debug indicator for cache busting
-echo '<div style="position: fixed; top: 0; right: 0; background: #10b981; color: white; padding: 4px 8px; font-size: 10px; z-index: 9999;">Enhanced v' . time() . '</div>';
+// Add cache busting parameter
+$cache_buster = '?v=' . time();
+echo '<link href="' . $CFG->wwwroot . '/local/alx_report_api/control_center_fix.css' . $cache_buster . '" rel="stylesheet">';
 
 ?>
 
 <style>
-/* Add cache-busting comment to force refresh: <?php echo time(); ?> */
 /* Modern Control Center Styling */
 :root {
     --primary-color: #2563eb;
@@ -147,55 +140,6 @@ echo '<div style="position: fixed; top: 0; right: 0; background: #10b981; color:
     padding: 24px;
     background: var(--light-bg);
     min-height: 100vh;
-}
-
-/* Fix bottom spacing */
-#overview-tab {
-    margin-bottom: 0 !important;
-    padding-bottom: 20px;
-}
-
-.card-grid {
-    margin-bottom: 0 !important;
-}
-
-/* Enhanced button hover effects */
-.btn-modern:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(0,0,0,0.2) !important;
-    opacity: 0.9;
-}
-
-/* Ensure proper card spacing */
-.dashboard-card {
-    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -1px rgb(0 0 0 / 0.06);
-    border-radius: 12px;
-    overflow: hidden;
-}
-
-/* Header visibility improvements */
-.card-header {
-    padding: 16px 20px 12px 20px;
-}
-
-.card-title {
-    font-size: 18px;
-    font-weight: 600;
-}
-
-.card-subtitle {
-    font-size: 14px;
-    opacity: 0.8;
-}
-
-/* Body spacing */
-.card-body {
-    padding: 20px;
-}
-
-/* Footer improvements */
-.card-footer {
-    text-align: center;
 }
 
 /* Header Section */
@@ -748,17 +692,17 @@ input[type="checkbox"]:disabled {
 
     <!-- System Overview Tab -->
     <div id="overview-tab" class="tab-content active">
-        <div class="card-grid card-grid-3" style="margin-bottom: 20px;">
+        <div class="card-grid card-grid-3">
             <!-- Performance Cards Row -->
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 20px; margin-top: 20px; margin-bottom: 20px;">
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 20px; margin-top: 20px;">
                 <!-- Enhanced API Performance Card -->
-                <div class="dashboard-card" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; margin-bottom: 0;">
-                    <div class="card-header" style="border-bottom: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.1);">
-                        <h3 class="card-title" style="color: white; margin: 0;">
+                <div class="dashboard-card" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none;">
+                    <div class="card-header" style="border-bottom: 1px solid rgba(255,255,255,0.2);">
+                        <h3 class="card-title" style="color: white;">
                             <i class="fas fa-tachometer-alt"></i>
                             API Performance
                         </h3>
-                        <p class="card-subtitle" style="color: rgba(255,255,255,0.8); margin: 4px 0 0 0;">Real-time performance metrics with visual indicators</p>
+                        <p class="card-subtitle" style="color: rgba(255,255,255,0.8);">Real-time performance metrics with visual indicators</p>
                     </div>
                     <div class="card-body">
                         <?php
@@ -807,8 +751,8 @@ input[type="checkbox"]:disabled {
                             </div>
                         </div>
                     </div>
-                    <div class="card-footer" style="border-top: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.1); padding: 16px;">
-                        <a href="<?php echo $CFG->wwwroot; ?>/local/alx_report_api/monitoring_dashboard.php" class="btn-modern" style="background: rgba(255,255,255,0.9); color: #667eea; border: 2px solid rgba(255,255,255,0.3); padding: 8px 16px; border-radius: 6px; text-decoration: none; display: inline-block; font-weight: 600; transition: all 0.3s ease;">
+                    <div class="card-footer" style="border-top: 1px solid rgba(255,255,255,0.2);">
+                        <a href="<?php echo $CFG->wwwroot; ?>/local/alx_report_api/monitoring_dashboard.php" class="btn-modern" style="background: rgba(255,255,255,0.2); color: white; border: 1px solid rgba(255,255,255,0.3);">
                             <i class="fas fa-chart-line"></i>
                             View Full Analytics
                         </a>
@@ -816,13 +760,13 @@ input[type="checkbox"]:disabled {
                 </div>
 
                 <!-- Enhanced Response Status Card -->
-                <div class="dashboard-card" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: white; border: none; margin-bottom: 0;">
-                    <div class="card-header" style="border-bottom: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.1);">
-                        <h3 class="card-title" style="color: white; margin: 0;">
+                <div class="dashboard-card" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: white; border: none;">
+                    <div class="card-header" style="border-bottom: 1px solid rgba(255,255,255,0.2);">
+                        <h3 class="card-title" style="color: white;">
                             <i class="fas fa-sync-alt"></i>
                             Sync Status
                         </h3>
-                        <p class="card-subtitle" style="color: rgba(255,255,255,0.8); margin: 4px 0 0 0;">Automatic data synchronization</p>
+                        <p class="card-subtitle" style="color: rgba(255,255,255,0.8);">Automatic data synchronization</p>
                     </div>
                     <div class="card-body">
                         <?php
@@ -876,8 +820,8 @@ input[type="checkbox"]:disabled {
                             <div style="font-size: 16px; font-weight: 600; color: #4ade80;">2025-07-01 12:37:36</div>
                         </div>
                     </div>
-                    <div class="card-footer" style="border-top: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.1); padding: 16px;">
-                        <a href="<?php echo $CFG->wwwroot; ?>/local/alx_report_api/auto_sync_status.php" class="btn-modern" style="background: rgba(255,255,255,0.9); color: #f093fb; border: 2px solid rgba(255,255,255,0.3); padding: 8px 16px; border-radius: 6px; text-decoration: none; display: inline-block; font-weight: 600; transition: all 0.3s ease;">
+                    <div class="card-footer" style="border-top: 1px solid rgba(255,255,255,0.2);">
+                        <a href="<?php echo $CFG->wwwroot; ?>/local/alx_report_api/auto_sync_status.php" class="btn-modern" style="background: rgba(255,255,255,0.2); color: white; border: 1px solid rgba(255,255,255,0.3);">
                             <i class="fas fa-cog"></i>
                             Sync Settings
                         </a>
@@ -885,13 +829,13 @@ input[type="checkbox"]:disabled {
                 </div>
 
                 <!-- Enhanced Security Status Card -->
-                <div class="dashboard-card" style="background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%); color: #1f2937; border: none; margin-bottom: 0;">
-                    <div class="card-header" style="border-bottom: 1px solid rgba(31,41,55,0.1); background: rgba(255,255,255,0.1);">
-                        <h3 class="card-title" style="color: #1f2937; margin: 0;">
+                <div class="dashboard-card" style="background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%); color: #1f2937; border: none;">
+                    <div class="card-header" style="border-bottom: 1px solid rgba(31,41,55,0.1);">
+                        <h3 class="card-title" style="color: #1f2937;">
                             <i class="fas fa-shield-alt" style="color: #10b981;"></i>
                             Security Status
                         </h3>
-                        <p class="card-subtitle" style="color: #6b7280; margin: 4px 0 0 0;">API security and access control</p>
+                        <p class="card-subtitle" style="color: #6b7280;">API security and access control</p>
                     </div>
                     <div class="card-body">
                         <?php
@@ -958,8 +902,8 @@ input[type="checkbox"]:disabled {
                             </div>
                         </div>
                     </div>
-                    <div class="card-footer" style="border-top: 1px solid rgba(31,41,55,0.1); background: rgba(255,255,255,0.1); padding: 16px;">
-                        <a href="<?php echo $CFG->wwwroot; ?>/local/alx_report_api/check_rate_limit.php" class="btn-modern" style="background: #10b981; color: white; border: 2px solid #10b981; padding: 8px 16px; border-radius: 6px; text-decoration: none; display: inline-block; font-weight: 600; transition: all 0.3s ease; box-shadow: 0 2px 4px rgba(16,185,129,0.3);">
+                    <div class="card-footer" style="border-top: 1px solid rgba(31,41,55,0.1);">
+                        <a href="<?php echo $CFG->wwwroot; ?>/local/alx_report_api/check_rate_limit.php" class="btn-modern" style="background: #10b981; color: white; border: none;">
                             <i class="fas fa-chart-line"></i>
                             Security Monitor
                         </a>
@@ -969,29 +913,29 @@ input[type="checkbox"]:disabled {
         </div>
 
         <!-- Quick Actions -->
-        <div class="dashboard-card" style="margin-top: 20px; margin-bottom: 0;">
-            <div class="card-header" style="background: linear-gradient(135deg, #28a745, #20c997); color: white; padding: 16px 20px 12px 20px;">
-                <h3 class="card-title" style="color: white; margin: 0;">
+        <div class="dashboard-card">
+            <div class="card-header">
+                <h3 class="card-title">
                     <i class="fas fa-bolt"></i>
                     Quick Actions
                 </h3>
-                <p class="card-subtitle" style="color: rgba(255,255,255,0.8); margin: 4px 0 0 0;">Common tasks and operations</p>
+                <p class="card-subtitle">Common tasks and operations</p>
             </div>
-            <div class="card-body" style="padding: 20px;">
+            <div class="card-body">
                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;">
-                    <a href="<?php echo $CFG->wwwroot; ?>/local/alx_report_api/populate_reporting_table.php" class="btn-modern btn-primary" style="background: #007bff; color: white; border: 2px solid #007bff; padding: 12px 16px; border-radius: 8px; text-decoration: none; display: flex; align-items: center; justify-content: center; gap: 8px; font-weight: 600; transition: all 0.3s ease; box-shadow: 0 2px 4px rgba(0,123,255,0.3);">
+                    <a href="<?php echo $CFG->wwwroot; ?>/local/alx_report_api/populate_reporting_table.php" class="btn-modern btn-primary">
                         <i class="fas fa-database"></i>
                         Populate Data
                     </a>
-                    <a href="<?php echo $CFG->wwwroot; ?>/local/alx_report_api/sync_reporting_data.php" class="btn-modern btn-warning" style="background: #ffc107; color: #212529; border: 2px solid #ffc107; padding: 12px 16px; border-radius: 8px; text-decoration: none; display: flex; align-items: center; justify-content: center; gap: 8px; font-weight: 600; transition: all 0.3s ease; box-shadow: 0 2px 4px rgba(255,193,7,0.3);">
+                    <a href="<?php echo $CFG->wwwroot; ?>/local/alx_report_api/sync_reporting_data.php" class="btn-modern btn-warning">
                         <i class="fas fa-sync"></i>
                         Manual Sync
                     </a>
-                    <a href="<?php echo $CFG->wwwroot; ?>/local/alx_report_api/company_settings.php" class="btn-modern btn-success" style="background: #28a745; color: white; border: 2px solid #28a745; padding: 12px 16px; border-radius: 8px; text-decoration: none; display: flex; align-items: center; justify-content: center; gap: 8px; font-weight: 600; transition: all 0.3s ease; box-shadow: 0 2px 4px rgba(40,167,69,0.3);">
+                    <a href="<?php echo $CFG->wwwroot; ?>/local/alx_report_api/company_settings.php" class="btn-modern btn-success">
                         <i class="fas fa-building"></i>
                         Company Settings
                     </a>
-                    <a href="<?php echo $CFG->wwwroot; ?>/local/alx_report_api/monitoring_dashboard.php" class="btn-modern btn-secondary" style="background: #6c757d; color: white; border: 2px solid #6c757d; padding: 12px 16px; border-radius: 8px; text-decoration: none; display: flex; align-items: center; justify-content: center; gap: 8px; font-weight: 600; transition: all 0.3s ease; box-shadow: 0 2px 4px rgba(108,117,125,0.3);">
+                    <a href="<?php echo $CFG->wwwroot; ?>/local/alx_report_api/monitoring_dashboard.php" class="btn-modern btn-secondary">
                         <i class="fas fa-chart-bar"></i>
                         Monitoring
                     </a>

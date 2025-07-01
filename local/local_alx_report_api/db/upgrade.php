@@ -112,30 +112,117 @@ function xmldb_local_alx_report_api_upgrade($oldversion) {
             $dbman->create_table($table);
         }
 
-        // Savepoint reached.
+        // Add enhanced logging fields to the logs table
+        $field = new xmldb_field('error_message', XMLDB_TYPE_TEXT, null, null, null, null, null, 'useragent');
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+        
+        // Add response_time_ms field
+        $field = new xmldb_field('response_time_ms', XMLDB_TYPE_INTEGER, '10', null, null, null, null, 'error_message');
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+        
+        // Add record_count field
+        $field = new xmldb_field('record_count', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0', 'response_time_ms');
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+        
+        // Add company_shortname field for better tracking
+        $field = new xmldb_field('company_shortname', XMLDB_TYPE_CHAR, '100', null, null, null, null, 'record_count');
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+        
+        // Add timeaccessed field (rename from timecreated for consistency)
+        $field = new xmldb_field('timeaccessed', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null, 'company_shortname');
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+            
+            // Copy data from timecreated to timeaccessed if timecreated exists
+            if ($dbman->field_exists($table, new xmldb_field('timecreated'))) {
+                $DB->execute("UPDATE {local_alx_api_logs} SET timeaccessed = timecreated WHERE timeaccessed IS NULL OR timeaccessed = 0");
+            }
+        }
+        
+        // Add ip_address field (improved naming)
+        $field = new xmldb_field('ip_address', XMLDB_TYPE_CHAR, '45', null, null, null, null, 'timeaccessed');
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+            
+            // Copy data from ipaddress to ip_address if ipaddress exists
+            if ($dbman->field_exists($table, new xmldb_field('ipaddress'))) {
+                $DB->execute("UPDATE {local_alx_api_logs} SET ip_address = ipaddress WHERE ip_address IS NULL OR ip_address = ''");
+            }
+        }
+        
+        // Add user_agent field (improved naming)
+        $field = new xmldb_field('user_agent', XMLDB_TYPE_CHAR, '255', null, null, null, null, 'ip_address');
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+            
+            // Copy data from useragent to user_agent if useragent exists
+            if ($dbman->field_exists($table, new xmldb_field('useragent'))) {
+                $DB->execute("UPDATE {local_alx_api_logs} SET user_agent = useragent WHERE user_agent IS NULL OR user_agent = ''");
+            }
+        }
+        
+        // Add additional_data field for storing extra context
+        $field = new xmldb_field('additional_data', XMLDB_TYPE_TEXT, null, null, null, null, null, 'user_agent');
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+        
+        // Add indexes for better performance
+        $index = new xmldb_index('error_message_idx', XMLDB_INDEX_NOTUNIQUE, ['error_message']);
+        if (!$dbman->index_exists($table, $index)) {
+            $dbman->add_index($table, $index);
+        }
+        
+        $index = new xmldb_index('company_shortname_idx', XMLDB_INDEX_NOTUNIQUE, ['company_shortname']);
+        if (!$dbman->index_exists($table, $index)) {
+            $dbman->add_index($table, $index);
+        }
+        
+        $index = new xmldb_index('endpoint_idx', XMLDB_INDEX_NOTUNIQUE, ['endpoint']);
+        if (!$dbman->index_exists($table, $index)) {
+            $dbman->add_index($table, $index);
+        }
+        
+        $index = new xmldb_index('timeaccessed_idx', XMLDB_INDEX_NOTUNIQUE, ['timeaccessed']);
+        if (!$dbman->index_exists($table, $index)) {
+            $dbman->add_index($table, $index);
+        }
+        
+        // Create alerts table for tracking system alerts
+        $alerts_table = new xmldb_table('local_alx_api_alerts');
+        if (!$dbman->table_exists($alerts_table)) {
+            $alerts_table->add_field('id', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE, null);
+            $alerts_table->add_field('alert_type', XMLDB_TYPE_CHAR, '50', null, XMLDB_NOTNULL, null, null);
+            $alerts_table->add_field('severity', XMLDB_TYPE_CHAR, '20', null, XMLDB_NOTNULL, null, null);
+            $alerts_table->add_field('message', XMLDB_TYPE_TEXT, null, null, XMLDB_NOTNULL, null, null);
+            $alerts_table->add_field('alert_data', XMLDB_TYPE_TEXT, null, null, null, null, null);
+            $alerts_table->add_field('hostname', XMLDB_TYPE_CHAR, '255', null, null, null, null);
+            $alerts_table->add_field('timecreated', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
+            $alerts_table->add_field('resolved', XMLDB_TYPE_INTEGER, '1', null, XMLDB_NOTNULL, null, '0');
+
+            $alerts_table->add_key('primary', XMLDB_KEY_PRIMARY, ['id']);
+            $alerts_table->add_index('alert_type_idx', XMLDB_INDEX_NOTUNIQUE, ['alert_type']);
+            $alerts_table->add_index('severity_idx', XMLDB_INDEX_NOTUNIQUE, ['severity']);
+            $alerts_table->add_index('timecreated_idx', XMLDB_INDEX_NOTUNIQUE, ['timecreated']);
+            $alerts_table->add_index('resolved_idx', XMLDB_INDEX_NOTUNIQUE, ['resolved']);
+
+            $dbman->create_table($alerts_table);
+        }
+        
         upgrade_plugin_savepoint(true, 2024011502, 'local', 'alx_report_api');
     }
 
     if ($oldversion < 2024011509) {
         // Create company settings table.
         $table = new xmldb_table('local_alx_api_settings');
-        
-        if (!$dbman->table_exists($table)) {
-            $table->add_field('id', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE, null);
-            $table->add_field('companyid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
-            $table->add_field('setting_name', XMLDB_TYPE_CHAR, '100', null, XMLDB_NOTNULL, null, null);
-            $table->add_field('setting_value', XMLDB_TYPE_INTEGER, '1', null, XMLDB_NOTNULL, null, '0');
-            $table->add_field('timecreated', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
-            $table->add_field('timemodified', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
-
-            $table->add_key('primary', XMLDB_KEY_PRIMARY, ['id']);
-            $table->add_key('unique_company_setting', XMLDB_KEY_UNIQUE, ['companyid', 'setting_name']);
-            
-            $table->add_index('companyid', XMLDB_INDEX_NOTUNIQUE, ['companyid']);
-            $table->add_index('setting_name', XMLDB_INDEX_NOTUNIQUE, ['setting_name']);
-
-            $dbman->create_table($table);
-        }
 
         // Migrate old service shortname from 'brilliapi' to 'alx_report_api' for existing installations
         $old_service = $DB->get_record('external_services', ['shortname' => 'brilliapi']);

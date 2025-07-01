@@ -42,27 +42,49 @@ if ($hassiteconfig) {
         'moodle/site:config'
     ));
 
+    // Add advanced monitoring page
+    $ADMIN->add('localplugins', new admin_externalpage(
+        'local_alx_report_api_advanced_monitoring',
+        '🔍 Advanced Monitoring',
+        $CFG->wwwroot . '/local/alx_report_api/advanced_monitoring.php',
+        'moodle/site:config'
+    ));
+
+    // Add historical trends dashboard
+    $ADMIN->add('localplugins', new admin_externalpage(
+        'local_alx_report_api_trends',
+        '📈 Historical Trends',
+        $CFG->wwwroot . '/local/alx_report_api/trends_dashboard.php',
+        'moodle/site:config'
+    ));
+
+    // Add other monitoring pages
+    $ADMIN->add('localplugins', new admin_externalpage(
+        'local_alx_report_api_monitoring',
+        '📊 Standard Monitoring',
+        $CFG->wwwroot . '/local/alx_report_api/monitoring_dashboard.php',
+        'moodle/site:config'
+    ));
+
+    $ADMIN->add('localplugins', new admin_externalpage(
+        'local_alx_report_api_auto_sync_status',
+        '⚡ Auto-Sync Status',
+        $CFG->wwwroot . '/local/alx_report_api/auto_sync_status.php',
+        'moodle/site:config'
+    ));
+
+    $ADMIN->add('localplugins', new admin_externalpage(
+        'local_alx_report_api_rate_limit',
+        '🛡️ Rate Limit Monitor',
+        $CFG->wwwroot . '/local/alx_report_api/check_rate_limit.php',
+        'moodle/site:config'
+    ));
+
     // Add company settings as a separate admin page
     $ADMIN->add('localplugins', new admin_externalpage(
         'local_alx_report_api_company_settings',
         get_string('company_settings_title', 'local_alx_report_api'),
         new moodle_url('/local/alx_report_api/company_settings.php'),
-        'moodle/site:config'
-    ));
-
-    // Add monitoring dashboard as a separate admin page
-    $ADMIN->add('localplugins', new admin_externalpage(
-        'local_alx_report_api_monitoring',
-        'ALX Report API - Monitoring Dashboard',
-        new moodle_url('/local/alx_report_api/monitoring_dashboard.php'),
-        'moodle/site:config'
-    ));
-
-    // Add auto sync status as a separate admin page
-    $ADMIN->add('localplugins', new admin_externalpage(
-        'local_alx_report_api_auto_sync_status',
-        'ALX Report API - Auto Sync Status',
-        new moodle_url('/local/alx_report_api/auto_sync_status.php'),
         'moodle/site:config'
     ));
 
@@ -257,4 +279,137 @@ if ($hassiteconfig) {
         'Main Configuration Pages',
         $primary_actions
     ));
+
+    // Add alerting configuration section
+    $settings->add(new admin_setting_heading(
+        'local_alx_report_api_alerting',
+        get_string('alerting_settings', 'local_alx_report_api'),
+        get_string('alerting_settings_desc', 'local_alx_report_api')
+    ));
+
+    // Enable alerting
+    $settings->add(new admin_setting_configcheckbox(
+        'local_alx_report_api/enable_alerting',
+        'Enable Alert System',
+        'Enable email and SMS alerts for system monitoring events (rate limits, security issues, performance problems)',
+        1
+    ));
+
+    // Alert threshold
+    $alert_threshold_options = [
+        'low' => 'Low - Send all alerts',
+        'medium' => 'Medium - Send medium, high, and critical alerts',
+        'high' => 'High - Send only high and critical alerts', 
+        'critical' => 'Critical - Send only critical alerts'
+    ];
+    $settings->add(new admin_setting_configselect(
+        'local_alx_report_api/alert_threshold',
+        'Alert Severity Threshold',
+        'Minimum severity level for sending alerts',
+        'medium',
+        $alert_threshold_options
+    ));
+
+    // Alert recipients (emails)
+    $settings->add(new admin_setting_configtextarea(
+        'local_alx_report_api/alert_emails',
+        'Alert Email Recipients',
+        'Comma-separated list of email addresses to receive alerts. Site administrators will automatically receive critical alerts.',
+        '',
+        PARAM_TEXT
+    ));
+
+    // Email alert configuration
+    $settings->add(new admin_setting_configcheckbox(
+        'local_alx_report_api/enable_email_alerts',
+        'Enable Email Alerts',
+        'Send alerts via email using Moodle\'s email system',
+        1
+    ));
+
+    // SMS alert configuration  
+    $settings->add(new admin_setting_configcheckbox(
+        'local_alx_report_api/enable_sms_alerts',
+        'Enable SMS Alerts',
+        'Send high and critical alerts via SMS (requires SMS service configuration)',
+        0
+    ));
+
+    // SMS service selection
+    $sms_service_options = [
+        'disabled' => 'Disabled',
+        'twilio' => 'Twilio',
+        'aws_sns' => 'AWS SNS',
+        'custom' => 'Custom SMS Gateway'
+    ];
+    $settings->add(new admin_setting_configselect(
+        'local_alx_report_api/sms_service',
+        'SMS Service Provider',
+        'Select SMS service for sending alerts',
+        'disabled',
+        $sms_service_options
+    ));
+
+    // Alert frequency control
+    $settings->add(new admin_setting_configtext(
+        'local_alx_report_api/alert_cooldown',
+        'Alert Cooldown Period (minutes)',
+        'Minimum time between alerts of the same type to prevent spam',
+        60,
+        PARAM_INT
+    ));
+
+    // Performance alert thresholds
+    $settings->add(new admin_setting_heading(
+        'local_alx_report_api_alert_thresholds',
+        'Alert Thresholds',
+        'Configure when alerts should be triggered based on system metrics'
+    ));
+
+    $settings->add(new admin_setting_configtext(
+        'local_alx_report_api/high_api_usage_threshold',
+        'High API Usage Threshold (calls/hour)',
+        'Send alert when API calls per hour exceed this number',
+        200,
+        PARAM_INT
+    ));
+
+    $settings->add(new admin_setting_configtext(
+        'local_alx_report_api/health_score_threshold',
+        'Health Score Alert Threshold',
+        'Send alert when system health score drops below this value (0-100)',
+        70,
+        PARAM_INT
+    ));
+
+    $settings->add(new admin_setting_configtext(
+        'local_alx_report_api/db_response_time_threshold',
+        'Database Response Time Threshold (ms)',
+        'Send alert when database response time exceeds this value',
+        200,
+        PARAM_INT
+    ));
+
+    // Test alert functionality
+    $settings->add(new admin_setting_heading(
+        'local_alx_report_api_alert_testing',
+        'Alert Testing',
+        'Test your alert configuration'
+    ));
+
+    if (isset($CFG->wwwroot)) {
+        $test_alert_url = $CFG->wwwroot . '/local/alx_report_api/test_alerts.php';
+        $settings->add(new admin_setting_description(
+            'local_alx_report_api/test_alerts',
+            'Test Alert System',
+            '<div style="margin: 10px 0;">
+                <a href="' . $test_alert_url . '" class="btn btn-secondary" style="padding: 8px 16px; text-decoration: none; background: #6c757d; color: white; border-radius: 4px;">
+                    🧪 Send Test Alert
+                </a>
+                <p style="margin-top: 10px; color: #666; font-size: 0.9em;">
+                    Click to send a test alert to verify your configuration is working properly.
+                </p>
+            </div>'
+        ));
+    }
 } 

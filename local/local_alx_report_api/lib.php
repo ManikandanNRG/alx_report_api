@@ -1282,62 +1282,2606 @@ function local_alx_report_api_test_api_call($token) {
 }
 
 /**
- * Get system health status for the control center.
+ * Get comprehensive system health status for the control center.
  *
- * @return array Health check results
+ * @return array Detailed health check results with diagnostics
  */
 function local_alx_report_api_get_system_health() {
     global $DB, $CFG;
     
     $health = [
         'overall_status' => 'healthy',
-        'checks' => []
+        'score' => 100,
+        'checks' => [],
+        'recommendations' => [],
+        'last_updated' => time()
     ];
     
-    // Database connectivity
+    $issues = 0;
+    $warnings = 0;
+    
+    // 1. Database connectivity and performance
     try {
+        $start_time = microtime(true);
         $DB->get_record('config', ['name' => 'version']);
-        $health['checks']['database'] = ['status' => 'ok', 'message' => 'Database accessible'];
+        $db_response_time = round((microtime(true) - $start_time) * 1000, 2);
+        
+        if ($db_response_time < 50) {
+            $health['checks']['database'] = [
+                'status' => 'ok', 
+                'message' => "Database responsive ({$db_response_time}ms)",
+                'details' => ['response_time' => $db_response_time]
+            ];
+        } else if ($db_response_time < 200) {
+            $health['checks']['database'] = [
+                'status' => 'warning', 
+                'message' => "Database slow ({$db_response_time}ms)", 
+                'details' => ['response_time' => $db_response_time]
+            ];
+            $warnings++;
+            $health['recommendations'][] = 'Database performance is slow. Consider optimizing queries or checking server load.';
+        } else {
+            $health['checks']['database'] = [
+                'status' => 'error', 
+                'message' => "Database very slow ({$db_response_time}ms)",
+                'details' => ['response_time' => $db_response_time]
+            ];
+            $issues++;
+            $health['recommendations'][] = 'Database performance is critical. Check database server status immediately.';
+        }
     } catch (Exception $e) {
-        $health['checks']['database'] = ['status' => 'error', 'message' => 'Database error: ' . $e->getMessage()];
-        $health['overall_status'] = 'unhealthy';
+        $health['checks']['database'] = [
+            'status' => 'error', 
+            'message' => 'Database error: ' . $e->getMessage(),
+            'details' => ['error' => $e->getMessage()]
+        ];
+        $issues++;
+        $health['recommendations'][] = 'Database connection failed. Check database server and configuration.';
     }
     
-    // Required tables
-    $required_tables = ['local_alx_api_reporting', 'local_alx_api_logs', 'external_services', 'external_tokens'];
-    $missing_tables = [];
+    // 2. Required tables existence and health
+    $required_tables = [
+        'local_alx_api_reporting' => 'Core reporting data',
+        'local_alx_api_logs' => 'API access tracking',
+        'local_alx_api_sync_status' => 'Sync status tracking',
+        'local_alx_api_cache' => 'Performance caching',
+        'local_alx_api_settings' => 'Company configurations',
+        'external_services' => 'Web service definitions',
+        'external_tokens' => 'API authentication'
+    ];
     
-    foreach ($required_tables as $table) {
+    $missing_tables = [];
+    $table_stats = [];
+    
+    foreach ($required_tables as $table => $description) {
         if (!$DB->get_manager()->table_exists($table)) {
-            $missing_tables[] = $table;
+            $missing_tables[] = "$table ($description)";
+        } else {
+            // Get table record count and last update
+            try {
+                $count = $DB->count_records($table);
+                $table_stats[$table] = ['count' => $count, 'description' => $description];
+                
+                // Check for data staleness
+                if (in_array($table, ['local_alx_api_reporting', 'local_alx_api_logs'])) {
+                    $last_update = $DB->get_field_sql("SELECT MAX(timecreated) FROM {{$table}}");
+                    $age_hours = $last_update ? round((time() - $last_update) / 3600, 1) : 0;
+                    $table_stats[$table]['last_update'] = $last_update;
+                    $table_stats[$table]['age_hours'] = $age_hours;
+                    
+                    if ($table === 'local_alx_api_logs' && $age_hours > 24) {
+                        $health['recommendations'][] = "No API activity in {$age_hours} hours. Check if API is being used.";
+                    }
+                }
+            } catch (Exception $e) {
+                $table_stats[$table] = ['error' => $e->getMessage()];
+            }
         }
     }
     
     if (empty($missing_tables)) {
-        $health['checks']['tables'] = ['status' => 'ok', 'message' => 'All required tables exist'];
+        $health['checks']['tables'] = [
+            'status' => 'ok', 
+            'message' => 'All required tables exist',
+            'details' => $table_stats
+        ];
     } else {
-        $health['checks']['tables'] = ['status' => 'warning', 'message' => 'Missing tables: ' . implode(', ', $missing_tables)];
-        if ($health['overall_status'] === 'healthy') {
-            $health['overall_status'] = 'warning';
+        $health['checks']['tables'] = [
+            'status' => 'error', 
+            'message' => 'Missing critical tables: ' . implode(', ', $missing_tables),
+            'details' => ['missing' => $missing_tables, 'existing' => $table_stats]
+        ];
+        $issues++;
+        $health['recommendations'][] = 'Install or upgrade the plugin to create missing database tables.';
+    }
+    
+    // 3. Web services configuration
+    if (empty($CFG->enablewebservices)) {
+        $health['checks']['webservices'] = [
+            'status' => 'error', 
+            'message' => 'Web services globally disabled',
+            'details' => ['enablewebservices' => false]
+        ];
+        $issues++;
+        $health['recommendations'][] = 'Enable web services in Site Administration > Advanced features.';
+    } else {
+        $health['checks']['webservices'] = [
+            'status' => 'ok', 
+            'message' => 'Web services enabled',
+            'details' => ['enablewebservices' => true]
+        ];
+    }
+    
+    // 4. API service status (check multiple possible service names)
+    $service = $DB->get_record('external_services', ['shortname' => 'alx_report_api_custom']);
+    if (!$service) {
+        // Fallback to check legacy service name
+        $service = $DB->get_record('external_services', ['shortname' => 'alx_report_api']);
+    }
+    
+    if ($service && $service->enabled) {
+        // Count active tokens
+        $active_tokens = $DB->count_records_select('external_tokens', 
+            'externalserviceid = ? AND (validuntil IS NULL OR validuntil > ?)', 
+            [$service->id, time()]
+        );
+        
+        $health['checks']['api_service'] = [
+            'status' => 'ok', 
+            'message' => "ALX Report API service active ({$active_tokens} tokens)",
+            'details' => [
+                'service_name' => $service->shortname,
+                'service_id' => $service->id, 
+                'active_tokens' => $active_tokens,
+                'enabled' => true
+            ]
+        ];
+        
+        if ($active_tokens === 0) {
+            $health['recommendations'][] = 'No active API tokens found. Create tokens for API access.';
+        }
+    } else if ($service && !$service->enabled) {
+        $health['checks']['api_service'] = [
+            'status' => 'warning', 
+            'message' => 'ALX Report API service exists but disabled',
+            'details' => [
+                'service_name' => $service->shortname,
+                'service_id' => $service->id,
+                'enabled' => false
+            ]
+        ];
+        $warnings++;
+        $health['recommendations'][] = 'Enable the ALX Report API service in web services management.';
+    } else {
+        $health['checks']['api_service'] = [
+            'status' => 'error', 
+            'message' => 'ALX Report API service not found',
+            'details' => [
+                'checked_names' => ['alx_report_api_custom', 'alx_report_api'],
+                'service_found' => false
+            ]
+        ];
+        $issues++;
+        $health['recommendations'][] = 'Create and enable the ALX Report API service in web services management.';
+    }
+    
+    // 5. Data quality checks
+    if ($DB->get_manager()->table_exists('local_alx_api_reporting')) {
+        $total_records = $DB->count_records('local_alx_api_reporting');
+        $active_records = $DB->count_records('local_alx_api_reporting', ['is_deleted' => 0]);
+        $stale_records = $DB->count_records_select('local_alx_api_reporting', 
+            'last_updated < ?', [time() - (30 * 24 * 3600)]); // 30 days old
+        
+        $quality_score = $total_records > 0 ? round(($active_records / $total_records) * 100, 1) : 0;
+        
+        $health['checks']['data_quality'] = [
+            'status' => $quality_score > 80 ? 'ok' : ($quality_score > 50 ? 'warning' : 'error'),
+            'message' => "Data quality: {$quality_score}% ({$active_records}/{$total_records} active)",
+            'details' => [
+                'total_records' => $total_records,
+                'active_records' => $active_records,
+                'deleted_records' => $total_records - $active_records,
+                'stale_records' => $stale_records,
+                'quality_score' => $quality_score
+            ]
+        ];
+        
+        if ($quality_score < 80) {
+            $health['recommendations'][] = "Data quality below 80%. Consider cleaning up deleted/stale records.";
+            if ($quality_score < 50) $issues++; else $warnings++;
+        }
+        
+        if ($stale_records > 0) {
+            $health['recommendations'][] = "{$stale_records} records haven't been updated in 30+ days.";
         }
     }
     
-    // Web service enabled
-    if (!empty($CFG->enablewebservices)) {
-        $health['checks']['webservices'] = ['status' => 'ok', 'message' => 'Web services enabled'];
-    } else {
-        $health['checks']['webservices'] = ['status' => 'error', 'message' => 'Web services disabled'];
-        $health['overall_status'] = 'unhealthy';
+    // 6. Performance metrics
+    if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
+        $recent_calls = $DB->count_records_select('local_alx_api_logs', 
+            'timecreated > ?', [time() - 3600]); // Last hour
+        
+        $avg_daily_calls = $DB->count_records_select('local_alx_api_logs', 
+            'timecreated > ?', [time() - (7 * 24 * 3600)]) / 7; // Weekly average
+        
+        $performance_status = 'ok';
+        $performance_message = "Recent activity: {$recent_calls} calls/hour, {$avg_daily_calls} calls/day avg";
+        
+        if ($recent_calls > 100) {
+            $performance_status = 'warning';
+            $performance_message .= ' (high activity)';
+            $health['recommendations'][] = 'High API activity detected. Monitor for performance impact.';
+        }
+        
+        $health['checks']['performance'] = [
+            'status' => $performance_status,
+            'message' => $performance_message,
+            'details' => [
+                'calls_last_hour' => $recent_calls,
+                'avg_daily_calls' => round($avg_daily_calls, 1)
+            ]
+        ];
     }
     
-    // API service exists
-    $service = $DB->get_record('external_services', ['shortname' => 'alx_report_api']);
-    if ($service && $service->enabled) {
-        $health['checks']['api_service'] = ['status' => 'ok', 'message' => 'ALX Report API service active'];
-    } else {
-        $health['checks']['api_service'] = ['status' => 'error', 'message' => 'ALX Report API service not found or disabled'];
+    // 7. Configuration validation
+    $config_issues = [];
+    $rate_limit = get_config('local_alx_report_api', 'rate_limit') ?: 100;
+    $max_records = get_config('local_alx_report_api', 'max_records') ?: 1000;
+    
+    if ($rate_limit > 1000) {
+        $config_issues[] = "Rate limit very high ({$rate_limit}). Consider security implications.";
+    }
+    if ($max_records > 5000) {
+        $config_issues[] = "Max records very high ({$max_records}). May cause performance issues.";
+    }
+    
+    $health['checks']['configuration'] = [
+        'status' => empty($config_issues) ? 'ok' : 'warning',
+        'message' => empty($config_issues) ? 'Configuration looks good' : implode(' ', $config_issues),
+        'details' => [
+            'rate_limit' => $rate_limit,
+            'max_records' => $max_records,
+            'issues' => $config_issues
+        ]
+    ];
+    
+    if (!empty($config_issues)) {
+        $warnings++;
+        $health['recommendations'] = array_merge($health['recommendations'], $config_issues);
+    }
+    
+    // Calculate overall health score and status
+    $total_checks = count($health['checks']);
+    $health['score'] = max(0, 100 - ($issues * 20) - ($warnings * 10));
+    
+    if ($issues > 0) {
         $health['overall_status'] = 'unhealthy';
+    } else if ($warnings > 0) {
+        $health['overall_status'] = 'warning';
+    } else {
+        $health['overall_status'] = 'healthy';
     }
     
     return $health;
+}
+
+/**
+ * Get comprehensive API tracking analytics.
+ *
+ * @param int $hours Number of hours to analyze (default 24)
+ * @return array Detailed API analytics
+ */
+function local_alx_report_api_get_api_analytics($hours = 24) {
+    global $DB;
+    
+    $analytics = [
+        'summary' => [
+            'total_calls' => 0,
+            'unique_users' => 0,
+            'unique_companies' => 0,
+            'success_rate' => 0,
+            'avg_response_size' => 0,
+            'peak_hour' => null,
+            'busiest_company' => null
+        ],
+        'trends' => [],
+        'performance' => [],
+        'errors' => [],
+        'security' => [],
+        'top_users' => [],
+        'top_companies' => []
+    ];
+    
+    if (!$DB->get_manager()->table_exists('local_alx_api_logs')) {
+        return $analytics;
+    }
+    
+    $start_time = time() - ($hours * 3600);
+    
+    // 1. Basic summary statistics
+    $total_calls = $DB->count_records_select('local_alx_api_logs', 'timecreated >= ?', [$start_time]);
+    $unique_users = $DB->count_records_sql(
+        "SELECT COUNT(DISTINCT userid) FROM {local_alx_api_logs} WHERE timecreated >= ?", [$start_time]
+    );
+    $unique_companies = $DB->count_records_sql(
+        "SELECT COUNT(DISTINCT companyid) FROM {local_alx_api_logs} WHERE timecreated >= ?", [$start_time]
+    );
+    
+    $analytics['summary'] = [
+        'total_calls' => $total_calls,
+        'unique_users' => $unique_users,
+        'unique_companies' => $unique_companies,
+        'time_period' => $hours . ' hours',
+        'calls_per_hour' => $hours > 0 ? round($total_calls / $hours, 1) : 0
+    ];
+    
+    if ($total_calls === 0) {
+        return $analytics;
+    }
+    
+    // 2. Hourly trends (last 24 hours broken into hours)
+    for ($i = $hours - 1; $i >= 0; $i--) {
+        $hour_start = time() - (($i + 1) * 3600);
+        $hour_end = time() - ($i * 3600);
+        $hour_calls = $DB->count_records_select('local_alx_api_logs', 
+            'timecreated >= ? AND timecreated < ?', [$hour_start, $hour_end]);
+        
+        $analytics['trends'][] = [
+            'hour' => date('H:00', $hour_end),
+            'calls' => $hour_calls,
+            'timestamp' => $hour_end
+        ];
+    }
+    
+    // Find peak hour
+    $peak = array_reduce($analytics['trends'], function($max, $hour) {
+        return ($hour['calls'] > ($max['calls'] ?? 0)) ? $hour : $max;
+    }, ['calls' => 0]);
+    $analytics['summary']['peak_hour'] = $peak['hour'] ?? null;
+    
+    // 3. Performance metrics (if we have response data)
+    try {
+        $response_sizes = $DB->get_records_sql(
+            "SELECT id, LENGTH(response_data) as size FROM {local_alx_api_logs} 
+             WHERE timecreated >= ? AND response_data IS NOT NULL", [$start_time]
+        );
+        
+        if (!empty($response_sizes)) {
+            $sizes = array_column($response_sizes, 'size');
+            $analytics['performance'] = [
+                'avg_response_size' => round(array_sum($sizes) / count($sizes)),
+                'min_response_size' => min($sizes),
+                'max_response_size' => max($sizes),
+                'total_data_transferred' => array_sum($sizes)
+            ];
+            $analytics['summary']['avg_response_size'] = $analytics['performance']['avg_response_size'];
+        }
+    } catch (Exception $e) {
+        // Response data column might not exist in older versions
+    }
+    
+    // 4. Top users by activity
+    $top_users = $DB->get_records_sql(
+        "SELECT l.userid, u.firstname, u.lastname, u.username, COUNT(*) as call_count
+         FROM {local_alx_api_logs} l
+         LEFT JOIN {user} u ON u.id = l.userid
+         WHERE l.timecreated >= ?
+         GROUP BY l.userid, u.firstname, u.lastname, u.username
+         ORDER BY call_count DESC
+         LIMIT 10", [$start_time]
+    );
+    
+    foreach ($top_users as $user) {
+        $analytics['top_users'][] = [
+            'user_id' => $user->userid,
+            'name' => trim($user->firstname . ' ' . $user->lastname) ?: $user->username,
+            'username' => $user->username,
+            'calls' => $user->call_count
+        ];
+    }
+    
+    // 5. Top companies by activity
+    $top_companies = $DB->get_records_sql(
+        "SELECT l.companyid, c.name, c.shortname, COUNT(*) as call_count
+         FROM {local_alx_api_logs} l
+         LEFT JOIN {company} c ON c.id = l.companyid
+         WHERE l.timecreated >= ?
+         GROUP BY l.companyid, c.name, c.shortname
+         ORDER BY call_count DESC
+         LIMIT 10", [$start_time]
+    );
+    
+    foreach ($top_companies as $company) {
+        $analytics['top_companies'][] = [
+            'company_id' => $company->companyid,
+            'name' => $company->name ?: 'Unknown',
+            'shortname' => $company->shortname,
+            'calls' => $company->call_count
+        ];
+    }
+    
+    // Set busiest company
+    if (!empty($analytics['top_companies'])) {
+        $analytics['summary']['busiest_company'] = $analytics['top_companies'][0]['name'];
+    }
+    
+    // 6. Security events (if we track them)
+    try {
+        $security_events = $DB->get_records_sql(
+            "SELECT endpoint, COUNT(*) as count
+             FROM {local_alx_api_logs}
+             WHERE timecreated >= ? AND endpoint LIKE 'security_%'
+             GROUP BY endpoint
+             ORDER BY count DESC", [$start_time]
+        );
+        
+        foreach ($security_events as $event) {
+            $analytics['security'][] = [
+                'event_type' => str_replace('security_', '', $event->endpoint),
+                'count' => $event->count
+            ];
+        }
+    } catch (Exception $e) {
+        // Security tracking might not be implemented
+    }
+    
+    return $analytics;
+}
+
+/**
+ * Get advanced rate limiting monitoring data.
+ *
+ * @return array Comprehensive rate limit analysis
+ */
+function local_alx_report_api_get_rate_limit_monitoring() {
+    global $DB;
+    
+    $monitoring = [
+        'current_limits' => [],
+        'usage_today' => [],
+        'violations' => [],
+        'trends' => [],
+        'alerts' => [],
+        'recommendations' => []
+    ];
+    
+    // Get current rate limit settings
+    $rate_limit = get_config('local_alx_report_api', 'rate_limit') ?: 100;
+    $max_records = get_config('local_alx_report_api', 'max_records') ?: 1000;
+    
+    $monitoring['current_limits'] = [
+        'daily_requests' => $rate_limit,
+        'max_records_per_request' => $max_records,
+        'enforcement_level' => 'strict'
+    ];
+    
+    if (!$DB->get_manager()->table_exists('local_alx_api_logs')) {
+        return $monitoring;
+    }
+    
+    $today_start = mktime(0, 0, 0);
+    
+    // Get today's usage by user
+    $usage_sql = "
+        SELECT 
+            l.userid,
+            u.firstname,
+            u.lastname,
+            u.username,
+            COUNT(*) as requests_today,
+            MIN(l.timecreated) as first_request,
+            MAX(l.timecreated) as last_request,
+            COUNT(DISTINCT l.companyid) as companies_accessed
+        FROM {local_alx_api_logs} l
+        LEFT JOIN {user} u ON u.id = l.userid
+        WHERE l.timecreated >= ?
+        GROUP BY l.userid, u.firstname, u.lastname, u.username
+        ORDER BY requests_today DESC
+    ";
+    
+    $usage_data = $DB->get_records_sql($usage_sql, [$today_start]);
+    
+    foreach ($usage_data as $user) {
+        $usage_percentage = round(($user->requests_today / $rate_limit) * 100, 1);
+        $status = 'ok';
+        
+        if ($user->requests_today >= $rate_limit) {
+            $status = 'exceeded';
+        } else if ($usage_percentage >= 80) {
+            $status = 'warning';
+        }
+        
+        $user_data = [
+            'user_id' => $user->userid,
+            'name' => trim($user->firstname . ' ' . $user->lastname) ?: $user->username,
+            'username' => $user->username,
+            'requests_today' => $user->requests_today,
+            'limit' => $rate_limit,
+            'usage_percentage' => $usage_percentage,
+            'status' => $status,
+            'first_request' => $user->first_request,
+            'last_request' => $user->last_request,
+            'companies_accessed' => $user->companies_accessed,
+            'time_span_hours' => round(($user->last_request - $user->first_request) / 3600, 1)
+        ];
+        
+        $monitoring['usage_today'][] = $user_data;
+        
+        // Track violations and alerts
+        if ($status === 'exceeded') {
+            $monitoring['violations'][] = $user_data;
+            $monitoring['alerts'][] = [
+                'type' => 'rate_limit_exceeded',
+                'severity' => 'high',
+                'message' => "User {$user_data['name']} exceeded daily limit ({$user->requests_today}/{$rate_limit})",
+                'user_id' => $user->userid,
+                'timestamp' => time()
+            ];
+        } else if ($status === 'warning' && $user->companies_accessed > 3) {
+            $monitoring['alerts'][] = [
+                'type' => 'suspicious_activity',
+                'severity' => 'medium',
+                'message' => "User {$user_data['name']} accessing {$user->companies_accessed} companies ({$user->requests_today} requests)",
+                'user_id' => $user->userid,
+                'timestamp' => time()
+            ];
+        }
+    }
+    
+    // Analyze trends over the past week
+    for ($i = 6; $i >= 0; $i--) {
+        $day_start = mktime(0, 0, 0) - ($i * 24 * 3600);
+        $day_end = $day_start + (24 * 3600);
+        
+        $day_stats = $DB->get_record_sql(
+            "SELECT 
+                COUNT(*) as total_requests,
+                COUNT(DISTINCT userid) as unique_users,
+                COUNT(DISTINCT companyid) as unique_companies
+             FROM {local_alx_api_logs}
+             WHERE timecreated >= ? AND timecreated < ?",
+            [$day_start, $day_end]
+        );
+        
+        $violations_count = 0;
+        $day_usage = $DB->get_records_sql(
+            "SELECT userid, COUNT(*) as requests
+             FROM {local_alx_api_logs}
+             WHERE timecreated >= ? AND timecreated < ?
+             GROUP BY userid",
+            [$day_start, $day_end]
+        );
+        
+        foreach ($day_usage as $user_usage) {
+            if ($user_usage->requests >= $rate_limit) {
+                $violations_count++;
+            }
+        }
+        
+        $monitoring['trends'][] = [
+            'date' => date('Y-m-d', $day_start),
+            'day_name' => date('D', $day_start),
+            'total_requests' => $day_stats->total_requests ?: 0,
+            'unique_users' => $day_stats->unique_users ?: 0,
+            'unique_companies' => $day_stats->unique_companies ?: 0,
+            'violations' => $violations_count,
+            'avg_requests_per_user' => $day_stats->unique_users > 0 ? 
+                round($day_stats->total_requests / $day_stats->unique_users, 1) : 0
+        ];
+    }
+    
+    // Generate recommendations
+    $total_violations = count($monitoring['violations']);
+    $total_users_today = count($monitoring['usage_today']);
+    $high_usage_users = array_filter($monitoring['usage_today'], function($user) {
+        return $user['usage_percentage'] >= 80;
+    });
+    
+    if ($total_violations > 0) {
+        $monitoring['recommendations'][] = [
+            'type' => 'security',
+            'priority' => 'high',
+            'message' => "{$total_violations} users exceeded rate limits today. Review their access patterns."
+        ];
+    }
+    
+    if (count($high_usage_users) > $total_users_today * 0.3) {
+        $monitoring['recommendations'][] = [
+            'type' => 'capacity',
+            'priority' => 'medium',
+            'message' => "Many users (30%+) are near rate limits. Consider increasing limits or optimizing API usage."
+        ];
+    }
+    
+    $week_total = array_sum(array_column($monitoring['trends'], 'total_requests'));
+    $daily_avg = round($week_total / 7, 1);
+    
+    if ($daily_avg > $rate_limit * $total_users_today * 0.5) {
+        $monitoring['recommendations'][] = [
+            'type' => 'optimization',
+            'priority' => 'medium',
+            'message' => "High API usage detected (avg {$daily_avg} requests/day). Consider implementing caching or data optimization."
+        ];
+    }
+    
+    return $monitoring;
 } 
+
+/**
+ * Send alert notifications via email and optionally SMS.
+ *
+ * @param string $alert_type Type of alert (rate_limit, security, health, performance)
+ * @param string $severity Severity level (low, medium, high, critical)
+ * @param string $message Alert message
+ * @param array $data Additional data for the alert
+ * @param array $recipients Optional specific recipients, otherwise uses configured admins
+ * @return bool Success status
+ */
+function local_alx_report_api_send_alert($alert_type, $severity, $message, $data = [], $recipients = []) {
+    global $CFG, $DB;
+    
+    // Check if alerting is enabled
+    $alerting_enabled = get_config('local_alx_report_api', 'enable_alerting');
+    if (!$alerting_enabled) {
+        return false;
+    }
+    
+    // Get severity threshold
+    $alert_threshold = get_config('local_alx_report_api', 'alert_threshold') ?: 'medium';
+    $severity_levels = ['low' => 1, 'medium' => 2, 'high' => 3, 'critical' => 4];
+    
+    if ($severity_levels[$severity] < $severity_levels[$alert_threshold]) {
+        return false; // Below threshold, don't send
+    }
+    
+    // Prepare alert data
+    $alert = [
+        'type' => $alert_type,
+        'severity' => $severity,
+        'message' => $message,
+        'data' => $data,
+        'timestamp' => time(),
+        'hostname' => $CFG->wwwroot,
+        'plugin' => 'ALX Report API'
+    ];
+    
+    // Log the alert
+    local_alx_report_api_log_alert($alert);
+    
+    // Get recipients
+    if (empty($recipients)) {
+        $recipients = local_alx_report_api_get_alert_recipients($alert_type, $severity);
+    }
+    
+    $success = true;
+    
+    // Send email alerts
+    foreach ($recipients as $recipient) {
+        if (!empty($recipient['email'])) {
+            $email_sent = local_alx_report_api_send_email_alert($recipient, $alert);
+            if (!$email_sent) {
+                $success = false;
+            }
+        }
+        
+        // Send SMS if configured and high severity
+        if (!empty($recipient['phone']) && in_array($severity, ['high', 'critical'])) {
+            $sms_enabled = get_config('local_alx_report_api', 'enable_sms_alerts');
+            if ($sms_enabled) {
+                local_alx_report_api_send_sms_alert($recipient, $alert);
+            }
+        }
+    }
+    
+    return $success;
+}
+
+/**
+ * Send email alert to recipient.
+ *
+ * @param array $recipient Recipient data with email, name
+ * @param array $alert Alert data
+ * @return bool Success status
+ */
+function local_alx_report_api_send_email_alert($recipient, $alert) {
+    global $CFG;
+    
+    $severity_icons = [
+        'low' => '🔵',
+        'medium' => '🟡', 
+        'high' => '🟠',
+        'critical' => '🔴'
+    ];
+    
+    $severity_colors = [
+        'low' => '#17a2b8',
+        'medium' => '#ffc107',
+        'high' => '#fd7e14', 
+        'critical' => '#dc3545'
+    ];
+    
+    $icon = $severity_icons[$alert['severity']] ?? '⚠️';
+    $color = $severity_colors[$alert['severity']] ?? '#6c757d';
+    
+    // Email subject
+    $subject = "[{$alert['plugin']}] {$icon} " . ucfirst($alert['severity']) . " Alert: " . ucfirst($alert['type']);
+    
+    // Email body (HTML)
+    $body = "
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset='utf-8'>
+        <style>
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+            .alert-container { max-width: 600px; margin: 0 auto; background: #f8f9fa; padding: 20px; border-radius: 8px; }
+            .alert-header { background: {$color}; color: white; padding: 20px; border-radius: 8px 8px 0 0; text-align: center; }
+            .alert-body { background: white; padding: 20px; border-radius: 0 0 8px 8px; }
+            .alert-detail { margin: 10px 0; padding: 10px; background: #f8f9fa; border-radius: 4px; }
+            .alert-data { background: #e9ecef; padding: 15px; border-radius: 4px; margin: 15px 0; }
+            .footer { text-align: center; margin-top: 20px; color: #6c757d; font-size: 12px; }
+        </style>
+    </head>
+    <body>
+        <div class='alert-container'>
+            <div class='alert-header'>
+                <h1>{$icon} System Alert</h1>
+                <h2>" . ucfirst($alert['severity']) . " - " . ucfirst($alert['type']) . "</h2>
+            </div>
+            <div class='alert-body'>
+                <div class='alert-detail'>
+                    <strong>Message:</strong><br>
+                    " . htmlspecialchars($alert['message']) . "
+                </div>
+                
+                <div class='alert-detail'>
+                    <strong>Time:</strong> " . date('Y-m-d H:i:s T', $alert['timestamp']) . "<br>
+                    <strong>System:</strong> " . htmlspecialchars($alert['hostname']) . "<br>
+                    <strong>Plugin:</strong> " . htmlspecialchars($alert['plugin']) . "
+                </div>";
+    
+    // Add additional data if present
+    if (!empty($alert['data'])) {
+        $body .= "<div class='alert-data'><strong>Additional Details:</strong><br>";
+        foreach ($alert['data'] as $key => $value) {
+            if (!is_array($value)) {
+                $body .= "<strong>" . htmlspecialchars($key) . ":</strong> " . htmlspecialchars($value) . "<br>";
+            }
+        }
+        $body .= "</div>";
+    }
+    
+    $body .= "
+                <div class='alert-detail'>
+                    <strong>Recommended Actions:</strong><br>
+                    " . local_alx_report_api_get_alert_recommendations($alert['type'], $alert['severity']) . "
+                </div>
+                
+                <div style='text-align: center; margin: 20px 0;'>
+                    <a href='{$CFG->wwwroot}/local/alx_report_api/advanced_monitoring.php' 
+                       style='background: {$color}; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;'>
+                        View Advanced Monitoring →
+                    </a>
+                </div>
+            </div>
+            <div class='footer'>
+                This is an automated alert from ALX Report API monitoring system.<br>
+                To modify alert settings, visit the plugin configuration page.
+            </div>
+        </div>
+    </body>
+    </html>";
+    
+    // Send email using Moodle's email system
+    try {
+        $user = new stdClass();
+        $user->email = $recipient['email'];
+        $user->firstname = $recipient['name'] ?? 'Administrator';
+        $user->lastname = '';
+        $user->mailformat = 1; // HTML format
+        
+        $from = core_user::get_noreply_user();
+        
+        return email_to_user($user, $from, $subject, '', $body);
+    } catch (Exception $e) {
+        error_log("ALX Report API: Failed to send email alert: " . $e->getMessage());
+        return false;
+    }
+}
+
+/**
+ * Send SMS alert (placeholder for SMS service integration).
+ *
+ * @param array $recipient Recipient data with phone number
+ * @param array $alert Alert data
+ * @return bool Success status
+ */
+function local_alx_report_api_send_sms_alert($recipient, $alert) {
+    // SMS Integration placeholder - can be extended with services like:
+    // - Twilio
+    // - AWS SNS
+    // - Local SMS gateway
+    
+    $sms_service = get_config('local_alx_report_api', 'sms_service') ?: 'disabled';
+    
+    if ($sms_service === 'disabled') {
+        return false;
+    }
+    
+    $severity_icons = ['low' => 'i', 'medium' => '!', 'high' => '!!', 'critical' => '!!!'];
+    $icon = $severity_icons[$alert['severity']] ?? '!';
+    
+    $message = "ALX API {$icon} " . strtoupper($alert['severity']) . ": " . $alert['message'] . 
+               " Time: " . date('H:i', $alert['timestamp']) . 
+               " Check: " . parse_url($alert['hostname'], PHP_URL_HOST);
+    
+    // Limit SMS to 160 characters
+    if (strlen($message) > 160) {
+        $message = substr($message, 0, 157) . '...';
+    }
+    
+    // Log SMS attempt
+    error_log("ALX Report API: SMS Alert to {$recipient['phone']}: {$message}");
+    
+    // Here you would integrate with your SMS service
+    // For now, we'll return true as a placeholder
+    return true;
+}
+
+/**
+ * Get alert recipients based on alert type and severity.
+ *
+ * @param string $alert_type Type of alert
+ * @param string $severity Severity level
+ * @return array Array of recipients with email and phone
+ */
+function local_alx_report_api_get_alert_recipients($alert_type, $severity) {
+    global $DB;
+    
+    $recipients = [];
+    
+    // Get configured alert recipients
+    $alert_emails = get_config('local_alx_report_api', 'alert_emails');
+    if ($alert_emails) {
+        $emails = array_filter(array_map('trim', explode(',', $alert_emails)));
+        foreach ($emails as $email) {
+            if (filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                $recipients[] = ['email' => $email, 'name' => 'Administrator'];
+            }
+        }
+    }
+    
+    // For critical alerts, also include site admins
+    if ($severity === 'critical') {
+        $admins = get_admins();
+        foreach ($admins as $admin) {
+            $recipients[] = [
+                'email' => $admin->email,
+                'name' => fullname($admin),
+                'phone' => isset($admin->phone1) ? $admin->phone1 : null
+            ];
+        }
+    }
+    
+    // Remove duplicates based on email
+    $unique_recipients = [];
+    $seen_emails = [];
+    foreach ($recipients as $recipient) {
+        if (!in_array($recipient['email'], $seen_emails)) {
+            $unique_recipients[] = $recipient;
+            $seen_emails[] = $recipient['email'];
+        }
+    }
+    
+    return $unique_recipients;
+}
+
+/**
+ * Get recommendations based on alert type and severity.
+ *
+ * @param string $alert_type Type of alert
+ * @param string $severity Severity level
+ * @return string HTML formatted recommendations
+ */
+function local_alx_report_api_get_alert_recommendations($alert_type, $severity) {
+    $recommendations = [
+        'rate_limit' => [
+            'low' => 'Monitor user activity patterns. Consider user education about API usage.',
+            'medium' => 'Review rate limits and user access patterns. Check for automated scripts.',
+            'high' => 'Immediate review required. Check for API abuse or unauthorized access.',
+            'critical' => 'URGENT: Multiple users exceeding limits. Possible security breach or system abuse.'
+        ],
+        'security' => [
+            'low' => 'Review access logs and monitor suspicious patterns.',
+            'medium' => 'Investigate user access patterns and verify token security.',
+            'high' => 'Immediate security review required. Check for unauthorized access.',
+            'critical' => 'URGENT: Potential security breach. Review all access immediately.'
+        ],
+        'health' => [
+            'low' => 'System performance monitoring recommended.',
+            'medium' => 'Check database and system resources. Review performance logs.',
+            'high' => 'Immediate system maintenance required. Check database and server status.',
+            'critical' => 'URGENT: System critical issues detected. Immediate intervention required.'
+        ],
+        'performance' => [
+            'low' => 'Monitor system performance trends.',
+            'medium' => 'Review database performance and optimize queries if needed.',
+            'high' => 'Performance degradation detected. Check server resources.',
+            'critical' => 'URGENT: Critical performance issues. System may be compromised.'
+        ]
+    ];
+    
+    return $recommendations[$alert_type][$severity] ?? 'Review system status and logs for details.';
+}
+
+/**
+ * Log alert to database for tracking and reporting.
+ *
+ * @param array $alert Alert data
+ * @return bool Success status
+ */
+function local_alx_report_api_log_alert($alert) {
+    global $DB;
+    
+    // Ensure alerts table exists
+    if (!$DB->get_manager()->table_exists('local_alx_api_alerts')) {
+        local_alx_report_api_create_alerts_table();
+    }
+    
+    try {
+        $record = new stdClass();
+        $record->alert_type = $alert['type'];
+        $record->severity = $alert['severity'];
+        $record->message = $alert['message'];
+        $record->alert_data = json_encode($alert['data']);
+        $record->hostname = $alert['hostname'];
+        $record->timecreated = $alert['timestamp'];
+        $record->resolved = 0;
+        
+        return $DB->insert_record('local_alx_api_alerts', $record);
+    } catch (Exception $e) {
+        error_log("ALX Report API: Failed to log alert: " . $e->getMessage());
+        return false;
+    }
+}
+
+/**
+ * Create alerts table if it doesn't exist.
+ */
+function local_alx_report_api_create_alerts_table() {
+    global $DB;
+    
+    $dbman = $DB->get_manager();
+    
+    if (!$dbman->table_exists('local_alx_api_alerts')) {
+        $table = new xmldb_table('local_alx_api_alerts');
+        $table->add_field('id', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE, null);
+        $table->add_field('alert_type', XMLDB_TYPE_CHAR, '50', null, XMLDB_NOTNULL, null, null);
+        $table->add_field('severity', XMLDB_TYPE_CHAR, '20', null, XMLDB_NOTNULL, null, null);
+        $table->add_field('message', XMLDB_TYPE_TEXT, null, null, XMLDB_NOTNULL, null, null);
+        $table->add_field('alert_data', XMLDB_TYPE_TEXT, null, null, null, null, null);
+        $table->add_field('hostname', XMLDB_TYPE_CHAR, '255', null, null, null, null);
+        $table->add_field('timecreated', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
+        $table->add_field('resolved', XMLDB_TYPE_INTEGER, '1', null, XMLDB_NOTNULL, null, '0');
+        
+        $table->add_key('primary', XMLDB_KEY_PRIMARY, array('id'));
+        $table->add_index('alert_type_idx', XMLDB_INDEX_NOTUNIQUE, array('alert_type'));
+        $table->add_index('severity_idx', XMLDB_INDEX_NOTUNIQUE, array('severity'));
+        $table->add_index('timecreated_idx', XMLDB_INDEX_NOTUNIQUE, array('timecreated'));
+        
+        $dbman->create_table($table);
+    }
+}
+
+/**
+ * Check system conditions and send alerts if thresholds are exceeded.
+ * This function should be called periodically (e.g., via cron).
+ */
+function local_alx_report_api_check_and_alert() {
+    // Check rate limit violations
+    $rate_monitoring = local_alx_report_api_get_rate_limit_monitoring();
+    
+    if (count($rate_monitoring['violations']) > 0) {
+        foreach ($rate_monitoring['violations'] as $violation) {
+            local_alx_report_api_send_alert(
+                'rate_limit',
+                'high',
+                "User {$violation['name']} exceeded daily rate limit ({$violation['requests_today']}/{$violation['limit']} requests)",
+                $violation
+            );
+        }
+    }
+    
+    // Check system health
+    $health = local_alx_report_api_get_system_health();
+    
+    if ($health['overall_status'] === 'unhealthy') {
+        local_alx_report_api_send_alert(
+            'health',
+            'critical',
+            "System health critical (Score: {$health['score']}/100)",
+            ['health_checks' => $health['checks'], 'recommendations' => $health['recommendations']]
+        );
+    } elseif ($health['overall_status'] === 'warning' && $health['score'] < 70) {
+        local_alx_report_api_send_alert(
+            'health',
+            'medium',
+            "System health warning (Score: {$health['score']}/100)",
+            ['health_checks' => $health['checks']]
+        );
+    }
+    
+    // Check for high API usage
+    $api_analytics = local_alx_report_api_get_api_analytics(1); // Last hour
+    
+    if ($api_analytics['summary']['calls_per_hour'] > 200) { // Configurable threshold
+        local_alx_report_api_send_alert(
+            'performance',
+            'medium',
+            "High API usage detected: {$api_analytics['summary']['calls_per_hour']} calls in the last hour",
+            ['analytics' => $api_analytics['summary']]
+        );
+    }
+    
+    // Check for security alerts from rate monitoring
+    foreach ($rate_monitoring['alerts'] as $alert) {
+        if ($alert['severity'] === 'high') {
+            local_alx_report_api_send_alert(
+                'security',
+                'high',
+                $alert['message'],
+                ['alert_type' => $alert['type'], 'user_id' => $alert['user_id'] ?? null]
+            );
+        }
+    }
+}
+
+/**
+ * Enhanced API analytics with comprehensive error tracking by endpoint and company.
+ *
+ * @param int $hours Number of hours to look back (default: 24)
+ * @param string $specific_company Optional specific company filter
+ * @param string $specific_endpoint Optional specific endpoint filter
+ * @return array Comprehensive analytics including error rates
+ */
+function local_alx_report_api_get_comprehensive_analytics($hours = 24, $specific_company = null, $specific_endpoint = null) {
+    global $DB;
+    
+    $since = time() - ($hours * 3600);
+    
+    // Base query conditions
+    $where_conditions = ['timeaccessed >= ?'];
+    $params = [$since];
+    
+    if ($specific_company) {
+        $where_conditions[] = 'company_shortname = ?';
+        $params[] = $specific_company;
+    }
+    
+    if ($specific_endpoint) {
+        $where_conditions[] = 'endpoint = ?';
+        $params[] = $specific_endpoint;
+    }
+    
+    $where_clause = implode(' AND ', $where_conditions);
+    
+    // 1. Overall Analytics
+    $overall_sql = "
+        SELECT 
+            COUNT(*) as total_requests,
+            COUNT(CASE WHEN error_message IS NULL OR error_message = '' THEN 1 END) as successful_requests,
+            COUNT(CASE WHEN error_message IS NOT NULL AND error_message != '' THEN 1 END) as failed_requests,
+            AVG(response_time_ms) as avg_response_time,
+            MAX(response_time_ms) as max_response_time,
+            MIN(response_time_ms) as min_response_time,
+            AVG(CASE WHEN error_message IS NULL OR error_message = '' THEN response_time_ms END) as avg_success_response_time,
+            AVG(CASE WHEN error_message IS NOT NULL AND error_message != '' THEN response_time_ms END) as avg_error_response_time,
+            SUM(record_count) as total_records_returned,
+            COUNT(DISTINCT userid) as unique_users,
+            COUNT(DISTINCT company_shortname) as unique_companies
+        FROM {local_alx_api_logs} 
+        WHERE {$where_clause}
+    ";
+    
+    $overall_stats = $DB->get_record_sql($overall_sql, $params);
+    
+    // Calculate success rate
+    $success_rate = $overall_stats->total_requests > 0 
+        ? round(($overall_stats->successful_requests / $overall_stats->total_requests) * 100, 2) 
+        : 0;
+    
+    // 2. Error Analysis by Type
+    $error_analysis_sql = "
+        SELECT 
+            error_message,
+            COUNT(*) as error_count,
+            COUNT(DISTINCT userid) as affected_users,
+            COUNT(DISTINCT company_shortname) as affected_companies,
+            AVG(response_time_ms) as avg_response_time,
+            MIN(timeaccessed) as first_occurrence,
+            MAX(timeaccessed) as last_occurrence
+        FROM {local_alx_api_logs} 
+        WHERE {$where_clause} AND (error_message IS NOT NULL AND error_message != '')
+        GROUP BY error_message
+        ORDER BY error_count DESC
+        LIMIT 20
+    ";
+    
+    $error_analysis = $DB->get_records_sql($error_analysis_sql, $params);
+    
+    // 3. Performance by Endpoint
+    $endpoint_performance_sql = "
+        SELECT 
+            endpoint,
+            COUNT(*) as total_requests,
+            COUNT(CASE WHEN error_message IS NULL OR error_message = '' THEN 1 END) as successful_requests,
+            COUNT(CASE WHEN error_message IS NOT NULL AND error_message != '' THEN 1 END) as failed_requests,
+            AVG(response_time_ms) as avg_response_time,
+            MAX(response_time_ms) as max_response_time,
+            SUM(record_count) as total_records,
+            COUNT(DISTINCT userid) as unique_users,
+            COUNT(DISTINCT company_shortname) as unique_companies
+        FROM {local_alx_api_logs} 
+        WHERE {$where_clause}
+        GROUP BY endpoint
+        ORDER BY total_requests DESC
+    ";
+    
+    $endpoint_performance = $DB->get_records_sql($endpoint_performance_sql, $params);
+    
+    // Calculate endpoint success rates
+    foreach ($endpoint_performance as $endpoint) {
+        $endpoint->success_rate = $endpoint->total_requests > 0 
+            ? round(($endpoint->successful_requests / $endpoint->total_requests) * 100, 2) 
+            : 0;
+        $endpoint->error_rate = 100 - $endpoint->success_rate;
+    }
+    
+    // 4. Performance by Company
+    $company_performance_sql = "
+        SELECT 
+            company_shortname,
+            COUNT(*) as total_requests,
+            COUNT(CASE WHEN error_message IS NULL OR error_message = '' THEN 1 END) as successful_requests,
+            COUNT(CASE WHEN error_message IS NOT NULL AND error_message != '' THEN 1 END) as failed_requests,
+            AVG(response_time_ms) as avg_response_time,
+            MAX(response_time_ms) as max_response_time,
+            SUM(record_count) as total_records,
+            COUNT(DISTINCT userid) as unique_users,
+            COUNT(DISTINCT endpoint) as endpoints_used
+        FROM {local_alx_api_logs} 
+        WHERE {$where_clause}
+        GROUP BY company_shortname
+        ORDER BY total_requests DESC
+        LIMIT 20
+    ";
+    
+    $company_performance = $DB->get_records_sql($company_performance_sql, $params);
+    
+    // Calculate company success rates
+    foreach ($company_performance as $company) {
+        $company->success_rate = $company->total_requests > 0 
+            ? round(($company->successful_requests / $company->total_requests) * 100, 2) 
+            : 0;
+        $company->error_rate = 100 - $company->success_rate;
+    }
+    
+    // 5. Hourly Trends
+    $hourly_trends_sql = "
+        SELECT 
+            FROM_UNIXTIME(timeaccessed, '%Y-%m-%d %H:00:00') as hour_bucket,
+            COUNT(*) as total_requests,
+            COUNT(CASE WHEN error_message IS NULL OR error_message = '' THEN 1 END) as successful_requests,
+            COUNT(CASE WHEN error_message IS NOT NULL AND error_message != '' THEN 1 END) as failed_requests,
+            AVG(response_time_ms) as avg_response_time,
+            SUM(record_count) as total_records
+        FROM {local_alx_api_logs} 
+        WHERE {$where_clause}
+        GROUP BY FROM_UNIXTIME(timeaccessed, '%Y-%m-%d %H:00:00')
+        ORDER BY hour_bucket DESC
+        LIMIT 24
+    ";
+    
+    $hourly_trends = $DB->get_records_sql($hourly_trends_sql, $params);
+    
+    // Calculate hourly success rates
+    foreach ($hourly_trends as $hour) {
+        $hour->success_rate = $hour->total_requests > 0 
+            ? round(($hour->successful_requests / $hour->total_requests) * 100, 2) 
+            : 0;
+        $hour->error_rate = 100 - $hour->success_rate;
+    }
+    
+    // 6. Top Error-Prone Users
+    $error_prone_users_sql = "
+        SELECT 
+            l.userid,
+            u.firstname,
+            u.lastname,
+            u.email,
+            COUNT(*) as total_requests,
+            COUNT(CASE WHEN l.error_message IS NOT NULL AND l.error_message != '' THEN 1 END) as failed_requests,
+            AVG(l.response_time_ms) as avg_response_time,
+            COUNT(DISTINCT l.company_shortname) as companies_accessed
+        FROM {local_alx_api_logs} l
+        LEFT JOIN {user} u ON l.userid = u.id
+        WHERE {$where_clause}
+        GROUP BY l.userid, u.firstname, u.lastname, u.email
+        HAVING failed_requests > 0
+        ORDER BY failed_requests DESC, total_requests DESC
+        LIMIT 10
+    ";
+    
+    $error_prone_users = $DB->get_records_sql($error_prone_users_sql, $params);
+    
+    // Calculate user error rates
+    foreach ($error_prone_users as $user) {
+        $user->error_rate = $user->total_requests > 0 
+            ? round(($user->failed_requests / $user->total_requests) * 100, 2) 
+            : 0;
+        $user->success_rate = 100 - $user->error_rate;
+    }
+    
+    // 7. Performance Bottlenecks (Slowest operations)
+    $bottlenecks_sql = "
+        SELECT 
+            endpoint,
+            company_shortname,
+            AVG(response_time_ms) as avg_response_time,
+            MAX(response_time_ms) as max_response_time,
+            COUNT(*) as request_count,
+            COUNT(CASE WHEN error_message IS NOT NULL AND error_message != '' THEN 1 END) as error_count
+        FROM {local_alx_api_logs} 
+        WHERE {$where_clause}
+        GROUP BY endpoint, company_shortname
+        HAVING AVG(response_time_ms) > 500
+        ORDER BY avg_response_time DESC
+        LIMIT 15
+    ";
+    
+    $bottlenecks = $DB->get_records_sql($bottlenecks_sql, $params);
+    
+    // 8. Recent Critical Errors (last hour)
+    $recent_errors_sql = "
+        SELECT 
+            l.timeaccessed,
+            l.endpoint,
+            l.company_shortname,
+            l.error_message,
+            l.response_time_ms,
+            u.firstname,
+            u.lastname,
+            u.email
+        FROM {local_alx_api_logs} l
+        LEFT JOIN {user} u ON l.userid = u.id
+        WHERE l.timeaccessed >= ? AND (l.error_message IS NOT NULL AND l.error_message != '')
+        ORDER BY l.timeaccessed DESC
+        LIMIT 20
+    ";
+    
+    $recent_errors = $DB->get_records_sql($recent_errors_sql, [time() - 3600]);
+    
+    return [
+        'summary' => [
+            'analysis_period_hours' => $hours,
+            'total_requests' => (int)$overall_stats->total_requests,
+            'successful_requests' => (int)$overall_stats->successful_requests,
+            'failed_requests' => (int)$overall_stats->failed_requests,
+            'success_rate' => $success_rate,
+            'error_rate' => round(100 - $success_rate, 2),
+            'avg_response_time' => round($overall_stats->avg_response_time ?: 0, 2),
+            'max_response_time' => round($overall_stats->max_response_time ?: 0, 2),
+            'min_response_time' => round($overall_stats->min_response_time ?: 0, 2),
+            'avg_success_response_time' => round($overall_stats->avg_success_response_time ?: 0, 2),
+            'avg_error_response_time' => round($overall_stats->avg_error_response_time ?: 0, 2),
+            'total_records_returned' => (int)$overall_stats->total_records_returned,
+            'unique_users' => (int)$overall_stats->unique_users,
+            'unique_companies' => (int)$overall_stats->unique_companies,
+            'calls_per_hour' => $hours > 0 ? round($overall_stats->total_requests / $hours, 2) : 0
+        ],
+        'error_analysis' => array_values($error_analysis),
+        'endpoint_performance' => array_values($endpoint_performance),
+        'company_performance' => array_values($company_performance),
+        'hourly_trends' => array_values($hourly_trends),
+        'error_prone_users' => array_values($error_prone_users),
+        'performance_bottlenecks' => array_values($bottlenecks),
+        'recent_critical_errors' => array_values($recent_errors),
+        'alerts' => local_alx_report_api_analyze_performance_alerts($overall_stats, $endpoint_performance, $company_performance)
+    ];
+}
+
+/**
+ * Analyze performance data and generate alerts for potential issues.
+ */
+function local_alx_report_api_analyze_performance_alerts($overall_stats, $endpoint_performance, $company_performance) {
+    $alerts = [];
+    
+    // High error rate alert
+    $error_rate = $overall_stats->total_requests > 0 
+        ? (($overall_stats->failed_requests / $overall_stats->total_requests) * 100) 
+        : 0;
+    
+    if ($error_rate > 10) {
+        $alerts[] = [
+            'type' => 'high_error_rate',
+            'severity' => $error_rate > 25 ? 'critical' : 'high',
+            'message' => "Overall error rate is {$error_rate}% (threshold: 10%)",
+            'data' => ['error_rate' => $error_rate, 'failed_requests' => $overall_stats->failed_requests]
+        ];
+    }
+    
+    // Slow response time alert
+    if ($overall_stats->avg_response_time > 2000) {
+        $alerts[] = [
+            'type' => 'slow_response_time',
+            'severity' => $overall_stats->avg_response_time > 5000 ? 'critical' : 'medium',
+            'message' => "Average response time is {$overall_stats->avg_response_time}ms (threshold: 2000ms)",
+            'data' => ['avg_response_time' => $overall_stats->avg_response_time]
+        ];
+    }
+    
+    // Endpoint-specific issues
+    foreach ($endpoint_performance as $endpoint) {
+        if ($endpoint->error_rate > 15) {
+            $alerts[] = [
+                'type' => 'endpoint_high_errors',
+                'severity' => $endpoint->error_rate > 30 ? 'high' : 'medium',
+                'message' => "Endpoint '{$endpoint->endpoint}' has {$endpoint->error_rate}% error rate",
+                'data' => ['endpoint' => $endpoint->endpoint, 'error_rate' => $endpoint->error_rate]
+            ];
+        }
+    }
+    
+    // Company-specific issues
+    foreach ($company_performance as $company) {
+        if ($company->error_rate > 20) {
+            $alerts[] = [
+                'type' => 'company_high_errors',
+                'severity' => 'medium',
+                'message' => "Company '{$company->company_shortname}' has {$company->error_rate}% error rate",
+                'data' => ['company' => $company->company_shortname, 'error_rate' => $company->error_rate]
+            ];
+        }
+    }
+    
+    return $alerts;
+}
+
+/**
+ * Enhanced logging function with response time and error tracking.
+ */
+function local_alx_report_api_log_api_call($userid, $company_shortname, $endpoint, $record_count = 0, $error_message = null, $response_time_ms = null, $additional_data = []) {
+    global $DB;
+    
+    try {
+        $log = new stdClass();
+        $log->userid = $userid;
+        $log->company_shortname = $company_shortname;
+        $log->endpoint = $endpoint;
+        $log->record_count = $record_count;
+        $log->error_message = $error_message;
+        $log->response_time_ms = $response_time_ms;
+        $log->timeaccessed = time();
+        $log->ip_address = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+        $log->user_agent = substr($_SERVER['HTTP_USER_AGENT'] ?? 'unknown', 0, 255);
+        
+        // Store additional data as JSON
+        if (!empty($additional_data)) {
+            $log->additional_data = json_encode($additional_data);
+        }
+        
+        $DB->insert_record('local_alx_api_logs', $log);
+        
+        // Check if this error should trigger an immediate alert
+        if ($error_message && !empty($error_message)) {
+            local_alx_report_api_check_error_alert($userid, $company_shortname, $endpoint, $error_message, $response_time_ms);
+        }
+        
+    } catch (Exception $e) {
+        // Don't let logging errors break the API
+        error_log("ALX Report API: Failed to log API call: " . $e->getMessage());
+    }
+}
+
+/**
+ * Check if an error should trigger an immediate alert.
+ */
+function local_alx_report_api_check_error_alert($userid, $company_shortname, $endpoint, $error_message, $response_time_ms) {
+    global $DB;
+    
+    // Check for critical error patterns
+    $critical_patterns = [
+        'database error',
+        'connection failed',
+        'timeout',
+        'memory limit',
+        'fatal error',
+        'access denied',
+        'authentication failed'
+    ];
+    
+    $is_critical = false;
+    foreach ($critical_patterns as $pattern) {
+        if (stripos($error_message, $pattern) !== false) {
+            $is_critical = true;
+            break;
+        }
+    }
+    
+    // Check error frequency (multiple errors in short time)
+    $recent_errors = $DB->count_records_select('local_alx_api_logs', 
+        'userid = ? AND endpoint = ? AND timeaccessed >= ? AND (error_message IS NOT NULL AND error_message != "")',
+        [$userid, $endpoint, time() - 300] // Last 5 minutes
+    );
+    
+    if ($is_critical || $recent_errors >= 3) {
+        $severity = $is_critical ? 'high' : 'medium';
+        $user = $DB->get_record('user', ['id' => $userid]);
+        $user_name = $user ? fullname($user) : "User ID {$userid}";
+        
+        local_alx_report_api_send_alert(
+            'performance',
+            $severity,
+            "Repeated API errors detected for {$user_name} on {$endpoint}: {$error_message}",
+            [
+                'user_id' => $userid,
+                'company' => $company_shortname,
+                'endpoint' => $endpoint,
+                'error_message' => $error_message,
+                'response_time_ms' => $response_time_ms,
+                'recent_error_count' => $recent_errors,
+                'is_critical_pattern' => $is_critical
+            ]
+        );
+    }
+}
+
+/**
+ * Export API logs data for a specific date range.
+ *
+ * @param int $date_from Start timestamp
+ * @param int $date_to End timestamp  
+ * @param string $company_filter Optional company filter
+ * @return array API logs data
+ */
+function local_alx_report_api_get_api_logs_export($date_from, $date_to, $company_filter = null) {
+    global $DB;
+    
+    $where_conditions = ['timeaccessed >= ? AND timeaccessed <= ?'];
+    $params = [$date_from, $date_to];
+    
+    if ($company_filter) {
+        $where_conditions[] = 'company_shortname = ?';
+        $params[] = $company_filter;
+    }
+    
+    $where_clause = implode(' AND ', $where_conditions);
+    
+    $sql = "
+        SELECT 
+            l.id,
+            l.timeaccessed,
+            l.userid,
+            u.firstname,
+            u.lastname,
+            u.email,
+            l.company_shortname,
+            l.endpoint,
+            l.record_count,
+            l.response_time_ms,
+            l.error_message,
+            l.ip_address,
+            l.user_agent
+        FROM {local_alx_api_logs} l
+        LEFT JOIN {user} u ON l.userid = u.id
+        WHERE {$where_clause}
+        ORDER BY l.timeaccessed DESC
+    ";
+    
+    $logs = $DB->get_records_sql($sql, $params);
+    
+    return [
+        'logs' => array_values($logs),
+        'summary' => [
+            'total_requests' => count($logs),
+            'date_range' => [
+                'from' => date('Y-m-d H:i:s', $date_from),
+                'to' => date('Y-m-d H:i:s', $date_to)
+            ],
+            'company_filter' => $company_filter ?: 'All companies'
+        ]
+    ];
+}
+
+/**
+ * Export data as CSV format.
+ *
+ * @param array $data Data to export
+ * @param string $data_type Type of data being exported
+ * @param int $date_from Start timestamp
+ * @param int $date_to End timestamp
+ */
+function local_alx_report_api_export_csv($data, $data_type, $date_from, $date_to) {
+    $filename = "alx_report_api_{$data_type}_" . date('Y-m-d_H-i-s') . '.csv';
+    
+    header('Content-Type: text/csv');
+    header('Content-Disposition: attachment; filename="' . $filename . '"');
+    header('Cache-Control: no-cache, must-revalidate');
+    header('Expires: 0');
+    
+    $output = fopen('php://output', 'w');
+    
+    // Add BOM for UTF-8 Excel compatibility
+    fprintf($output, chr(0xEF).chr(0xBB).chr(0xBF));
+    
+    // Export header
+    fputcsv($output, ['ALX Report API Export - ' . ucfirst(str_replace('_', ' ', $data_type))]);
+    fputcsv($output, ['Export Date:', date('Y-m-d H:i:s')]);
+    fputcsv($output, ['Date Range:', date('Y-m-d H:i:s', $date_from) . ' to ' . date('Y-m-d H:i:s', $date_to)]);
+    fputcsv($output, []); // Empty row
+    
+    switch ($data_type) {
+        case 'analytics':
+            local_alx_report_api_export_analytics_csv($output, $data);
+            break;
+        case 'api_logs':
+            local_alx_report_api_export_logs_csv($output, $data);
+            break;
+        case 'system_health':
+            local_alx_report_api_export_health_csv($output, $data);
+            break;
+        case 'rate_limiting':
+            local_alx_report_api_export_rate_limiting_csv($output, $data);
+            break;
+    }
+    
+    fclose($output);
+}
+
+/**
+ * Export analytics data to CSV.
+ */
+function local_alx_report_api_export_analytics_csv($output, $data) {
+    // Summary section
+    fputcsv($output, ['=== ANALYTICS SUMMARY ===']);
+    fputcsv($output, ['Metric', 'Value']);
+    fputcsv($output, ['Analysis Period (hours)', $data['summary']['analysis_period_hours']]);
+    fputcsv($output, ['Total Requests', $data['summary']['total_requests']]);
+    fputcsv($output, ['Successful Requests', $data['summary']['successful_requests']]);
+    fputcsv($output, ['Failed Requests', $data['summary']['failed_requests']]);
+    fputcsv($output, ['Success Rate (%)', $data['summary']['success_rate']]);
+    fputcsv($output, ['Error Rate (%)', $data['summary']['error_rate']]);
+    fputcsv($output, ['Average Response Time (ms)', $data['summary']['avg_response_time']]);
+    fputcsv($output, ['Max Response Time (ms)', $data['summary']['max_response_time']]);
+    fputcsv($output, ['Unique Users', $data['summary']['unique_users']]);
+    fputcsv($output, ['Unique Companies', $data['summary']['unique_companies']]);
+    fputcsv($output, ['Calls per Hour', $data['summary']['calls_per_hour']]);
+    fputcsv($output, []); // Empty row
+    
+    // Endpoint Performance
+    if (!empty($data['endpoint_performance'])) {
+        fputcsv($output, ['=== ENDPOINT PERFORMANCE ===']);
+        fputcsv($output, ['Endpoint', 'Total Requests', 'Success Rate (%)', 'Error Rate (%)', 'Avg Response Time (ms)', 'Max Response Time (ms)', 'Total Records', 'Unique Users']);
+        foreach ($data['endpoint_performance'] as $endpoint) {
+            fputcsv($output, [
+                $endpoint->endpoint,
+                $endpoint->total_requests,
+                $endpoint->success_rate,
+                $endpoint->error_rate,
+                round($endpoint->avg_response_time, 2),
+                $endpoint->max_response_time,
+                $endpoint->total_records,
+                $endpoint->unique_users
+            ]);
+        }
+        fputcsv($output, []); // Empty row
+    }
+    
+    // Company Performance
+    if (!empty($data['company_performance'])) {
+        fputcsv($output, ['=== COMPANY PERFORMANCE ===']);
+        fputcsv($output, ['Company', 'Total Requests', 'Success Rate (%)', 'Error Rate (%)', 'Avg Response Time (ms)', 'Total Records', 'Unique Users', 'Endpoints Used']);
+        foreach ($data['company_performance'] as $company) {
+            fputcsv($output, [
+                $company->company_shortname,
+                $company->total_requests,
+                $company->success_rate,
+                $company->error_rate,
+                round($company->avg_response_time, 2),
+                $company->total_records,
+                $company->unique_users,
+                $company->endpoints_used
+            ]);
+        }
+        fputcsv($output, []); // Empty row
+    }
+    
+    // Error Analysis
+    if (!empty($data['error_analysis'])) {
+        fputcsv($output, ['=== ERROR ANALYSIS ===']);
+        fputcsv($output, ['Error Message', 'Count', 'Affected Users', 'Affected Companies', 'Avg Response Time (ms)', 'First Occurrence', 'Last Occurrence']);
+        foreach ($data['error_analysis'] as $error) {
+            fputcsv($output, [
+                $error->error_message,
+                $error->error_count,
+                $error->affected_users,
+                $error->affected_companies,
+                round($error->avg_response_time, 2),
+                date('Y-m-d H:i:s', $error->first_occurrence),
+                date('Y-m-d H:i:s', $error->last_occurrence)
+            ]);
+        }
+        fputcsv($output, []); // Empty row
+    }
+    
+    // Hourly Trends
+    if (!empty($data['hourly_trends'])) {
+        fputcsv($output, ['=== HOURLY TRENDS ===']);
+        fputcsv($output, ['Hour', 'Total Requests', 'Success Rate (%)', 'Error Rate (%)', 'Avg Response Time (ms)', 'Total Records']);
+        foreach ($data['hourly_trends'] as $hour) {
+            fputcsv($output, [
+                $hour->hour_bucket,
+                $hour->total_requests,
+                $hour->success_rate,
+                $hour->error_rate,
+                round($hour->avg_response_time, 2),
+                $hour->total_records
+            ]);
+        }
+    }
+}
+
+/**
+ * Export API logs to CSV.
+ */
+function local_alx_report_api_export_logs_csv($output, $data) {
+    fputcsv($output, ['=== API LOGS ===']);
+    fputcsv($output, ['Total Logs:', count($data['logs'])]);
+    fputcsv($output, []); // Empty row
+    
+    // Headers
+    fputcsv($output, [
+        'Timestamp',
+        'User ID', 
+        'User Name',
+        'User Email',
+        'Company',
+        'Endpoint',
+        'Records Returned',
+        'Response Time (ms)',
+        'Status',
+        'Error Message',
+        'IP Address',
+        'User Agent'
+    ]);
+    
+    // Data rows
+    foreach ($data['logs'] as $log) {
+        $status = empty($log->error_message) ? 'Success' : 'Error';
+        $user_name = trim(($log->firstname ?? '') . ' ' . ($log->lastname ?? ''));
+        
+        fputcsv($output, [
+            date('Y-m-d H:i:s', $log->timeaccessed),
+            $log->userid,
+            $user_name ?: 'Unknown',
+            $log->email ?? 'Unknown',
+            $log->company_shortname ?? 'Unknown',
+            $log->endpoint,
+            $log->record_count ?? 0,
+            $log->response_time_ms ?? '',
+            $status,
+            $log->error_message ?? '',
+            $log->ip_address ?? '',
+            substr($log->user_agent ?? '', 0, 100) // Truncate user agent
+        ]);
+    }
+}
+
+/**
+ * Export system health data to CSV.
+ */
+function local_alx_report_api_export_health_csv($output, $data) {
+    $health = $data['health'];
+    
+    fputcsv($output, ['=== SYSTEM HEALTH REPORT ===']);
+    fputcsv($output, ['Overall Status:', $health['overall_status']]);
+    fputcsv($output, ['Health Score:', $health['score'] . '/100']);
+    fputcsv($output, ['Report Time:', date('Y-m-d H:i:s')]);
+    fputcsv($output, []); // Empty row
+    
+    // Health checks
+    fputcsv($output, ['=== HEALTH CHECKS ===']);
+    fputcsv($output, ['Component', 'Status', 'Message', 'Details']);
+    
+    foreach ($health['checks'] as $check) {
+        fputcsv($output, [
+            $check['component'],
+            $check['status'],
+            $check['message'],
+            is_array($check['details']) ? json_encode($check['details']) : $check['details']
+        ]);
+    }
+    
+    fputcsv($output, []); // Empty row
+    
+    // Recommendations
+    if (!empty($health['recommendations'])) {
+        fputcsv($output, ['=== RECOMMENDATIONS ===']);
+        fputcsv($output, ['Recommendation']);
+        
+        foreach ($health['recommendations'] as $recommendation) {
+            fputcsv($output, [$recommendation]);
+        }
+    }
+}
+
+/**
+ * Export rate limiting data to CSV.
+ */
+function local_alx_report_api_export_rate_limiting_csv($output, $data) {
+    $monitoring = $data['rate_monitoring'];
+    
+    fputcsv($output, ['=== RATE LIMITING REPORT ===']);
+    fputcsv($output, ['Report Time:', date('Y-m-d H:i:s')]);
+    fputcsv($output, []); // Empty row
+    
+    // Violations
+    if (!empty($monitoring['violations'])) {
+        fputcsv($output, ['=== RATE LIMIT VIOLATIONS ===']);
+        fputcsv($output, ['User ID', 'User Name', 'Email', 'Company', 'Requests Today', 'Daily Limit', 'Usage %', 'Companies Accessed']);
+        
+        foreach ($monitoring['violations'] as $violation) {
+            fputcsv($output, [
+                $violation['userid'],
+                $violation['name'],
+                $violation['email'],
+                $violation['primary_company'],
+                $violation['requests_today'],
+                $violation['limit'],
+                $violation['usage_percentage'],
+                $violation['companies_count']
+            ]);
+        }
+        fputcsv($output, []); // Empty row
+    }
+    
+    // High usage users
+    if (!empty($monitoring['high_usage_users'])) {
+        fputcsv($output, ['=== HIGH USAGE USERS ===']);
+        fputcsv($output, ['User ID', 'User Name', 'Email', 'Requests Today', 'Usage %', 'Companies Accessed']);
+        
+        foreach ($monitoring['high_usage_users'] as $user) {
+            fputcsv($output, [
+                $user['userid'],
+                $user['name'],
+                $user['email'],
+                $user['requests_today'],
+                $user['usage_percentage'],
+                $user['companies_count']
+            ]);
+        }
+        fputcsv($output, []); // Empty row
+    }
+    
+    // Daily trends
+    if (!empty($monitoring['daily_trends'])) {
+        fputcsv($output, ['=== DAILY TRENDS (Last 7 Days) ===']);
+        fputcsv($output, ['Date', 'Total Requests', 'Unique Users', 'Average per User', 'Violations']);
+        
+        foreach ($monitoring['daily_trends'] as $day) {
+            fputcsv($output, [
+                $day['date'],
+                $day['total_requests'],
+                $day['unique_users'],
+                $day['avg_requests_per_user'],
+                $day['violations']
+            ]);
+        }
+    }
+}
+
+/**
+ * Export data as PDF format.
+ *
+ * @param array $data Data to export
+ * @param string $data_type Type of data being exported
+ * @param int $date_from Start timestamp
+ * @param int $date_to End timestamp
+ */
+function local_alx_report_api_export_pdf($data, $data_type, $date_from, $date_to) {
+    // Note: This is a basic HTML-to-PDF implementation
+    // For production use, consider using libraries like TCPDF, mPDF, or DomPDF
+    
+    $filename = "alx_report_api_{$data_type}_" . date('Y-m-d_H-i-s') . '.pdf';
+    
+    // Generate HTML content
+    $html = local_alx_report_api_generate_pdf_html($data, $data_type, $date_from, $date_to);
+    
+    // Simple PDF generation using HTML
+    header('Content-Type: application/pdf');
+    header('Content-Disposition: attachment; filename="' . $filename . '"');
+    header('Cache-Control: no-cache, must-revalidate');
+    header('Expires: 0');
+    
+    // This is a simplified implementation - in production you'd use a proper PDF library
+    echo $html;
+}
+
+/**
+ * Generate HTML content for PDF export.
+ */
+function local_alx_report_api_generate_pdf_html($data, $data_type, $date_from, $date_to) {
+    global $CFG;
+    
+    $html = '
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <title>ALX Report API - ' . ucfirst(str_replace('_', ' ', $data_type)) . ' Report</title>
+        <style>
+            body { font-family: Arial, sans-serif; margin: 20px; }
+            .header { text-align: center; border-bottom: 2px solid #007bff; padding-bottom: 20px; margin-bottom: 30px; }
+            .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin: 20px 0; }
+            .summary-card { border: 1px solid #ddd; padding: 15px; border-radius: 5px; text-align: center; }
+            .metric-value { font-size: 24px; font-weight: bold; color: #007bff; }
+            .metric-label { font-size: 12px; color: #666; }
+            table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+            th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+            th { background-color: #f8f9fa; font-weight: bold; }
+            .section-title { font-size: 18px; font-weight: bold; margin: 30px 0 15px 0; color: #333; border-bottom: 1px solid #ddd; padding-bottom: 5px; }
+            .footer { margin-top: 40px; text-align: center; font-size: 12px; color: #666; border-top: 1px solid #ddd; padding-top: 20px; }
+        </style>
+    </head>
+    <body>
+        <div class="header">
+            <h1>ALX Report API</h1>
+            <h2>' . ucfirst(str_replace('_', ' ', $data_type)) . ' Report</h2>
+            <p>Generated: ' . date('Y-m-d H:i:s') . '</p>
+            <p>Period: ' . date('Y-m-d H:i:s', $date_from) . ' to ' . date('Y-m-d H:i:s', $date_to) . '</p>
+        </div>';
+    
+    // Add content based on data type
+    switch ($data_type) {
+        case 'analytics':
+            $html .= local_alx_report_api_generate_analytics_pdf_content($data);
+            break;
+        case 'system_health':
+            $html .= local_alx_report_api_generate_health_pdf_content($data);
+            break;
+        case 'rate_limiting':
+            $html .= local_alx_report_api_generate_rate_limiting_pdf_content($data);
+            break;
+        case 'api_logs':
+            $html .= local_alx_report_api_generate_logs_pdf_content($data);
+            break;
+    }
+    
+    $html .= '
+        <div class="footer">
+            <p>This report was generated by ALX Report API monitoring system</p>
+            <p>Server: ' . $CFG->wwwroot . '</p>
+        </div>
+    </body>
+    </html>';
+    
+    return $html;
+}
+
+/**
+ * Generate analytics content for PDF.
+ */
+function local_alx_report_api_generate_analytics_pdf_content($data) {
+    $summary = $data['summary'];
+    
+    $content = '
+    <div class="section-title">📊 Analytics Summary</div>
+    <div class="summary-grid">
+        <div class="summary-card">
+            <div class="metric-value">' . number_format($summary['total_requests']) . '</div>
+            <div class="metric-label">Total Requests</div>
+        </div>
+        <div class="summary-card">
+            <div class="metric-value">' . $summary['success_rate'] . '%</div>
+            <div class="metric-label">Success Rate</div>
+        </div>
+        <div class="summary-card">
+            <div class="metric-value">' . $summary['avg_response_time'] . 'ms</div>
+            <div class="metric-label">Avg Response Time</div>
+        </div>
+        <div class="summary-card">
+            <div class="metric-value">' . $summary['unique_users'] . '</div>
+            <div class="metric-label">Unique Users</div>
+        </div>
+    </div>';
+    
+    // Endpoint Performance Table
+    if (!empty($data['endpoint_performance'])) {
+        $content .= '
+        <div class="section-title">🎯 Endpoint Performance</div>
+        <table>
+            <tr>
+                <th>Endpoint</th>
+                <th>Requests</th>
+                <th>Success Rate</th>
+                <th>Avg Response Time</th>
+                <th>Users</th>
+            </tr>';
+        
+        foreach (array_slice($data['endpoint_performance'], 0, 10) as $endpoint) {
+            $content .= '
+            <tr>
+                <td>' . htmlspecialchars($endpoint->endpoint) . '</td>
+                <td>' . number_format($endpoint->total_requests) . '</td>
+                <td>' . $endpoint->success_rate . '%</td>
+                <td>' . round($endpoint->avg_response_time, 2) . 'ms</td>
+                <td>' . $endpoint->unique_users . '</td>
+            </tr>';
+        }
+        
+        $content .= '</table>';
+    }
+    
+    return $content;
+}
+
+/**
+ * Generate system health content for PDF.
+ */
+function local_alx_report_api_generate_health_pdf_content($data) {
+    $health = $data['health'];
+    
+    $status_color = $health['overall_status'] === 'healthy' ? '#28a745' : 
+                   ($health['overall_status'] === 'warning' ? '#ffc107' : '#dc3545');
+    
+    $content = '
+    <div class="section-title">🏥 System Health Overview</div>
+    <div class="summary-grid">
+        <div class="summary-card">
+            <div class="metric-value" style="color: ' . $status_color . '">' . $health['score'] . '/100</div>
+            <div class="metric-label">Health Score</div>
+        </div>
+        <div class="summary-card">
+            <div class="metric-value" style="color: ' . $status_color . '">' . ucfirst($health['overall_status']) . '</div>
+            <div class="metric-label">Overall Status</div>
+        </div>
+    </div>
+    
+    <div class="section-title">🔍 Health Checks</div>
+    <table>
+        <tr>
+            <th>Component</th>
+            <th>Status</th>
+            <th>Message</th>
+        </tr>';
+    
+    foreach ($health['checks'] as $check) {
+        $status_icon = $check['status'] === 'healthy' ? '✅' : 
+                      ($check['status'] === 'warning' ? '⚠️' : '❌');
+        
+        $content .= '
+        <tr>
+            <td>' . htmlspecialchars($check['component']) . '</td>
+            <td>' . $status_icon . ' ' . ucfirst($check['status']) . '</td>
+            <td>' . htmlspecialchars($check['message']) . '</td>
+        </tr>';
+    }
+    
+    $content .= '</table>';
+    
+    if (!empty($health['recommendations'])) {
+        $content .= '
+        <div class="section-title">💡 Recommendations</div>
+        <ul>';
+        
+        foreach ($health['recommendations'] as $recommendation) {
+            $content .= '<li>' . htmlspecialchars($recommendation) . '</li>';
+        }
+        
+        $content .= '</ul>';
+    }
+    
+    return $content;
+}
+
+/**
+ * Generate rate limiting content for PDF.
+ */
+function local_alx_report_api_generate_rate_limiting_pdf_content($data) {
+    $monitoring = $data['rate_monitoring'];
+    
+    $content = '
+    <div class="section-title">🚦 Rate Limiting Overview</div>';
+    
+    if (!empty($monitoring['violations'])) {
+        $content .= '
+        <div class="section-title">⚠️ Rate Limit Violations</div>
+        <table>
+            <tr>
+                <th>User</th>
+                <th>Company</th>
+                <th>Requests Today</th>
+                <th>Daily Limit</th>
+                <th>Usage %</th>
+            </tr>';
+        
+        foreach ($monitoring['violations'] as $violation) {
+            $content .= '
+            <tr>
+                <td>' . htmlspecialchars($violation['name']) . '</td>
+                <td>' . htmlspecialchars($violation['primary_company']) . '</td>
+                <td>' . $violation['requests_today'] . '</td>
+                <td>' . $violation['limit'] . '</td>
+                <td>' . $violation['usage_percentage'] . '%</td>
+            </tr>';
+        }
+        
+        $content .= '</table>';
+    } else {
+        $content .= '<p>✅ No rate limit violations detected.</p>';
+    }
+    
+    return $content;
+}
+
+/**
+ * Generate logs content for PDF.
+ */
+function local_alx_report_api_generate_logs_pdf_content($data) {
+    $content = '
+    <div class="section-title">📋 API Access Logs</div>
+    <p>Total logs: ' . count($data['logs']) . '</p>';
+    
+    if (!empty($data['logs'])) {
+        $content .= '
+        <table>
+            <tr>
+                <th>Time</th>
+                <th>User</th>
+                <th>Company</th>
+                <th>Endpoint</th>
+                <th>Status</th>
+                <th>Response Time</th>
+            </tr>';
+        
+        foreach (array_slice($data['logs'], 0, 50) as $log) {
+            $status = empty($log->error_message) ? '✅ Success' : '❌ Error';
+            $user_name = trim(($log->firstname ?? '') . ' ' . ($log->lastname ?? ''));
+            
+            $content .= '
+            <tr>
+                <td>' . date('Y-m-d H:i', $log->timeaccessed) . '</td>
+                <td>' . htmlspecialchars($user_name ?: 'Unknown') . '</td>
+                <td>' . htmlspecialchars($log->company_shortname ?? 'Unknown') . '</td>
+                <td>' . htmlspecialchars($log->endpoint) . '</td>
+                <td>' . $status . '</td>
+                <td>' . ($log->response_time_ms ?? 'N/A') . 'ms</td>
+            </tr>';
+        }
+        
+        $content .= '</table>';
+        
+        if (count($data['logs']) > 50) {
+            $content .= '<p><em>Showing first 50 logs. Export CSV for complete data.</em></p>';
+        }
+    }
+    
+    return $content;
+}
+
+/**
+ * Export data as JSON format.
+ *
+ * @param array $data Data to export
+ * @param string $data_type Type of data being exported
+ * @param int $date_from Start timestamp
+ * @param int $date_to End timestamp
+ */
+function local_alx_report_api_export_json($data, $data_type, $date_from, $date_to) {
+    $filename = "alx_report_api_{$data_type}_" . date('Y-m-d_H-i-s') . '.json';
+    
+    header('Content-Type: application/json');
+    header('Content-Disposition: attachment; filename="' . $filename . '"');
+    header('Cache-Control: no-cache, must-revalidate');
+    header('Expires: 0');
+    
+    $export_data = [
+        'export_info' => [
+            'plugin' => 'ALX Report API',
+            'data_type' => $data_type,
+            'export_timestamp' => time(),
+            'export_date' => date('Y-m-d H:i:s'),
+            'date_range' => [
+                'from' => date('Y-m-d H:i:s', $date_from),
+                'to' => date('Y-m-d H:i:s', $date_to),
+                'from_timestamp' => $date_from,
+                'to_timestamp' => $date_to
+            ]
+        ],
+        'data' => $data
+    ];
+    
+    echo json_encode($export_data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+}
+
+/**
+ * 🔍 MEDIUM PRIORITY #5: Performance Bottleneck Identification
+ * Get detailed performance analysis and bottleneck identification.
+ */
+function local_alx_report_api_get_performance_bottlenecks($hours = 24) {
+    global $DB;
+    
+    $start_time = time() - ($hours * 3600);
+    
+    // 1. Identify slow endpoints
+    $slow_endpoints_sql = "
+        SELECT 
+            endpoint,
+            COUNT(*) as total_calls,
+            AVG(response_time_ms) as avg_response_time,
+            MAX(response_time_ms) as max_response_time,
+            STDDEV(response_time_ms) as response_time_variance,
+            COUNT(CASE WHEN response_time_ms > 1000 THEN 1 END) as slow_calls
+        FROM {local_alx_api_logs}
+        WHERE timeaccessed >= ? AND response_time_ms IS NOT NULL
+        GROUP BY endpoint
+        HAVING AVG(response_time_ms) > 500 OR COUNT(CASE WHEN response_time_ms > 1000 THEN 1 END) > 0
+        ORDER BY avg_response_time DESC
+        LIMIT 20
+    ";
+    $slow_endpoints = $DB->get_records_sql($slow_endpoints_sql, [$start_time]);
+    
+    // 2. Identify performance patterns by hour
+    $hourly_performance_sql = "
+        SELECT 
+            HOUR(FROM_UNIXTIME(timeaccessed)) as hour_of_day,
+            COUNT(*) as total_calls,
+            AVG(response_time_ms) as avg_response_time,
+            COUNT(CASE WHEN response_time_ms > 1000 THEN 1 END) as slow_calls,
+            COUNT(CASE WHEN error_message IS NOT NULL AND error_message != '' THEN 1 END) as error_count
+        FROM {local_alx_api_logs}
+        WHERE timeaccessed >= ?
+        GROUP BY HOUR(FROM_UNIXTIME(timeaccessed))
+        ORDER BY hour_of_day
+    ";
+    $hourly_performance = $DB->get_records_sql($hourly_performance_sql, [$start_time]);
+    
+    // 3. Company-specific performance issues
+    $company_performance_sql = "
+        SELECT 
+            company_shortname,
+            COUNT(*) as total_calls,
+            AVG(response_time_ms) as avg_response_time,
+            COUNT(CASE WHEN response_time_ms > 1000 THEN 1 END) as slow_calls,
+            AVG(record_count) as avg_records_per_call,
+            COUNT(DISTINCT userid) as unique_users
+        FROM {local_alx_api_logs}
+        WHERE timeaccessed >= ? AND company_shortname IS NOT NULL
+        GROUP BY company_shortname
+        HAVING AVG(response_time_ms) > 300 OR COUNT(CASE WHEN response_time_ms > 1000 THEN 1 END) > 5
+        ORDER BY avg_response_time DESC
+        LIMIT 15
+    ";
+    $company_performance = $DB->get_records_sql($company_performance_sql, [$start_time]);
+    
+    // 4. Heavy users (potential bottleneck sources)
+    $heavy_users_sql = "
+        SELECT 
+            u.firstname,
+            u.lastname,
+            u.email,
+            logs.userid,
+            logs.company_shortname,
+            COUNT(*) as total_calls,
+            AVG(response_time_ms) as avg_response_time,
+            SUM(record_count) as total_records_requested
+        FROM {local_alx_api_logs} logs
+        JOIN {user} u ON logs.userid = u.id
+        WHERE timeaccessed >= ?
+        GROUP BY logs.userid, logs.company_shortname
+        HAVING COUNT(*) > 50 OR SUM(record_count) > 10000
+        ORDER BY total_calls DESC
+        LIMIT 20
+    ";
+    $heavy_users = $DB->get_records_sql($heavy_users_sql, [$start_time]);
+    
+    // 5. Database performance analysis
+    $db_performance = local_alx_report_api_analyze_database_performance();
+    
+    // 6. Peak load analysis
+    $peak_load_sql = "
+        SELECT 
+            FROM_UNIXTIME(timeaccessed, '%Y-%m-%d %H:00:00') as hour_bucket,
+            COUNT(*) as calls_count,
+            AVG(response_time_ms) as avg_response_time,
+            COUNT(DISTINCT userid) as unique_users,
+            COUNT(DISTINCT company_shortname) as unique_companies
+        FROM {local_alx_api_logs}
+        WHERE timeaccessed >= ?
+        GROUP BY FROM_UNIXTIME(timeaccessed, '%Y-%m-%d %H:00:00')
+        ORDER BY calls_count DESC
+        LIMIT 10
+    ";
+    $peak_load_periods = $DB->get_records_sql($peak_load_sql, [$start_time]);
+    
+    return [
+        'slow_endpoints' => array_values($slow_endpoints),
+        'hourly_performance' => array_values($hourly_performance),
+        'company_performance' => array_values($company_performance),
+        'heavy_users' => array_values($heavy_users),
+        'database_performance' => $db_performance,
+        'peak_load_periods' => array_values($peak_load_periods),
+        'analysis_period' => $hours,
+        'recommendations' => local_alx_report_api_generate_performance_recommendations($slow_endpoints, $hourly_performance, $company_performance)
+    ];
+}
+
+/**
+ * Analyze database performance metrics
+ */
+function local_alx_report_api_analyze_database_performance() {
+    global $DB;
+    
+    $start_time = microtime(true);
+    
+    // Test query performance
+    $test_queries = [
+        'simple_count' => "SELECT COUNT(*) as count FROM {local_alx_api_logs}",
+        'complex_join' => "SELECT COUNT(*) as count FROM {local_alx_api_logs} l JOIN {user} u ON l.userid = u.id",
+        'aggregation' => "SELECT company_shortname, COUNT(*) as count FROM {local_alx_api_logs} GROUP BY company_shortname LIMIT 5",
+        'recent_data' => "SELECT COUNT(*) as count FROM {local_alx_api_logs} WHERE timeaccessed >= " . (time() - 3600)
+    ];
+    
+    $performance_results = [];
+    
+    foreach ($test_queries as $query_name => $sql) {
+        $query_start = microtime(true);
+        try {
+            $result = $DB->get_record_sql($sql);
+            $query_time = (microtime(true) - $query_start) * 1000; // Convert to milliseconds
+            
+            $performance_results[$query_name] = [
+                'execution_time_ms' => round($query_time, 2),
+                'status' => 'success',
+                'result_count' => isset($result->count) ? $result->count : 0
+            ];
+        } catch (Exception $e) {
+            $performance_results[$query_name] = [
+                'execution_time_ms' => -1,
+                'status' => 'error',
+                'error' => $e->getMessage()
+            ];
+        }
+    }
+    
+    // Check table sizes
+    $table_info_sql = "
+        SELECT 
+            table_name,
+            table_rows,
+            data_length,
+            index_length
+        FROM information_schema.TABLES 
+        WHERE table_schema = DATABASE() 
+        AND table_name IN ('" . $DB->get_prefix() . "local_alx_api_logs', '" . $DB->get_prefix() . "local_alx_reporting_data')
+    ";
+    
+    try {
+        $table_info = $DB->get_records_sql($table_info_sql);
+    } catch (Exception $e) {
+        $table_info = [];
+    }
+    
+    return [
+        'query_performance' => $performance_results,
+        'table_information' => array_values($table_info),
+        'overall_health' => local_alx_report_api_calculate_db_health_score($performance_results)
+    ];
+}
+
+/**
+ * Generate performance recommendations based on analysis
+ */
+function local_alx_report_api_generate_performance_recommendations($slow_endpoints, $hourly_performance, $company_performance) {
+    $recommendations = [];
+    
+    // Analyze slow endpoints
+    if (!empty($slow_endpoints)) {
+        $recommendations[] = [
+            'type' => 'endpoint_optimization',
+            'severity' => 'high',
+            'title' => 'Slow API Endpoints Detected',
+            'description' => count($slow_endpoints) . ' endpoints are performing slower than optimal',
+            'actions' => [
+                'Review database queries for slow endpoints',
+                'Consider implementing response caching',
+                'Optimize data structures and indexing',
+                'Monitor endpoint usage patterns'
+            ]
+        ];
+    }
+    
+    // Analyze peak hour performance
+    $peak_hours = array_filter($hourly_performance, function($hour) {
+        return isset($hour->avg_response_time) && $hour->avg_response_time > 800;
+    });
+    
+    if (!empty($peak_hours)) {
+        $recommendations[] = [
+            'type' => 'load_balancing',
+            'severity' => 'medium',
+            'title' => 'Peak Hour Performance Issues',
+            'description' => 'Performance degrades during peak usage hours',
+            'actions' => [
+                'Implement request queuing during peak hours',
+                'Consider scaling database resources',
+                'Add rate limiting during high-load periods',
+                'Schedule maintenance during off-peak hours'
+            ]
+        ];
+    }
+    
+    // Analyze company-specific issues
+    if (!empty($company_performance)) {
+        $recommendations[] = [
+            'type' => 'company_optimization',
+            'severity' => 'medium',
+            'title' => 'Company-Specific Performance Issues',
+            'description' => count($company_performance) . ' companies experiencing slower response times',
+            'actions' => [
+                'Review data size for affected companies',
+                'Implement company-specific caching',
+                'Consider data archiving for large datasets',
+                'Optimize company data structure'
+            ]
+        ];
+    }
+    
+    return $recommendations;
+}
+
+/**
+ * Calculate database health score based on performance metrics
+ */
+function local_alx_report_api_calculate_db_health_score($performance_results) {
+    $score = 100;
+    
+    foreach ($performance_results as $query_name => $result) {
+        if ($result['status'] === 'error') {
+            $score -= 30;
+        } elseif ($result['execution_time_ms'] > 100) {
+            $score -= 10;
+        } elseif ($result['execution_time_ms'] > 50) {
+            $score -= 5;
+        }
+    }
+    
+    return max(0, $score);
+}
+
+/**
+ * 🔐 MEDIUM PRIORITY #6: Authentication Attempts Logging
+ * Log and analyze authentication attempts for security monitoring.
+ */
+function local_alx_report_api_log_auth_attempt($token, $userid, $success, $ip_address, $user_agent = '', $endpoint = '') {
+    global $DB;
+    
+    // Create auth attempts table if it doesn't exist
+    local_alx_report_api_ensure_auth_table();
+    
+    $auth_log = new stdClass();
+    $auth_log->token_id = $token ? substr($token, 0, 8) . '...' : 'none'; // Only store partial token for security
+    $auth_log->userid = $userid;
+    $auth_log->success = $success ? 1 : 0;
+    $auth_log->ip_address = $ip_address;
+    $auth_log->user_agent = substr($user_agent, 0, 255); // Limit user agent length
+    $auth_log->endpoint = $endpoint;
+    $auth_log->timeaccessed = time();
+    
+    try {
+        $DB->insert_record('local_alx_auth_attempts', $auth_log);
+        
+        // Check for suspicious activity
+        local_alx_report_api_check_suspicious_auth_activity($ip_address, $userid);
+        
+    } catch (Exception $e) {
+        // Log error but don't break API functionality
+        error_log('ALX Report API: Failed to log auth attempt - ' . $e->getMessage());
+    }
+}
+
+/**
+ * Ensure authentication attempts table exists
+ */
+function local_alx_report_api_ensure_auth_table() {
+    global $DB;
+    
+    $dbman = $DB->get_manager();
+    $table_name = 'local_alx_auth_attempts';
+    
+    if (!$dbman->table_exists($table_name)) {
+        // Table will be created by upgrade.php, just log for now
+        error_log('ALX Report API: Auth attempts table does not exist, will be created on next upgrade');
+    }
+}
+
+/**
+ * Check for suspicious authentication activity
+ */
+function local_alx_report_api_check_suspicious_auth_activity($ip_address, $userid) {
+    global $DB;
+    
+    $last_hour = time() - 3600;
+    
+    // Check for repeated failed attempts from same IP
+    $failed_attempts_sql = "
+        SELECT COUNT(*) as failed_count
+        FROM {local_alx_auth_attempts}
+        WHERE ip_address = ? AND success = 0 AND timeaccessed >= ?
+    ";
+    $failed_count = $DB->get_field_sql($failed_attempts_sql, [$ip_address, $last_hour]);
+    
+    if ($failed_count >= 10) {
+        local_alx_report_api_trigger_security_alert([
+            'type' => 'repeated_failed_auth',
+            'severity' => 'high',
+            'ip_address' => $ip_address,
+            'failed_attempts' => $failed_count,
+            'time_period' => '1 hour'
+        ]);
+    }
+    
+    // Check for authentication from multiple IPs for same user
+    if ($userid) {
+        $ip_count_sql = "
+            SELECT COUNT(DISTINCT ip_address) as ip_count
+            FROM {local_alx_auth_attempts}
+            WHERE userid = ? AND timeaccessed >= ?
+        ";
+        $ip_count = $DB->get_field_sql($ip_count_sql, [$userid, $last_hour]);
+        
+        if ($ip_count >= 5) {
+            local_alx_report_api_trigger_security_alert([
+                'type' => 'multiple_ip_auth',
+                'severity' => 'medium',
+                'userid' => $userid,
+                'ip_count' => $ip_count,
+                'time_period' => '1 hour'
+            ]);
+        }
+    }
+}
+
+/**
+ * Get authentication analytics and security insights
+ */
+function local_alx_report_api_get_auth_analytics($hours = 24) {
+    global $DB;
+    
+    $start_time = time() - ($hours * 3600);
+    
+    // Basic auth stats
+    $auth_stats_sql = "
+        SELECT 
+            COUNT(*) as total_attempts,
+            COUNT(CASE WHEN success = 1 THEN 1 END) as successful_attempts,
+            COUNT(CASE WHEN success = 0 THEN 1 END) as failed_attempts,
+            COUNT(DISTINCT ip_address) as unique_ips,
+            COUNT(DISTINCT userid) as unique_users
+        FROM {local_alx_auth_attempts}
+        WHERE timeaccessed >= ?
+    ";
+    
+    try {
+        $auth_stats = $DB->get_record_sql($auth_stats_sql, [$start_time]);
+    } catch (Exception $e) {
+        // If table doesn't exist, return empty stats
+        $auth_stats = (object)[
+            'total_attempts' => 0,
+            'successful_attempts' => 0,
+            'failed_attempts' => 0,
+            'unique_ips' => 0,
+            'unique_users' => 0
+        ];
+    }
+    
+    // Top failing IPs
+    $failing_ips_sql = "
+        SELECT 
+            ip_address,
+            COUNT(*) as total_attempts,
+            COUNT(CASE WHEN success = 0 THEN 1 END) as failed_attempts,
+            MAX(timeaccessed) as last_attempt
+        FROM {local_alx_auth_attempts}
+        WHERE timeaccessed >= ?
+        GROUP BY ip_address
+        HAVING COUNT(CASE WHEN success = 0 THEN 1 END) > 5
+        ORDER BY failed_attempts DESC
+        LIMIT 10
+    ";
+    
+    try {
+        $failing_ips = $DB->get_records_sql($failing_ips_sql, [$start_time]);
+    } catch (Exception $e) {
+        $failing_ips = [];
+    }
+    
+    // Authentication timeline (hourly)
+    $timeline_sql = "
+        SELECT 
+            FROM_UNIXTIME(timeaccessed, '%Y-%m-%d %H:00:00') as hour_bucket,
+            COUNT(*) as total_attempts,
+            COUNT(CASE WHEN success = 1 THEN 1 END) as successful_attempts,
+            COUNT(CASE WHEN success = 0 THEN 1 END) as failed_attempts
+        FROM {local_alx_auth_attempts}
+        WHERE timeaccessed >= ?
+        GROUP BY FROM_UNIXTIME(timeaccessed, '%Y-%m-%d %H:00:00')
+        ORDER BY hour_bucket
+    ";
+    
+    try {
+        $timeline = $DB->get_records_sql($timeline_sql, [$start_time]);
+    } catch (Exception $e) {
+        $timeline = [];
+    }
+    
+    return [
+        'stats' => $auth_stats,
+        'failing_ips' => array_values($failing_ips),
+        'timeline' => array_values($timeline),
+        'security_score' => local_alx_report_api_calculate_security_score($auth_stats, $failing_ips),
+        'analysis_period' => $hours
+    ];
+}
+
+/**
+ * Calculate security score based on authentication patterns
+ */
+function local_alx_report_api_calculate_security_score($auth_stats, $failing_ips) {
+    $score = 100;
+    
+    // Reduce score based on failure rate
+    if ($auth_stats->total_attempts > 0) {
+        $failure_rate = ($auth_stats->failed_attempts / $auth_stats->total_attempts) * 100;
+        
+        if ($failure_rate > 50) {
+            $score -= 40;
+        } elseif ($failure_rate > 25) {
+            $score -= 20;
+        } elseif ($failure_rate > 10) {
+            $score -= 10;
+        }
+    }
+    
+    // Reduce score based on suspicious IPs
+    $suspicious_ip_count = count($failing_ips);
+    if ($suspicious_ip_count > 10) {
+        $score -= 30;
+    } elseif ($suspicious_ip_count > 5) {
+        $score -= 15;
+    } elseif ($suspicious_ip_count > 2) {
+        $score -= 10;
+    }
+    
+    return max(0, $score);
+}
+
+/**
+ * Trigger security alert for suspicious authentication activity
+ */
+function local_alx_report_api_trigger_security_alert($alert_data) {
+    $message = '';
+    
+    switch ($alert_data['type']) {
+        case 'repeated_failed_auth':
+            $message = "🚨 SECURITY ALERT: {$alert_data['failed_attempts']} failed authentication attempts from IP {$alert_data['ip_address']} in the last {$alert_data['time_period']}";
+            break;
+        case 'multiple_ip_auth':
+            $message = "⚠️ SECURITY NOTICE: User ID {$alert_data['userid']} authenticated from {$alert_data['ip_count']} different IP addresses in the last {$alert_data['time_period']}";
+            break;
+    }
+    
+    if ($message) {
+        local_alx_report_api_send_alert('security', $alert_data['severity'], 'Authentication Security Alert', $message, $alert_data);
+    }
+}

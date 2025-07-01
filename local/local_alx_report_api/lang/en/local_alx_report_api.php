@@ -145,3 +145,30 @@ $string['api_status_full_sync_success'] = 'Full sync completed successfully. Ret
 $string['api_status_fallback_used'] = 'Used fallback query method due to reporting table issues. Performance may be slower than normal.';
 $string['api_debug_sync_mode'] = 'Sync mode: {$a->mode}, Company: {$a->company}, Last sync: {$a->last_sync}';
 $string['api_debug_no_changes'] = 'No changes detected since last sync. This is expected behavior when there are no new course completions or user activities.'; 
+
+$string['verify_table_status'] = 'Verification Table Status';
+$string['verify_table_status_desc'] = 'Shows the current status of the reporting table verification and data validation.';
+
+// Alerting system language strings  
+$string['alerting_settings'] = 'Alert System Configuration';
+$string['alerting_settings_desc'] = 'Configure email and SMS alerts for monitoring events, system health, security issues, and performance problems.';
+$string['enable_alerting'] = 'Enable Alert System';
+$string['enable_alerting_desc'] = 'Enable email and SMS alerts for system monitoring events';
+$string['alert_threshold'] = 'Alert Severity Threshold';
+$string['alert_threshold_desc'] = 'Minimum severity level for sending alerts';
+$string['alert_emails'] = 'Alert Email Recipients';
+$string['alert_emails_desc'] = 'Comma-separated list of email addresses to receive alerts';
+$string['enable_email_alerts'] = 'Enable Email Alerts';
+$string['enable_email_alerts_desc'] = 'Send alerts via email using Moodle\'s email system';
+$string['enable_sms_alerts'] = 'Enable SMS Alerts';
+$string['enable_sms_alerts_desc'] = 'Send high and critical alerts via SMS';
+$string['sms_service'] = 'SMS Service Provider';
+$string['sms_service_desc'] = 'Select SMS service for sending alerts';
+$string['alert_cooldown'] = 'Alert Cooldown Period';
+$string['alert_cooldown_desc'] = 'Minimum time between alerts of the same type (in minutes)';
+$string['high_api_usage_threshold'] = 'High API Usage Alert Threshold';
+$string['high_api_usage_threshold_desc'] = 'Send alert when API calls per hour exceed this number';
+$string['health_score_threshold'] = 'Health Score Alert Threshold';
+$string['health_score_threshold_desc'] = 'Send alert when system health score drops below this value';
+$string['db_response_time_threshold'] = 'Database Response Time Alert Threshold';
+$string['db_response_time_threshold_desc'] = 'Send alert when database response time exceeds this value (in milliseconds)'; 
