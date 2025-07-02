@@ -222,8 +222,8 @@ if ($hassiteconfig) {
     ));
 
     // Enhanced Quick Links
-    $alx_report_service = $DB->get_record('external_services', ['shortname' => 'alx_report_api_custom']);
-    $service_id = $alx_report_service ? $alx_report_service->id : '';
+            $alx_report_service = $DB->get_record('external_services', ['shortname' => 'alx_report_api_custom']);
+            $service_id = $alx_report_service ? $alx_report_service->id : '';
     
     $manage_services_url = $service_id ? 
         $CFG->wwwroot . '/admin/webservice/service.php?id=' . $service_id : 
@@ -273,7 +273,7 @@ if ($hassiteconfig) {
             </a>
         </div>
     </div>';
-
+    
     $settings->add(new admin_setting_heading(
         'local_alx_report_api/primaryactions',
         'Main Configuration Pages',

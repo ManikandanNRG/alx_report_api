@@ -624,12 +624,14 @@ class local_alx_report_api_external extends external_api {
             local_alx_report_api_cache_set($cache_key, $companyid, $result, 1800); // 30 minutes cache
         }
         
-        // Handle empty results with detailed status messages
+        // Handle empty results - must return empty array for Moodle external API compliance
         if (empty($result)) {
-            $status_response = self::generate_empty_result_status($sync_mode, $companyid, $token, $enabled_courses);
-            self::debug_log("Returning status message for empty result: " . $status_response['message']);
-            self::debug_log("=== API Request End (Empty Result with Status) ===");
-            return $status_response;
+            self::debug_log("Returning empty array for no data. Sync mode: {$sync_mode}");
+            // We must return an empty array to comply with the API contract.
+            // The client (Power BI) will interpret this as "no changes" and not clear its data.
+            // Detailed status is available in debug logs and the control center.
+            local_alx_report_api_update_sync_status($companyid, $token, 0, 'success');
+            return [];
         }
 
         self::debug_log("Final result count: " . count($result));
@@ -792,13 +794,12 @@ class local_alx_report_api_external extends external_api {
             $result[] = $response_item;
         }
 
-        // Handle empty results with detailed status messages for fallback
+        // Handle empty results - must return empty array for Moodle external API compliance
         if (empty($result)) {
-            $status_response = self::generate_empty_result_status($sync_mode, $companyid, $token, $enabled_courses);
-            $status_response['fallback_used'] = true;
-            $status_response['message'] = get_string('api_status_fallback_used', 'local_alx_report_api') . ' ' . $status_response['message'];
-            self::debug_log("Fallback returning status message for empty result: " . $status_response['message']);
-            return $status_response;
+            self::debug_log("Fallback returning empty array for no data. Sync mode: {$sync_mode}");
+            // Update sync status even for empty results
+            local_alx_report_api_update_sync_status($companyid, $token, 0, 'success');
+            return [];
         }
 
         self::debug_log("Fallback result count: " . count($result) . " (sync_mode: $sync_mode, time_filter: " . ($first_sync_hours > 0 && $sync_mode === 'first' ? 'YES' : 'NO') . ")");
@@ -927,3 +928,4 @@ class local_alx_report_api_external extends external_api {
         }
     }
 } 
+ 

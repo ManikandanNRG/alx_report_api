@@ -762,20 +762,61 @@ input[type="checkbox"]:disabled {
                     </div>
                     <div class="card-body">
                         <?php
-                        // Get API analytics for last 24 hours
+                        // Get API analytics for last 24 hours - REAL DATA ONLY
                         $api_analytics = local_alx_report_api_get_api_analytics(24);
-                        $response_time = 2.3; // Sample response time in seconds
-                        $success_rate = 99.2; // Sample success rate percentage
+                        
+                        // Initialize default values
+                        $response_time = 0;
+                        $success_rate = 100; // Default to 100% if no error tracking
+                        $has_api_data = false;
+                        
+                        if ($api_analytics['summary']['total_calls'] > 0) {
+                            $has_api_data = true;
+                            
+                            // Calculate success rate - assume success unless we can track errors
+                            $success_rate = 100;
+                            
+                            // Only try to calculate detailed metrics if we have the necessary fields
+                            if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
+                                $table_info = $DB->get_columns('local_alx_api_logs');
+                                
+                                // Check if we have response time tracking
+                                if (isset($table_info['response_time_ms'])) {
+                                    $avg_response = $DB->get_field_sql("
+                                        SELECT AVG(response_time_ms) 
+                                        FROM {local_alx_api_logs} 
+                                        WHERE timecreated >= ? AND response_time_ms IS NOT NULL AND response_time_ms > 0
+                                    ", [time() - 86400]);
+                                    $response_time = $avg_response ? round($avg_response / 1000, 2) : 0;
+                                }
+                                
+                                // Check if we have error tracking
+                                if (isset($table_info['error_message'])) {
+                                    $total_calls = $DB->count_records_select('local_alx_api_logs', 'timecreated >= ?', [time() - 86400]);
+                                    $error_calls = $DB->count_records_select('local_alx_api_logs', 
+                                        'timecreated >= ? AND error_message IS NOT NULL AND error_message != ?', 
+                                        [time() - 86400, '']
+                                    );
+                                    if ($total_calls > 0) {
+                                        $success_rate = round((($total_calls - $error_calls) / $total_calls) * 100, 1);
+                                    }
+                                }
+                            }
+                        }
                         ?>
                         
+                        <?php if ($has_api_data): ?>
                         <!-- Response Time with Progress Bar -->
                         <div style="margin-bottom: 20px;">
                             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                                 <strong style="color: white;">Response Time</strong>
-                                <span style="color: #4ade80; font-weight: 600;"><?php echo $response_time; ?>s avg</span>
+                                <span style="color: #4ade80; font-weight: 600;"><?php echo $response_time > 0 ? $response_time . 's avg' : 'Not tracked'; ?></span>
                             </div>
                             <div style="background: rgba(255,255,255,0.2); border-radius: 10px; height: 8px; overflow: hidden;">
-                                <div style="background: linear-gradient(90deg, #4ade80 0%, #22c55e 100%); width: 85%; height: 100%; border-radius: 10px; transition: width 0.3s ease;"></div>
+                                <?php 
+                                $response_percentage = $response_time > 0 ? min(100, (5 - $response_time) / 5 * 100) : 100;
+                                ?>
+                                <div style="background: linear-gradient(90deg, #4ade80 0%, #22c55e 100%); width: <?php echo max(5, $response_percentage); ?>%; height: 100%; border-radius: 10px; transition: width 0.3s ease;"></div>
                             </div>
                         </div>
 
@@ -806,9 +847,40 @@ input[type="checkbox"]:disabled {
                                 <div style="font-size: 12px; color: rgba(255,255,255,0.8);">Unique Users</div>
                             </div>
                         </div>
+                        
+                        <?php else: ?>
+                        <!-- No Data State -->
+                        <div style="text-align: center; padding: 40px 20px;">
+                            <div style="font-size: 48px; margin-bottom: 16px; opacity: 0.5;">📊</div>
+                            <h4 style="color: white; margin-bottom: 8px;">No API Activity Yet</h4>
+                            <p style="color: rgba(255,255,255,0.7); margin-bottom: 20px; font-size: 14px;">
+                                Create API tokens and start making calls to see performance metrics here.
+                            </p>
+                            <div style="background: rgba(255,255,255,0.1); padding: 16px; border-radius: 8px; margin-bottom: 20px;">
+                                <div style="font-size: 14px; color: rgba(255,255,255,0.8); margin-bottom: 8px;">
+                                    <strong>To get started:</strong>
+                                </div>
+                                <div style="font-size: 13px; color: rgba(255,255,255,0.7); text-align: left;">
+                                    1. Configure web services<br>
+                                    2. Create API tokens<br>
+                                    3. Make your first API call
+                                </div>
+                            </div>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                                <div style="text-align: center; padding: 12px; background: rgba(255,255,255,0.1); border-radius: 8px;">
+                                    <div style="font-size: 20px; font-weight: 700; color: #94a3b8;">0</div>
+                                    <div style="font-size: 12px; color: rgba(255,255,255,0.8);">Calls/Hour</div>
+                                </div>
+                                <div style="text-align: center; padding: 12px; background: rgba(255,255,255,0.1); border-radius: 8px;">
+                                    <div style="font-size: 20px; font-weight: 700; color: #94a3b8;">0</div>
+                                    <div style="font-size: 12px; color: rgba(255,255,255,0.8);">Unique Users</div>
+                                </div>
+                            </div>
+                        </div>
+                        <?php endif; ?>
                     </div>
-                    <div class="card-footer" style="border-top: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.1); padding: 16px;">
-                        <a href="<?php echo $CFG->wwwroot; ?>/local/alx_report_api/monitoring_dashboard.php" class="btn-modern" style="background: rgba(255,255,255,0.9); color: #667eea; border: 2px solid rgba(255,255,255,0.3); padding: 8px 16px; border-radius: 6px; text-decoration: none; display: inline-block; font-weight: 600; transition: all 0.3s ease;">
+                    <div class="card-footer" style="border-top: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.1); padding: 16px; text-align: center;">
+                        <a href="<?php echo $CFG->wwwroot; ?>/local/alx_report_api/monitoring_dashboard.php" class="btn-modern" style="background: rgba(255,255,255,0.9); color: #667eea; border: 2px solid rgba(255,255,255,0.3); padding: 10px 20px; border-radius: 6px; text-decoration: none; display: inline-block; font-weight: 600; transition: all 0.3s ease;">
                             <i class="fas fa-chart-line"></i>
                             View Full Analytics
                         </a>
@@ -876,8 +948,8 @@ input[type="checkbox"]:disabled {
                             <div style="font-size: 16px; font-weight: 600; color: #4ade80;">2025-07-01 12:37:36</div>
                         </div>
                     </div>
-                    <div class="card-footer" style="border-top: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.1); padding: 16px;">
-                        <a href="<?php echo $CFG->wwwroot; ?>/local/alx_report_api/auto_sync_status.php" class="btn-modern" style="background: rgba(255,255,255,0.9); color: #f093fb; border: 2px solid rgba(255,255,255,0.3); padding: 8px 16px; border-radius: 6px; text-decoration: none; display: inline-block; font-weight: 600; transition: all 0.3s ease;">
+                    <div class="card-footer" style="border-top: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.1); padding: 16px; text-align: center;">
+                        <a href="<?php echo $CFG->wwwroot; ?>/local/alx_report_api/auto_sync_status.php" class="btn-modern" style="background: rgba(255,255,255,0.9); color: #f093fb; border: 2px solid rgba(255,255,255,0.3); padding: 10px 20px; border-radius: 6px; text-decoration: none; display: inline-block; font-weight: 600; transition: all 0.3s ease;">
                             <i class="fas fa-cog"></i>
                             Sync Settings
                         </a>
@@ -958,8 +1030,8 @@ input[type="checkbox"]:disabled {
                             </div>
                         </div>
                     </div>
-                    <div class="card-footer" style="border-top: 1px solid rgba(31,41,55,0.1); background: rgba(255,255,255,0.1); padding: 16px;">
-                        <a href="<?php echo $CFG->wwwroot; ?>/local/alx_report_api/check_rate_limit.php" class="btn-modern" style="background: #10b981; color: white; border: 2px solid #10b981; padding: 8px 16px; border-radius: 6px; text-decoration: none; display: inline-block; font-weight: 600; transition: all 0.3s ease; box-shadow: 0 2px 4px rgba(16,185,129,0.3);">
+                    <div class="card-footer" style="border-top: 1px solid rgba(31,41,55,0.1); background: rgba(255,255,255,0.1); padding: 16px; text-align: center;">
+                        <a href="<?php echo $CFG->wwwroot; ?>/local/alx_report_api/check_rate_limit.php" class="btn-modern" style="background: #10b981; color: white; border: 2px solid #10b981; padding: 10px 20px; border-radius: 6px; text-decoration: none; display: inline-block; font-weight: 600; transition: all 0.3s ease; box-shadow: 0 2px 4px rgba(16,185,129,0.3);">
                             <i class="fas fa-chart-line"></i>
                             Security Monitor
                         </a>
