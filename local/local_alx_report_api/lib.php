@@ -1082,22 +1082,26 @@ function local_alx_report_api_get_system_stats() {
         $today_start = mktime(0, 0, 0);
         $week_start = strtotime('-7 days', $today_start);
         
+        // Determine which time field to use
+        $table_info = $DB->get_columns('local_alx_api_logs');
+        $time_field = isset($table_info['timeaccessed']) ? 'timeaccessed' : 'timecreated';
+        
         $stats['api_calls_today'] = $DB->count_records_select(
             'local_alx_api_logs',
-            'timecreated >= ?',
+            "{$time_field} >= ?",
             [$today_start]
         );
         
         $stats['api_calls_week'] = $DB->count_records_select(
             'local_alx_api_logs',
-            'timecreated >= ?',
+            "{$time_field} >= ?",
             [$week_start]
         );
         
         // Last sync time
         $last_sync = $DB->get_field_select(
             'local_alx_api_logs',
-            'MAX(timecreated)',
+            "MAX({$time_field})",
             'action LIKE ?',
             ['%sync%']
         );
@@ -1169,24 +1173,52 @@ function local_alx_report_api_get_company_stats($companyid = 0) {
             $today_start = mktime(0, 0, 0);
             $week_start = strtotime('-7 days', $today_start);
             
-            $stats['api_calls_today'] = $DB->count_records_select(
-                'local_alx_api_logs',
-                'companyid = ? AND timecreated >= ?',
-                [$company->id, $today_start]
-            );
+            // Determine which time field to use
+            $table_info = $DB->get_columns('local_alx_api_logs');
+            $time_field = isset($table_info['timeaccessed']) ? 'timeaccessed' : 'timecreated';
             
-            $stats['api_calls_week'] = $DB->count_records_select(
-                'local_alx_api_logs',
-                'companyid = ? AND timecreated >= ?',
-                [$company->id, $week_start]
-            );
-            
-            $last_access = $DB->get_field_select(
-                'local_alx_api_logs',
-                'MAX(timecreated)',
-                'companyid = ?',
-                [$company->id]
-            );
+            // Determine which company field to use
+            if (isset($table_info['companyid'])) {
+                // Old schema
+                $stats['api_calls_today'] = $DB->count_records_select(
+                    'local_alx_api_logs',
+                    "companyid = ? AND {$time_field} >= ?",
+                    [$company->id, $today_start]
+                );
+                
+                $stats['api_calls_week'] = $DB->count_records_select(
+                    'local_alx_api_logs',
+                    "companyid = ? AND {$time_field} >= ?",
+                    [$company->id, $week_start]
+                );
+                
+                $last_access = $DB->get_field_select(
+                    'local_alx_api_logs',
+                    "MAX({$time_field})",
+                    'companyid = ?',
+                    [$company->id]
+                );
+            } else if (isset($table_info['company_shortname'])) {
+                // New schema
+                $stats['api_calls_today'] = $DB->count_records_select(
+                    'local_alx_api_logs',
+                    "company_shortname = ? AND {$time_field} >= ?",
+                    [$company->shortname, $today_start]
+                );
+                
+                $stats['api_calls_week'] = $DB->count_records_select(
+                    'local_alx_api_logs',
+                    "company_shortname = ? AND {$time_field} >= ?",
+                    [$company->shortname, $week_start]
+                );
+                
+                $last_access = $DB->get_field_select(
+                    'local_alx_api_logs',
+                    "MAX({$time_field})",
+                    'company_shortname = ?',
+                    [$company->shortname]
+                );
+            }
             $stats['last_access'] = $last_access ?: 0;
         }
         
@@ -1615,37 +1647,50 @@ function local_alx_report_api_get_api_analytics($hours = 24) {
     global $DB;
     
     $analytics = [
-        'summary' => [
+        'summary' => [],
+        'trends' => [],
+        'performance' => [],
+        'top_users' => [],
+        'top_companies' => [],
+        'security' => []
+    ];
+    
+    // Check if logs table exists
+    if (!$DB->get_manager()->table_exists('local_alx_api_logs')) {
+        $analytics['summary'] = [
             'total_calls' => 0,
             'unique_users' => 0,
             'unique_companies' => 0,
-            'success_rate' => 0,
-            'avg_response_size' => 0,
-            'peak_hour' => null,
-            'busiest_company' => null
-        ],
-        'trends' => [],
-        'performance' => [],
-        'errors' => [],
-        'security' => [],
-        'top_users' => [],
-        'top_companies' => []
-    ];
-    
-    if (!$DB->get_manager()->table_exists('local_alx_api_logs')) {
+            'time_period' => $hours . ' hours',
+            'calls_per_hour' => 0
+        ];
         return $analytics;
     }
+    
+    // Determine which time field to use
+    $table_info = $DB->get_columns('local_alx_api_logs');
+    $time_field = isset($table_info['timeaccessed']) ? 'timeaccessed' : 'timecreated';
     
     $start_time = time() - ($hours * 3600);
     
     // 1. Basic summary statistics
-    $total_calls = $DB->count_records_select('local_alx_api_logs', 'timecreated >= ?', [$start_time]);
+    $total_calls = $DB->count_records_select('local_alx_api_logs', "{$time_field} >= ?", [$start_time]);
     $unique_users = $DB->count_records_sql(
-        "SELECT COUNT(DISTINCT userid) FROM {local_alx_api_logs} WHERE timecreated >= ?", [$start_time]
+        "SELECT COUNT(DISTINCT userid) FROM {local_alx_api_logs} WHERE {$time_field} >= ?", [$start_time]
     );
-    $unique_companies = $DB->count_records_sql(
-        "SELECT COUNT(DISTINCT companyid) FROM {local_alx_api_logs} WHERE timecreated >= ?", [$start_time]
-    );
+    
+    // Check if companyid field exists (old logs) or company_shortname (new logs)
+    if (isset($table_info['companyid'])) {
+        $unique_companies = $DB->count_records_sql(
+            "SELECT COUNT(DISTINCT companyid) FROM {local_alx_api_logs} WHERE {$time_field} >= ?", [$start_time]
+        );
+    } else if (isset($table_info['company_shortname'])) {
+        $unique_companies = $DB->count_records_sql(
+            "SELECT COUNT(DISTINCT company_shortname) FROM {local_alx_api_logs} WHERE {$time_field} >= ?", [$start_time]
+        );
+    } else {
+        $unique_companies = 0;
+    }
     
     $analytics['summary'] = [
         'total_calls' => $total_calls,
@@ -1664,7 +1709,7 @@ function local_alx_report_api_get_api_analytics($hours = 24) {
         $hour_start = time() - (($i + 1) * 3600);
         $hour_end = time() - ($i * 3600);
         $hour_calls = $DB->count_records_select('local_alx_api_logs', 
-            'timecreated >= ? AND timecreated < ?', [$hour_start, $hour_end]);
+            "{$time_field} >= ? AND {$time_field} < ?", [$hour_start, $hour_end]);
         
         $analytics['trends'][] = [
             'hour' => date('H:00', $hour_end),
@@ -1683,7 +1728,7 @@ function local_alx_report_api_get_api_analytics($hours = 24) {
     try {
         $response_sizes = $DB->get_records_sql(
             "SELECT id, LENGTH(response_data) as size FROM {local_alx_api_logs} 
-             WHERE timecreated >= ? AND response_data IS NOT NULL", [$start_time]
+             WHERE {$time_field} >= ? AND response_data IS NOT NULL", [$start_time]
         );
         
         if (!empty($response_sizes)) {
@@ -1705,7 +1750,7 @@ function local_alx_report_api_get_api_analytics($hours = 24) {
         "SELECT l.userid, u.firstname, u.lastname, u.username, COUNT(*) as call_count
          FROM {local_alx_api_logs} l
          LEFT JOIN {user} u ON u.id = l.userid
-         WHERE l.timecreated >= ?
+         WHERE l.{$time_field} >= ?
          GROUP BY l.userid, u.firstname, u.lastname, u.username
          ORDER BY call_count DESC
          LIMIT 10", [$start_time]
@@ -1720,24 +1765,46 @@ function local_alx_report_api_get_api_analytics($hours = 24) {
         ];
     }
     
-    // 5. Top companies by activity
-    $top_companies = $DB->get_records_sql(
-        "SELECT l.companyid, c.name, c.shortname, COUNT(*) as call_count
-         FROM {local_alx_api_logs} l
-         LEFT JOIN {company} c ON c.id = l.companyid
-         WHERE l.timecreated >= ?
-         GROUP BY l.companyid, c.name, c.shortname
-         ORDER BY call_count DESC
-         LIMIT 10", [$start_time]
-    );
-    
-    foreach ($top_companies as $company) {
-        $analytics['top_companies'][] = [
-            'company_id' => $company->companyid,
-            'name' => $company->name ?: 'Unknown',
-            'shortname' => $company->shortname,
-            'calls' => $company->call_count
-        ];
+    // 5. Top companies by activity - handle both old and new schema
+    if (isset($table_info['companyid'])) {
+        // Old schema with companyid
+        $top_companies = $DB->get_records_sql(
+            "SELECT l.companyid, c.name, c.shortname, COUNT(*) as call_count
+             FROM {local_alx_api_logs} l
+             LEFT JOIN {company} c ON c.id = l.companyid
+             WHERE l.{$time_field} >= ?
+             GROUP BY l.companyid, c.name, c.shortname
+             ORDER BY call_count DESC
+             LIMIT 10", [$start_time]
+        );
+        
+        foreach ($top_companies as $company) {
+            $analytics['top_companies'][] = [
+                'company_id' => $company->companyid,
+                'name' => $company->name ?: 'Unknown',
+                'shortname' => $company->shortname,
+                'calls' => $company->call_count
+            ];
+        }
+    } else if (isset($table_info['company_shortname'])) {
+        // New schema with company_shortname
+        $top_companies = $DB->get_records_sql(
+            "SELECT l.company_shortname, COUNT(*) as call_count
+             FROM {local_alx_api_logs} l
+             WHERE l.{$time_field} >= ? AND l.company_shortname IS NOT NULL
+             GROUP BY l.company_shortname
+             ORDER BY call_count DESC
+             LIMIT 10", [$start_time]
+        );
+        
+        foreach ($top_companies as $company) {
+            $analytics['top_companies'][] = [
+                'company_id' => 0,
+                'name' => $company->company_shortname,
+                'shortname' => $company->company_shortname,
+                'calls' => $company->call_count
+            ];
+        }
     }
     
     // Set busiest company
@@ -1750,7 +1817,7 @@ function local_alx_report_api_get_api_analytics($hours = 24) {
         $security_events = $DB->get_records_sql(
             "SELECT endpoint, COUNT(*) as count
              FROM {local_alx_api_logs}
-             WHERE timecreated >= ? AND endpoint LIKE 'security_%'
+             WHERE {$time_field} >= ? AND endpoint LIKE 'security_%'
              GROUP BY endpoint
              ORDER BY count DESC", [$start_time]
         );
@@ -1799,6 +1866,10 @@ function local_alx_report_api_get_rate_limit_monitoring() {
         return $monitoring;
     }
     
+    // Determine which time field to use
+    $table_info = $DB->get_columns('local_alx_api_logs');
+    $time_field = isset($table_info['timeaccessed']) ? 'timeaccessed' : 'timecreated';
+    
     $today_start = mktime(0, 0, 0);
     
     // Get today's usage by user
@@ -1809,12 +1880,12 @@ function local_alx_report_api_get_rate_limit_monitoring() {
             u.lastname,
             u.username,
             COUNT(*) as requests_today,
-            MIN(l.timecreated) as first_request,
-            MAX(l.timecreated) as last_request,
-            COUNT(DISTINCT l.companyid) as companies_accessed
+            MIN(l.{$time_field}) as first_request,
+            MAX(l.{$time_field}) as last_request,
+            COUNT(DISTINCT " . (isset($table_info['companyid']) ? 'l.companyid' : 'l.company_shortname') . ") as companies_accessed
         FROM {local_alx_api_logs} l
         LEFT JOIN {user} u ON u.id = l.userid
-        WHERE l.timecreated >= ?
+        WHERE l.{$time_field} >= ?
         GROUP BY l.userid, u.firstname, u.lastname, u.username
         ORDER BY requests_today DESC
     ";
@@ -1873,13 +1944,16 @@ function local_alx_report_api_get_rate_limit_monitoring() {
         $day_start = mktime(0, 0, 0) - ($i * 24 * 3600);
         $day_end = $day_start + (24 * 3600);
         
+        // Use appropriate company field for counting
+        $company_field = isset($table_info['companyid']) ? 'companyid' : 'company_shortname';
+        
         $day_stats = $DB->get_record_sql(
             "SELECT 
                 COUNT(*) as total_requests,
                 COUNT(DISTINCT userid) as unique_users,
-                COUNT(DISTINCT companyid) as unique_companies
+                COUNT(DISTINCT {$company_field}) as unique_companies
              FROM {local_alx_api_logs}
-             WHERE timecreated >= ? AND timecreated < ?",
+             WHERE {$time_field} >= ? AND {$time_field} < ?",
             [$day_start, $day_end]
         );
         
@@ -1887,7 +1961,7 @@ function local_alx_report_api_get_rate_limit_monitoring() {
         $day_usage = $DB->get_records_sql(
             "SELECT userid, COUNT(*) as requests
              FROM {local_alx_api_logs}
-             WHERE timecreated >= ? AND timecreated < ?
+             WHERE {$time_field} >= ? AND {$time_field} < ?
              GROUP BY userid",
             [$day_start, $day_end]
         );
@@ -1945,7 +2019,7 @@ function local_alx_report_api_get_rate_limit_monitoring() {
     }
     
     return $monitoring;
-} 
+}
 
 /**
  * Send alert notifications via email and optionally SMS.

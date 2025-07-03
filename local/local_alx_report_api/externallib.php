@@ -167,15 +167,14 @@ class local_alx_report_api_external extends external_api {
     }
 
     /**
-     * Check rate limiting for the user (global daily limit).
+     * Check if the user has exceeded the daily rate limit.
      *
-     * @param int $userid User ID
-     * @throws moodle_exception If rate limit exceeded
+     * @param int $userid User ID to check
+     * @throws moodle_exception If rate limit is exceeded
      */
     private static function check_rate_limit($userid) {
-        global $DB;
+        global $DB, $CFG;
         
-        // Get rate limit from settings (default 100 requests per day)
         $rate_limit = get_config('local_alx_report_api', 'rate_limit') ?: 100;
         
         // Calculate start of today (midnight)
@@ -184,9 +183,13 @@ class local_alx_report_api_external extends external_api {
         // Count requests from this user today
         $request_count = 0;
         if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
+            // Determine which time field to use
+            $table_info = $DB->get_columns('local_alx_api_logs');
+            $time_field = isset($table_info['timeaccessed']) ? 'timeaccessed' : 'timecreated';
+            
             $request_count = $DB->count_records_select(
                 'local_alx_api_logs', 
-                'userid = ? AND timecreated >= ?', 
+                "userid = ? AND {$time_field} >= ?", 
                 [$userid, $today_start]
             );
         }
