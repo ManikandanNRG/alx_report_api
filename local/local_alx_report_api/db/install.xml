@@ -8,19 +8,25 @@
       <FIELDS>
         <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
         <FIELD NAME="userid" TYPE="int" LENGTH="10" NOTNULL="true" COMMENT="ID of the user making the API request"/>
-        <FIELD NAME="companyid" TYPE="int" LENGTH="10" NOTNULL="true" COMMENT="ID of the company the user belongs to"/>
+        <FIELD NAME="company_shortname" TYPE="char" LENGTH="100" NOTNULL="false" COMMENT="Company shortname for easy identification"/>
         <FIELD NAME="endpoint" TYPE="char" LENGTH="255" NOTNULL="true" COMMENT="API endpoint that was called"/>
-        <FIELD NAME="ipaddress" TYPE="char" LENGTH="45" NOTNULL="false" COMMENT="IP address of the request"/>
-        <FIELD NAME="useragent" TYPE="text" NOTNULL="false" COMMENT="User agent string"/>
-        <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" COMMENT="Timestamp when the request was made"/>
+        <FIELD NAME="record_count" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" COMMENT="Number of records returned"/>
+        <FIELD NAME="error_message" TYPE="text" NOTNULL="false" COMMENT="Error message if request failed"/>
+        <FIELD NAME="response_time_ms" TYPE="number" LENGTH="10" DECIMALS="2" NOTNULL="false" COMMENT="Response time in milliseconds"/>
+        <FIELD NAME="timeaccessed" TYPE="int" LENGTH="10" NOTNULL="true" COMMENT="Timestamp when the request was made"/>
+        <FIELD NAME="ip_address" TYPE="char" LENGTH="45" NOTNULL="false" COMMENT="IP address of the request"/>
+        <FIELD NAME="user_agent" TYPE="text" NOTNULL="false" COMMENT="User agent string"/>
+        <FIELD NAME="additional_data" TYPE="text" NOTNULL="false" COMMENT="Additional request data in JSON format"/>
       </FIELDS>
       <KEYS>
         <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
       </KEYS>
       <INDEXES>
         <INDEX NAME="userid" UNIQUE="false" FIELDS="userid"/>
-        <INDEX NAME="companyid" UNIQUE="false" FIELDS="companyid"/>
-        <INDEX NAME="timecreated" UNIQUE="false" FIELDS="timecreated"/>
+        <INDEX NAME="company_shortname" UNIQUE="false" FIELDS="company_shortname"/>
+        <INDEX NAME="endpoint" UNIQUE="false" FIELDS="endpoint"/>
+        <INDEX NAME="timeaccessed" UNIQUE="false" FIELDS="timeaccessed"/>
+        <INDEX NAME="response_time_ms" UNIQUE="false" FIELDS="response_time_ms"/>
       </INDEXES>
     </TABLE>
     <TABLE NAME="local_alx_api_settings" COMMENT="Company-specific API settings for the ALX Report API plugin">

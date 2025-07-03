@@ -297,53 +297,108 @@ class local_alx_report_api_external extends external_api {
      */
     public static function get_course_progress($limit = 100, $offset = 0) {
         global $DB, $USER;
+        
+        // Start response time measurement
+        $start_time = microtime(true);
+        $endpoint = 'get_course_progress';
+        $error_message = null;
+        $record_count = 0;
 
-        // 1. Validate parameters
-        $params = self::validate_parameters(self::get_course_progress_parameters(), [
-            'limit' => $limit,
-            'offset' => $offset
-        ]);
+        try {
+            // 1. Validate parameters
+            $params = self::validate_parameters(self::get_course_progress_parameters(), [
+                'limit' => $limit,
+                'offset' => $offset
+            ]);
 
-        // 2. Validate limit against configured maximum
-        $max_records = get_config('local_alx_report_api', 'max_records') ?: 1000;
-        if ($params['limit'] > $max_records) {
-            throw new moodle_exception('limittoolarge', 'local_alx_report_api', '', $max_records, 
-                "Requested limit ({$params['limit']}) exceeds maximum allowed ({$max_records}) records per request.");
+            // 2. Validate limit against configured maximum
+            $max_records = get_config('local_alx_report_api', 'max_records') ?: 1000;
+            if ($params['limit'] > $max_records) {
+                throw new moodle_exception('limittoolarge', 'local_alx_report_api', '', $max_records, 
+                    "Requested limit ({$params['limit']}) exceeds maximum allowed ({$max_records}) records per request.");
+            }
+
+            // 3. Get current authenticated user
+            if (!$USER || !$USER->id || $USER->id <= 0) {
+                throw new moodle_exception('invaliduser', 'local_alx_report_api', '', null, 
+                    'User must be authenticated to access this service');
+            }
+
+            // 4. Check rate limiting (global daily limit)
+            self::check_rate_limit($USER->id);
+
+            // 5. Check GET method restriction (if enabled in settings)
+            $allow_get_method = get_config('local_alx_report_api', 'allow_get_method');
+            if (!$allow_get_method && $_SERVER['REQUEST_METHOD'] === 'GET') {
+                throw new moodle_exception('invalidrequestmethod', 'local_alx_report_api', '', null, 
+                    'GET method is disabled. Only POST method is allowed for security reasons. Enable GET method in plugin settings for development/testing.');
+            }
+
+            // 6. Check rate limiting again (duplicate line removed in original, keeping consistent)
+            self::check_rate_limit($USER->id);
+
+            // 7. Get company association for the authenticated user
+            $companyid = self::get_user_company($USER->id);
+            if (!$companyid) {
+                throw new moodle_exception('nocompanyassociation', 'local_alx_report_api', '', null, 
+                    'User is not associated with any company');
+            }
+
+            // 8. Get company shortname for logging
+            $company_shortname = 'unknown';
+            if ($DB->get_manager()->table_exists('company')) {
+                $company = $DB->get_record('company', ['id' => $companyid], 'shortname');
+                if ($company) {
+                    $company_shortname = $company->shortname;
+                }
+            }
+
+            // 9. Get course progress data
+            $progressdata = self::get_company_course_progress($companyid, $params['limit'], $params['offset']);
+            
+            // 10. Count returned records
+            $record_count = count($progressdata);
+
+            return $progressdata;
+
+        } catch (Exception $e) {
+            $error_message = $e->getMessage();
+            throw $e;
+        } finally {
+            // Calculate response time in milliseconds
+            $end_time = microtime(true);
+            $response_time_ms = round(($end_time - $start_time) * 1000, 2);
+            
+            // Get company shortname if not set due to early error
+            if (!isset($company_shortname)) {
+                $company_shortname = 'unknown';
+                if (isset($USER) && $USER->id > 0) {
+                    $companyid = self::get_user_company($USER->id);
+                    if ($companyid && $DB->get_manager()->table_exists('company')) {
+                        $company = $DB->get_record('company', ['id' => $companyid], 'shortname');
+                        if ($company) {
+                            $company_shortname = $company->shortname;
+                        }
+                    }
+                }
+            }
+            
+            // Log API call with response time using the enhanced logging function
+            $userid = isset($USER) && $USER->id > 0 ? $USER->id : 0;
+            local_alx_report_api_log_api_call(
+                $userid,
+                $company_shortname, 
+                $endpoint,
+                $record_count,
+                $error_message,
+                $response_time_ms,
+                [
+                    'limit' => $limit,
+                    'offset' => $offset,
+                    'request_method' => $_SERVER['REQUEST_METHOD'] ?? 'unknown'
+                ]
+            );
         }
-
-        // 3. Get current authenticated user
-        if (!$USER || !$USER->id || $USER->id <= 0) {
-            throw new moodle_exception('invaliduser', 'local_alx_report_api', '', null, 
-                'User must be authenticated to access this service');
-        }
-
-        // 4. Check rate limiting (global daily limit)
-        self::check_rate_limit($USER->id);
-
-        // 5. Check GET method restriction (if enabled in settings)
-        $allow_get_method = get_config('local_alx_report_api', 'allow_get_method');
-        if (!$allow_get_method && $_SERVER['REQUEST_METHOD'] === 'GET') {
-            throw new moodle_exception('invalidrequestmethod', 'local_alx_report_api', '', null, 
-                'GET method is disabled. Only POST method is allowed for security reasons. Enable GET method in plugin settings for development/testing.');
-        }
-
-        // 4. Check rate limiting (global daily limit)
-        self::check_rate_limit($USER->id);
-
-        // 5. Get company association for the authenticated user
-        $companyid = self::get_user_company($USER->id);
-        if (!$companyid) {
-            throw new moodle_exception('nocompanyassociation', 'local_alx_report_api', '', null, 
-                'User is not associated with any company');
-        }
-
-        // 6. Log API access
-        self::log_api_access($USER->id, $companyid, 'get_course_progress');
-
-        // Get course progress data.
-        $progressdata = self::get_company_course_progress($companyid, $params['limit'], $params['offset']);
-
-        return $progressdata;
     }
 
     /**
@@ -866,66 +921,6 @@ class local_alx_report_api_external extends external_api {
         ];
 
         return $status_response;
-    }
-
-    /**
-     * Log API access for audit purposes.
-     *
-     * @param int $userid User ID making the request
-     * @param int $companyid Company ID
-     * @param string $endpoint API endpoint called
-     */
-    private static function log_api_access($userid, $companyid, $endpoint) {
-        global $DB;
-
-        $log = new stdClass();
-        $log->userid = $userid;
-        $log->companyid = $companyid;
-        $log->endpoint = $endpoint;
-        $log->ipaddress = getremoteaddr();
-        $log->useragent = $_SERVER['HTTP_USER_AGENT'] ?? '';
-        $log->timecreated = time();
-
-        // Create log table if it doesn't exist.
-        self::ensure_log_table_exists();
-
-        try {
-            $DB->insert_record('local_alx_api_logs', $log);
-        } catch (Exception $e) {
-            // Logging should not break the API functionality.
-            debugging('Failed to log API access: ' . $e->getMessage(), DEBUG_DEVELOPER);
-        }
-    }
-
-    /**
-     * Ensure the log table exists.
-     */
-    private static function ensure_log_table_exists() {
-        global $DB;
-
-        $dbman = $DB->get_manager();
-        $table = new xmldb_table('local_alx_api_logs');
-
-        if (!$dbman->table_exists($table)) {
-            $table->add_field('id', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE, null);
-            $table->add_field('userid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
-            $table->add_field('companyid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
-            $table->add_field('endpoint', XMLDB_TYPE_CHAR, '255', null, XMLDB_NOTNULL, null, null);
-            $table->add_field('ipaddress', XMLDB_TYPE_CHAR, '45', null, null, null, null);
-            $table->add_field('useragent', XMLDB_TYPE_TEXT, null, null, null, null, null);
-            $table->add_field('timecreated', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
-
-            $table->add_key('primary', XMLDB_KEY_PRIMARY, ['id']);
-            $table->add_index('userid', XMLDB_INDEX_NOTUNIQUE, ['userid']);
-            $table->add_index('companyid', XMLDB_INDEX_NOTUNIQUE, ['companyid']);
-            $table->add_index('timecreated', XMLDB_INDEX_NOTUNIQUE, ['timecreated']);
-
-            try {
-                $dbman->create_table($table);
-            } catch (Exception $e) {
-                debugging('Failed to create log table: ' . $e->getMessage(), DEBUG_DEVELOPER);
-            }
-        }
     }
 } 
  

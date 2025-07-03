@@ -782,19 +782,23 @@ input[type="checkbox"]:disabled {
                                 
                                 // Check if we have response time tracking
                                 if (isset($table_info['response_time_ms'])) {
+                                    // Use timeaccessed (new field) or fall back to timecreated (old field)
+                                    $time_field = isset($table_info['timeaccessed']) ? 'timeaccessed' : 'timecreated';
                                     $avg_response = $DB->get_field_sql("
                                         SELECT AVG(response_time_ms) 
                                         FROM {local_alx_api_logs} 
-                                        WHERE timecreated >= ? AND response_time_ms IS NOT NULL AND response_time_ms > 0
+                                        WHERE {$time_field} >= ? AND response_time_ms IS NOT NULL AND response_time_ms > 0
                                     ", [time() - 86400]);
                                     $response_time = $avg_response ? round($avg_response / 1000, 2) : 0;
                                 }
                                 
                                 // Check if we have error tracking
                                 if (isset($table_info['error_message'])) {
-                                    $total_calls = $DB->count_records_select('local_alx_api_logs', 'timecreated >= ?', [time() - 86400]);
+                                    // Use timeaccessed (new field) or fall back to timecreated (old field)
+                                    $time_field = isset($table_info['timeaccessed']) ? 'timeaccessed' : 'timecreated';
+                                    $total_calls = $DB->count_records_select('local_alx_api_logs', "{$time_field} >= ?", [time() - 86400]);
                                     $error_calls = $DB->count_records_select('local_alx_api_logs', 
-                                        'timecreated >= ? AND error_message IS NOT NULL AND error_message != ?', 
+                                        "{$time_field} >= ? AND error_message IS NOT NULL AND error_message != ?", 
                                         [time() - 86400, '']
                                     );
                                     if ($total_calls > 0) {
