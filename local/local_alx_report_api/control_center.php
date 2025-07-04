@@ -912,23 +912,39 @@ input[type="checkbox"]:disabled {
                                 'last_sync_timestamp > ?', [time() - 86400]);
                             $auto_mode_count = $DB->count_records('local_alx_api_sync_status', ['sync_mode' => 'auto']);
                             $incremental_mode_count = $DB->count_records('local_alx_api_sync_status', ['sync_mode' => 'always_incremental']);
+                            // Fetch the most recent sync timestamp
+                            $last_sync_timestamp = $DB->get_field_sql('SELECT MAX(last_sync_timestamp) FROM {local_alx_api_sync_status}');
                         } else {
                             $total_sync_entries = 0;
                             $recent_syncs = 0;
                             $auto_mode_count = 0;
                             $incremental_mode_count = 0;
+                            $last_sync_timestamp = false;
                         }
-                        
                         // Calculate percentages for visual representation
                         $auto_percentage = $total_sync_entries > 0 ? ($auto_mode_count / $total_sync_entries) * 100 : 0;
                         $incremental_percentage = $total_sync_entries > 0 ? ($incremental_mode_count / $total_sync_entries) * 100 : 0;
+
+                        // Get next scheduled sync time from Moodle scheduled tasks
+                        $task_record = $DB->get_record('task_scheduled', ['classname' => '\\local_alx_report_api\\task\\sync_reporting_data_task']);
+                        if ($task_record && !empty($task_record->nextruntime)) {
+                            $next_sync_time = userdate($task_record->nextruntime, '%Y-%m-%d %H:%M:%S');
+                        } else {
+                            $next_sync_time = 'Not scheduled';
+                        }
+                        // Format last sync time
+                        if ($last_sync_timestamp && $last_sync_timestamp > 0) {
+                            $last_sync_time = userdate($last_sync_timestamp, '%Y-%m-%d %H:%M:%S');
+                        } else {
+                            $last_sync_time = 'No syncs yet';
+                        }
                         ?>
 
                         <!-- Last Sync Status -->
                         <div style="text-align: center; margin-bottom: 20px;">
                             <div style="display: inline-flex; align-items: center; background: rgba(255,255,255,0.2); padding: 12px 20px; border-radius: 25px;">
                                 <i class="fas fa-check-circle" style="color: #4ade80; margin-right: 8px; font-size: 16px;"></i>
-                                <span style="font-weight: 600;">Last Sync: 2025-07-01 11:37:36</span>
+                                <span style="font-weight: 600;">Last Sync: <?php echo $last_sync_time; ?></span>
                             </div>
                         </div>
 
@@ -952,7 +968,9 @@ input[type="checkbox"]:disabled {
                         <!-- Next Sync Countdown -->
                         <div style="text-align: center; margin-top: 16px; padding: 12px; background: rgba(255,255,255,0.1); border-radius: 8px;">
                             <div style="font-size: 14px; color: rgba(255,255,255,0.8);">Next Sync</div>
-                            <div style="font-size: 16px; font-weight: 600; color: #4ade80;">2025-07-01 12:37:36</div>
+                            <div style="font-size: 16px; font-weight: 600; color: #4ade80;">
+                                <?php echo $next_sync_time; ?>
+                            </div>
                         </div>
                     </div>
                     <div class="card-footer" style="border-top: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.1); padding: 16px; text-align: center;">
@@ -1801,9 +1819,9 @@ function createAPIPerformanceChart() {
     const ctx = document.getElementById('api-performance-chart');
     if (!ctx) return;
     
-    // Sample data - you can replace this with real data from PHP
-    const hourlyData = [12, 8, 15, 20, 18, 25, 30, 35, 22, 18, 16, 14];
-    const hours = ['1h', '2h', '3h', '4h', '5h', '6h', '7h', '8h', '9h', '10h', '11h', '12h'];
+    // Injected real data from PHP
+    const hourlyData = <?php echo json_encode(array_column($api_analytics['trends'], 'calls')); ?>;
+    const hours = <?php echo json_encode(array_column($api_analytics['trends'], 'hour')); ?>;
     
     new Chart(ctx, {
         type: 'line',
