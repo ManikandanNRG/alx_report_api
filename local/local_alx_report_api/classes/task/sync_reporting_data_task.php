@@ -122,6 +122,9 @@ class sync_reporting_data_task extends \core\task\scheduled_task {
                     // Clear cache entries for this company to ensure fresh data
                     $this->clear_company_cache($company->id);
                     
+                    // Update sync status for this company
+                    $this->update_company_sync_status($company->id, $company_stats);
+                    
                 } catch (\Exception $e) {
                     $total_stats['total_errors']++;
                     $total_stats['companies_with_errors'][] = $company->id;
@@ -156,7 +159,7 @@ class sync_reporting_data_task extends \core\task\scheduled_task {
      * Sync changes for a specific company.
      *
      * @param int $companyid Company ID
-     * @param int $hours_back Hours to look back for changes
+     * @param int $hours_back Hours to look back for changes (fallback if no last sync)
      * @return array Statistics
      */
     private function sync_company_changes($companyid, $hours_back) {
@@ -165,7 +168,16 @@ class sync_reporting_data_task extends \core\task\scheduled_task {
         // Ensure performance debugging is off, as it can interfere with cursors.
         $DB->set_debug(false);
         
-        $cutoff_time = time() - ($hours_back * 3600);
+        // Get the last sync timestamp for this company
+        $cron_token = 'cron_task_' . $companyid;
+        $last_sync = $DB->get_field('local_alx_api_sync_status', 'last_sync_timestamp', [
+            'companyid' => $companyid,
+            'token_hash' => hash('sha256', $cron_token)
+        ]);
+        
+        // If no last sync found, use the hours_back parameter
+        $cutoff_time = $last_sync ? $last_sync : (time() - ($hours_back * 3600));
+        
         $stats = [
             'users_updated' => 0,
             'records_updated' => 0,
@@ -183,7 +195,7 @@ class sync_reporting_data_task extends \core\task\scheduled_task {
             $completion_sql = "
                 SELECT DISTINCT cc.userid, cc.course as courseid
                 FROM {course_completions} cc
-                WHERE cc.timecompleted > :cutoff_time AND EXISTS (
+                WHERE cc.timecompleted >= :cutoff_time AND EXISTS (
                     SELECT 1 FROM {company_users} cu
                     WHERE cu.userid = cc.userid AND cu.companyid = :companyid
                 )";
@@ -202,7 +214,7 @@ class sync_reporting_data_task extends \core\task\scheduled_task {
                 SELECT DISTINCT cmc.userid, cm.course as courseid
                 FROM {course_modules_completion} cmc
                 JOIN {course_modules} cm ON cm.id = cmc.coursemoduleid
-                WHERE cmc.timemodified > :cutoff_time AND EXISTS (
+                WHERE cmc.timemodified >= :cutoff_time AND EXISTS (
                     SELECT 1 FROM {company_users} cu
                     WHERE cu.userid = cmc.userid AND cu.companyid = :companyid
                 )";
@@ -217,7 +229,7 @@ class sync_reporting_data_task extends \core\task\scheduled_task {
                 SELECT DISTINCT ue.userid, e.courseid
                 FROM {user_enrolments} ue
                 JOIN {enrol} e ON e.id = ue.enrolid
-                WHERE ue.timemodified > :cutoff_time AND EXISTS (
+                WHERE ue.timemodified >= :cutoff_time AND EXISTS (
                     SELECT 1 FROM {company_users} cu
                     WHERE cu.userid = ue.userid AND cu.companyid = :companyid
                 )";
@@ -278,6 +290,28 @@ class sync_reporting_data_task extends \core\task\scheduled_task {
         } catch (\Exception $e) {
             $this->log_message("Failed to clear cache for company {$companyid}: " . $e->getMessage());
         }
+    }
+
+    /**
+     * Update sync status for a company.
+     *
+     * @param int $companyid Company ID
+     * @param array $stats Company sync statistics
+     */
+    private function update_company_sync_status($companyid, $stats) {
+        // Use a special token for cron tasks to maintain unique constraint
+        $cron_token = 'cron_task_' . $companyid;
+        $total_records = $stats['records_updated'] + $stats['records_created'];
+        $status = empty($stats['errors']) ? 'success' : 'failed';
+        $error_message = empty($stats['errors']) ? null : implode('; ', $stats['errors']);
+        
+        local_alx_report_api_update_sync_status(
+            $companyid,
+            $cron_token,
+            $total_records,
+            $status,
+            $error_message
+        );
     }
 
     /**
