@@ -122,7 +122,7 @@ class sync_reporting_data_task extends \core\task\scheduled_task {
                     // Clear cache entries for this company to ensure fresh data
                     $this->clear_company_cache($company->id);
                     
-                } catch (Exception $e) {
+                } catch (\Exception $e) {
                     $total_stats['total_errors']++;
                     $total_stats['companies_with_errors'][] = $company->id;
                     $this->log_message("Company {$company->id} failed: " . $e->getMessage());
@@ -146,7 +146,7 @@ class sync_reporting_data_task extends \core\task\scheduled_task {
             set_config('last_auto_sync', time(), 'local_alx_report_api');
             set_config('last_sync_stats', json_encode($total_stats), 'local_alx_report_api');
             
-        } catch (Exception $e) {
+        } catch (\Exception $e) {
             $this->log_message("Critical sync error: " . $e->getMessage());
             throw $e;
         }
@@ -161,6 +161,9 @@ class sync_reporting_data_task extends \core\task\scheduled_task {
      */
     private function sync_company_changes($companyid, $hours_back) {
         global $DB;
+
+        // Ensure performance debugging is off, as it can interfere with cursors.
+        $DB->set_debug(false);
         
         $cutoff_time = time() - ($hours_back * 3600);
         $stats = [
@@ -170,61 +173,91 @@ class sync_reporting_data_task extends \core\task\scheduled_task {
             'errors' => []
         ];
         
+        $completion_changes = [];
+        $module_changes = [];
+        $enrollment_changes = [];
+        $params = ['cutoff_time' => $cutoff_time, 'companyid' => $companyid];
+
+        // Find users with recent course completion changes
         try {
-            // Find users with recent course completion changes
             $completion_sql = "
-                SELECT DISTINCT cc.userid, cu.companyid, cc.course as courseid
+                SELECT DISTINCT cc.userid, cc.course as courseid
                 FROM {course_completions} cc
-                JOIN {company_users} cu ON cu.userid = cc.userid
-                WHERE cc.timemodified > :cutoff_time
-                  AND cu.companyid = :companyid";
-            
-            $params = ['cutoff_time' => $cutoff_time, 'companyid' => $companyid];
+                WHERE cc.timecompleted > :cutoff_time AND EXISTS (
+                    SELECT 1 FROM {company_users} cu
+                    WHERE cu.userid = cc.userid AND cu.companyid = :companyid
+                )";
             $completion_changes = $DB->get_records_sql($completion_sql, $params);
-            
-            // Find users with recent module completion changes
+        } catch (\Exception $e) {
+            $error_message = "Error querying course completions: " . $e->getMessage();
+            if (property_exists($e, 'debuginfo')) {
+                $error_message .= " | Debug Info: " . $e->debuginfo;
+            }
+            $stats['errors'][] = $error_message;
+        }
+
+        // Find users with recent module completion changes
+        try {
             $module_sql = "
-                SELECT DISTINCT cmc.userid, cu.companyid, cm.course as courseid
+                SELECT DISTINCT cmc.userid, cm.course as courseid
                 FROM {course_modules_completion} cmc
                 JOIN {course_modules} cm ON cm.id = cmc.coursemoduleid
-                JOIN {company_users} cu ON cu.userid = cmc.userid
-                WHERE cmc.timemodified > :cutoff_time
-                  AND cu.companyid = :companyid";
-            
+                WHERE cmc.timemodified > :cutoff_time AND EXISTS (
+                    SELECT 1 FROM {company_users} cu
+                    WHERE cu.userid = cmc.userid AND cu.companyid = :companyid
+                )";
             $module_changes = $DB->get_records_sql($module_sql, $params);
-            
-            // Find users with recent enrollment changes
+        } catch (\Exception $e) {
+            $stats['errors'][] = "Error querying module completions: " . $e->getMessage();
+        }
+
+        // Find users with recent enrollment changes
+        try {
             $enrollment_sql = "
-                SELECT DISTINCT ue.userid, cu.companyid, e.courseid
+                SELECT DISTINCT ue.userid, e.courseid
                 FROM {user_enrolments} ue
                 JOIN {enrol} e ON e.id = ue.enrolid
-                JOIN {company_users} cu ON cu.userid = ue.userid
-                WHERE ue.timemodified > :cutoff_time
-                  AND cu.companyid = :companyid";
-            
+                WHERE ue.timemodified > :cutoff_time AND EXISTS (
+                    SELECT 1 FROM {company_users} cu
+                    WHERE cu.userid = ue.userid AND cu.companyid = :companyid
+                )";
             $enrollment_changes = $DB->get_records_sql($enrollment_sql, $params);
-            
-            // Combine all changes
-            $all_changes = [];
-            foreach ([$completion_changes, $module_changes, $enrollment_changes] as $changes) {
-                foreach ($changes as $change) {
-                    $key = $change->userid . '_' . $change->companyid . '_' . $change->courseid;
-                    $all_changes[$key] = $change;
-                }
+        } catch (\Exception $e) {
+            $stats['errors'][] = "Error querying enrollments: " . $e->getMessage();
+        }
+        
+        // Combine all changes and get unique users/courses to update
+        $all_changes = array_merge($completion_changes, $module_changes, $enrollment_changes);
+        
+        if (empty($all_changes)) {
+            return $stats;
+        }
+
+        $updates_to_process = [];
+        foreach ($all_changes as $change) {
+            $key = "{$change->userid}-{$change->courseid}";
+            if (!isset($updates_to_process[$key])) {
+                $updates_to_process[$key] = $change;
             }
-            
-            // Process each change
-            foreach ($all_changes as $change) {
-                if (local_alx_report_api_update_reporting_record($change->userid, $change->companyid, $change->courseid)) {
+        }
+
+        foreach ($updates_to_process as $update) {
+            try {
+                $update_result = local_alx_report_api_update_reporting_record($update->userid, $companyid, $update->courseid);
+                
+                if ($update_result['created']) {
+                    $stats['records_created']++;
+                } else if ($update_result['updated']) {
                     $stats['records_updated']++;
                 }
+            } catch (\Exception $e) {
+                $error_msg = "Error updating user {$update->userid}, course {$update->courseid}: " . $e->getMessage();
+                $stats['errors'][] = $error_msg;
             }
-            
-            $stats['users_updated'] = count($all_changes);
-            
-        } catch (Exception $e) {
-            $stats['errors'][] = 'Company sync error: ' . $e->getMessage();
         }
+        
+        $updated_user_ids = array_unique(array_map(function($c) { return $c->userid; }, $updates_to_process));
+        $stats['users_updated'] = count($updated_user_ids);
         
         return $stats;
     }
@@ -242,7 +275,7 @@ class sync_reporting_data_task extends \core\task\scheduled_task {
             if ($deleted > 0) {
                 $this->log_message("Cleared {$deleted} cache entries for company {$companyid}");
             }
-        } catch (Exception $e) {
+        } catch (\Exception $e) {
             $this->log_message("Failed to clear cache for company {$companyid}: " . $e->getMessage());
         }
     }
