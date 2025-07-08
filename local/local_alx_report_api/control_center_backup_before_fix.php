@@ -925,24 +925,6 @@ input[type="checkbox"]:disabled {
                         $auto_percentage = $total_sync_entries > 0 ? ($auto_mode_count / $total_sync_entries) * 100 : 0;
                         $incremental_percentage = $total_sync_entries > 0 ? ($incremental_mode_count / $total_sync_entries) * 100 : 0;
 
-                        // Get actual active tokens count (fix for correct display)
-                        $actual_active_tokens = 0;
-                        if ($DB->get_manager()->table_exists('external_tokens')) {
-                            // Check for primary service name first
-                            $service_id = $DB->get_field('external_services', 'id', ['shortname' => 'alx_report_api_custom']);
-                            if (!$service_id) {
-                                // Fallback to legacy service name
-                                $service_id = $DB->get_field('external_services', 'id', ['shortname' => 'alx_report_api']);
-                            }
-                            
-                            if ($service_id) {
-                                $actual_active_tokens = $DB->count_records('external_tokens', [
-                                    'externalserviceid' => $service_id,
-                                    'tokentype' => EXTERNAL_TOKEN_PERMANENT
-                                ]);
-                            }
-                        }
-
                         // Get next scheduled sync time from Moodle scheduled tasks
                         $task_record = $DB->get_record('task_scheduled', ['classname' => '\\local_alx_report_api\\task\\sync_reporting_data_task']);
                         if ($task_record && !empty($task_record->nextruntime)) {
@@ -974,7 +956,7 @@ input[type="checkbox"]:disabled {
                         <!-- Sync Statistics -->
                         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
                             <div style="text-align: center; padding: 12px; background: rgba(255,255,255,0.1); border-radius: 8px;">
-                                <div style="font-size: 20px; font-weight: 700; color: #fbbf24;"><?php echo $actual_active_tokens; ?></div>
+                                <div style="font-size: 20px; font-weight: 700; color: #fbbf24;"><?php echo $total_sync_entries; ?></div>
                                 <div style="font-size: 12px; color: rgba(255,255,255,0.8);">Active Tokens</div>
                             </div>
                             <div style="text-align: center; padding: 12px; background: rgba(255,255,255,0.1); border-radius: 8px;">

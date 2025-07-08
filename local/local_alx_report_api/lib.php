@@ -1108,14 +1108,22 @@ function local_alx_report_api_get_system_stats() {
         $stats['last_sync'] = $last_sync ?: 0;
     }
     
-    // Active tokens count
+    // Active tokens count - check both service names
     if ($DB->get_manager()->table_exists('external_tokens')) {
-        $service_id = $DB->get_field('external_services', 'id', ['shortname' => 'alx_report_api']);
+        // Check for primary service name first
+        $service_id = $DB->get_field('external_services', 'id', ['shortname' => 'alx_report_api_custom']);
+        if (!$service_id) {
+            // Fallback to legacy service name
+            $service_id = $DB->get_field('external_services', 'id', ['shortname' => 'alx_report_api']);
+        }
+        
         if ($service_id) {
             $stats['active_tokens'] = $DB->count_records('external_tokens', [
                 'externalserviceid' => $service_id,
                 'tokentype' => EXTERNAL_TOKEN_PERMANENT
             ]);
+        } else {
+            $stats['active_tokens'] = 0;
         }
     }
     
