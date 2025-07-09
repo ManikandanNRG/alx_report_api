@@ -330,7 +330,22 @@ $total_api_calls = 0;
 $recent_api_calls = 0;
 if ($api_logs_exist) {
     $total_api_calls = $DB->count_records('local_alx_api_logs');
-    $recent_api_calls = $DB->count_records_select('local_alx_api_logs', 'timecreated > ?', [time() - 86400]);
+    // Check which time field exists
+    $table_info = $DB->get_columns('local_alx_api_logs');
+    $time_field = isset($table_info['timeaccessed']) ? 'timeaccessed' : 'timecreated';
+    
+    // Check which company field exists
+    $company_join = '';
+    $company_select = ', "Unknown" as company_name';
+    if (isset($table_info['companyid'])) {
+        $company_join = 'LEFT JOIN {company} c ON c.id = l.companyid';
+        $company_select = ', c.name as company_name';
+    } elseif (isset($table_info['company_shortname'])) {
+        $company_join = 'LEFT JOIN {company} c ON c.shortname = l.company_shortname';
+        $company_select = ', c.name as company_name';
+    }
+    
+    $recent_api_calls = $DB->count_records_select('local_alx_api_logs', "{$time_field} > ?", [time() - 86400]);
 }
 
 // Metrics Grid
@@ -536,13 +551,28 @@ if ($api_logs_exist && $recent_api_calls > 0) {
     echo '<h2 class="section-title">📡 Recent API Activity</h2>';
     echo '<div class="table-container">';
     
+    // Check which time field exists
+    $table_info = $DB->get_columns('local_alx_api_logs');
+    $time_field = isset($table_info['timeaccessed']) ? 'timeaccessed' : 'timecreated';
+    
+    // Check which company field exists
+    $company_join = '';
+    $company_select = ', "Unknown" as company_name';
+    if (isset($table_info['companyid'])) {
+        $company_join = 'LEFT JOIN {company} c ON c.id = l.companyid';
+        $company_select = ', c.name as company_name';
+    } elseif (isset($table_info['company_shortname'])) {
+        $company_join = 'LEFT JOIN {company} c ON c.shortname = l.company_shortname';
+        $company_select = ', c.name as company_name';
+    }
+    
     $recent_logs = $DB->get_records_sql("
-        SELECT l.*, c.name as company_name, u.firstname, u.lastname
+        SELECT l.*, u.firstname, u.lastname{$company_select}
         FROM {local_alx_api_logs} l
-        LEFT JOIN {company} c ON c.id = l.companyid
+        {$company_join}
         LEFT JOIN {user} u ON u.id = l.userid
-        WHERE l.timecreated > ?
-        ORDER BY l.timecreated DESC
+        WHERE l.{$time_field} > ?
+        ORDER BY l.{$time_field} DESC
         LIMIT 20
     ", [time() - 86400]);
     
@@ -559,7 +589,7 @@ if ($api_logs_exist && $recent_api_calls > 0) {
     echo '<tbody>';
     
     foreach ($recent_logs as $log) {
-        $time = date('Y-m-d H:i:s', $log->timecreated);
+        $time = date('Y-m-d H:i:s', $log->{$time_field});
         $user_name = $log->firstname && $log->lastname ? $log->firstname . ' ' . $log->lastname : 'Unknown';
         $response_size = strlen($log->response_data);
         

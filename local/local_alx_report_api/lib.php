@@ -1269,11 +1269,15 @@ function local_alx_report_api_get_recent_logs($limit = 10) {
     $logs = [];
     
     if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
+        // Check which time field exists
+        $table_info = $DB->get_columns('local_alx_api_logs');
+        $time_field = isset($table_info['timeaccessed']) ? 'timeaccessed' : 'timecreated';
+        
         $sql = "SELECT l.*, c.name as company_name, u.firstname, u.lastname
                 FROM {local_alx_api_logs} l
                 LEFT JOIN {company} c ON l.companyid = c.id
                 LEFT JOIN {user} u ON l.userid = u.id
-                ORDER BY l.timecreated DESC";
+                ORDER BY l.{$time_field} DESC";
         
         $records = $DB->get_records_sql($sql, [], 0, $limit);
         
@@ -1283,7 +1287,7 @@ function local_alx_report_api_get_recent_logs($limit = 10) {
                 'action' => $record->action ?? 'API Call',
                 'user_name' => trim($record->firstname . ' ' . $record->lastname),
                 'company_name' => $record->company_name ?? 'Unknown',
-                'timestamp' => $record->timecreated,
+                'timestamp' => $record->{$time_field},
                 'status' => $record->status ?? 'success',
                 'details' => $record->details ?? ''
             ];

@@ -24,13 +24,22 @@ try {
     
     // Get total records from reporting table (same as monitoring dashboard)
     if ($DB->get_manager()->table_exists('local_alx_api_reporting')) {
-        $stats['total_records'] = $DB->count_records('local_alx_api_reporting', ['is_deleted' => 0]);
+        // Check if is_deleted field exists
+        $table_info = $DB->get_columns('local_alx_api_reporting');
+        if (isset($table_info['is_deleted'])) {
+            $stats['total_records'] = $DB->count_records('local_alx_api_reporting', ['is_deleted' => 0]);
+        } else {
+            $stats['total_records'] = $DB->count_records('local_alx_api_reporting');
+        }
     }
     
     // Get API calls today
     if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
         $today_start = mktime(0, 0, 0);
-        $stats['api_calls_today'] = $DB->count_records_select('local_alx_api_logs', 'timecreated >= ?', [$today_start]);
+        // Check which time field exists
+        $table_info = $DB->get_columns('local_alx_api_logs');
+        $time_field = isset($table_info['timeaccessed']) ? 'timeaccessed' : 'timecreated';
+        $stats['api_calls_today'] = $DB->count_records_select('local_alx_api_logs', "{$time_field} >= ?", [$today_start]);
     }
     
     // Determine system health
