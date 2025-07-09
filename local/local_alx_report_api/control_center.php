@@ -169,11 +169,26 @@ echo '<div style="position: fixed; top: 0; right: 0; background: #10b981; color:
     opacity: 0.9;
 }
 
-/* Ensure proper card spacing */
+/* Ensure proper card spacing and equal heights */
 .dashboard-card {
     box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -1px rgb(0 0 0 / 0.06);
     border-radius: 12px;
     overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+/* Make card body flex to push footer to bottom */
+.dashboard-card .card-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Ensure card footer sticks to bottom */
+.dashboard-card .card-footer {
+    margin-top: auto;
 }
 
 /* Header visibility improvements */
@@ -371,22 +386,6 @@ echo '<div style="position: fixed; top: 0; right: 0; background: #10b981; color:
 .card-grid-2 { grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); }
 .card-grid-3 { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
 .card-grid-4 { grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); }
-
-/* Enhanced Dashboard Cards */
-.dashboard-card {
-    background: var(--card-bg);
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-sm);
-    border: 1px solid var(--border-color);
-    overflow: hidden;
-    transition: all 0.3s ease;
-    position: relative;
-}
-
-.dashboard-card:hover {
-    box-shadow: var(--shadow-lg);
-    transform: translateY(-4px);
-}
 
 /* Special gradient cards for performance metrics */
 .dashboard-card.gradient-card-1 {
@@ -693,6 +692,15 @@ input[type="checkbox"]:disabled {
         text-align: center;
     }
 }
+
+/* Grid container for equal height cards */
+.performance-cards-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+    gap: 20px;
+    margin: 20px 0;
+    align-items: stretch;
+}
 </style>
 
 <div class="control-center-container">
@@ -753,9 +761,9 @@ input[type="checkbox"]:disabled {
     <div id="overview-tab" class="tab-content active">
         <div class="card-grid card-grid-3" style="margin-bottom: 20px;">
             <!-- Performance Cards Row -->
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 20px; margin-top: 20px; margin-bottom: 20px;">
+            <div class="performance-cards-grid">
                 <!-- Enhanced API Performance Card -->
-                <div class="dashboard-card" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; margin-bottom: 0;">
+                <div class="dashboard-card" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none;">
                     <div class="card-header" style="border-bottom: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.1);">
                         <h3 class="card-title" style="color: white; margin: 0;">
                             <i class="fas fa-tachometer-alt"></i>
@@ -895,7 +903,7 @@ input[type="checkbox"]:disabled {
                 </div>
 
                 <!-- Enhanced Response Status Card -->
-                <div class="dashboard-card" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: white; border: none; margin-bottom: 0;">
+                <div class="dashboard-card" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: white; border: none;">
                     <div class="card-header" style="border-bottom: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.1);">
                         <h3 class="card-title" style="color: white; margin: 0;">
                             <i class="fas fa-sync-alt"></i>
@@ -936,10 +944,19 @@ input[type="checkbox"]:disabled {
                             }
                             
                             if ($service_id) {
-                                $actual_active_tokens = $DB->count_records('external_tokens', [
-                                    'externalserviceid' => $service_id,
-                                    'tokentype' => EXTERNAL_TOKEN_PERMANENT
-                                ]);
+                                // Use the PROVEN working method from debug script - simple query then filter in PHP
+                                $tokens = $DB->get_records_select('external_tokens', 
+                                    'externalserviceid = ? AND tokentype = ?', 
+                                    [$service_id, EXTERNAL_TOKEN_PERMANENT], 
+                                    '', 'id, validuntil');
+                                
+                                // Filter for valid tokens in PHP (more reliable than SQL)
+                                $current_time = time();
+                                foreach ($tokens as $token) {
+                                    if (!$token->validuntil || $token->validuntil > $current_time) {
+                                        $actual_active_tokens++;
+                                    }
+                                }
                             }
                         }
 
@@ -1000,7 +1017,7 @@ input[type="checkbox"]:disabled {
                 </div>
 
                 <!-- Enhanced Security Status Card -->
-                <div class="dashboard-card" style="background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%); color: #1f2937; border: none; margin-bottom: 0;">
+                <div class="dashboard-card" style="background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%); color: #1f2937; border: none;">
                     <div class="card-header" style="border-bottom: 1px solid rgba(31,41,55,0.1); background: rgba(255,255,255,0.1);">
                         <h3 class="card-title" style="color: #1f2937; margin: 0;">
                             <i class="fas fa-shield-alt" style="color: #10b981;"></i>

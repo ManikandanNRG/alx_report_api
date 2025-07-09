@@ -202,7 +202,7 @@ class local_alx_report_api_external extends external_api {
     }
 
     /**
-     * Get the service ID for alx_report_api_custom.
+     * Get the service ID for alx_report_api_custom or alx_report_api.
      *
      * @return int Service ID
      */
@@ -211,7 +211,12 @@ class local_alx_report_api_external extends external_api {
         
         static $service_id = null;
         if ($service_id === null) {
+            // Check for alx_report_api_custom first (primary service name)
             $service = $DB->get_record('external_services', ['shortname' => 'alx_report_api_custom']);
+            if (!$service) {
+                // Fallback to alx_report_api for compatibility
+                $service = $DB->get_record('external_services', ['shortname' => 'alx_report_api']);
+            }
             $service_id = $service ? $service->id : 0;
         }
         

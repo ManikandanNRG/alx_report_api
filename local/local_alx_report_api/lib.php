@@ -96,11 +96,18 @@ function local_alx_report_api_validate_token($token) {
         return false;
     }
 
-    // Check if token is for our service.
+    // Check if token is for our service - check both service names for compatibility.
     $service = $DB->get_record('external_services', [
         'id' => $tokenrecord->externalserviceid,
-        'shortname' => 'alx_report_api',
+        'shortname' => 'alx_report_api_custom',
     ]);
+
+    if (!$service) {
+        $service = $DB->get_record('external_services', [
+            'id' => $tokenrecord->externalserviceid,
+            'shortname' => 'alx_report_api',
+        ]);
+    }
 
     if (!$service) {
         return false;
@@ -142,44 +149,61 @@ function local_alx_report_api_cleanup_logs($days = 90) {
 }
 
 /**
- * Get API usage statistics for a company.
+ * Get usage statistics for a specific company.
  *
  * @param int $companyid Company ID
- * @param int $days Number of days to look back (default: 30)
+ * @param int $days Number of days to look back (default 30)
  * @return array Usage statistics
  */
 function local_alx_report_api_get_usage_stats($companyid, $days = 30) {
     global $DB;
 
-    $cutoff = time() - ($days * 24 * 60 * 60);
     $stats = [
         'total_requests' => 0,
         'unique_users' => 0,
         'last_access' => 0,
     ];
 
-    if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
-        // Total requests.
+    if (!$DB->get_manager()->table_exists('local_alx_api_logs')) {
+        return $stats;
+    }
+
+    // Determine which time field to use
+    $table_info = $DB->get_columns('local_alx_api_logs');
+    $time_field = isset($table_info['timeaccessed']) ? 'timeaccessed' : 'timecreated';
+    
+    $cutoff = time() - ($days * 24 * 3600);
+
+    // Check if we have the old companyid field or new company_shortname field
+    if (isset($table_info['companyid'])) {
+        // Old schema
         $stats['total_requests'] = $DB->count_records_select(
             'local_alx_api_logs',
-            'companyid = ? AND timecreated > ?',
+            "companyid = ? AND {$time_field} > ?",
             [$companyid, $cutoff]
         );
 
         // Unique users.
         $sql = "SELECT COUNT(DISTINCT userid) 
                 FROM {local_alx_api_logs} 
-                WHERE companyid = ? AND timecreated > ?";
+                WHERE companyid = ? AND {$time_field} > ?";
         $stats['unique_users'] = $DB->count_records_sql($sql, [$companyid, $cutoff]);
 
         // Last access.
         $last_access = $DB->get_field_select(
             'local_alx_api_logs',
-            'MAX(timecreated)',
+            "MAX({$time_field})",
             'companyid = ?',
             [$companyid]
         );
         $stats['last_access'] = $last_access ?: 0;
+    } else {
+        // New schema or no company field - return zero stats
+        $stats = [
+            'total_requests' => 0,
+            'unique_users' => 0,
+            'last_access' => 0,
+        ];
     }
 
     return $stats;
@@ -1448,7 +1472,11 @@ function local_alx_report_api_get_system_health() {
                 
                 // Check for data staleness
                 if (in_array($table, ['local_alx_api_reporting', 'local_alx_api_logs'])) {
-                    $last_update = $DB->get_field_sql("SELECT MAX(timecreated) FROM {{$table}}");
+                    // Determine which time field to use
+                    $table_info = $DB->get_columns($table);
+                    $time_field = isset($table_info['timeaccessed']) ? 'timeaccessed' : 'timecreated';
+                    
+                    $last_update = $DB->get_field_sql("SELECT MAX({$time_field}) FROM {{$table}}");
                     $age_hours = $last_update ? round((time() - $last_update) / 3600, 1) : 0;
                     $table_stats[$table]['last_update'] = $last_update;
                     $table_stats[$table]['age_hours'] = $age_hours;
@@ -1582,11 +1610,15 @@ function local_alx_report_api_get_system_health() {
     
     // 6. Performance metrics
     if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
+        // Determine which time field to use
+        $table_info = $DB->get_columns('local_alx_api_logs');
+        $time_field = isset($table_info['timeaccessed']) ? 'timeaccessed' : 'timecreated';
+        
         $recent_calls = $DB->count_records_select('local_alx_api_logs', 
-            'timecreated > ?', [time() - 3600]); // Last hour
+            "{$time_field} > ?", [time() - 3600]); // Last hour
         
         $avg_daily_calls = $DB->count_records_select('local_alx_api_logs', 
-            'timecreated > ?', [time() - (7 * 24 * 3600)]) / 7; // Weekly average
+            "{$time_field} > ?", [time() - (7 * 24 * 3600)]) / 7; // Weekly average
         
         $performance_status = 'ok';
         $performance_message = "Recent activity: {$recent_calls} calls/hour, {$avg_daily_calls} calls/day avg";
