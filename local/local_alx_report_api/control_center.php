@@ -852,7 +852,7 @@ input[type="checkbox"]:disabled {
                         </div>
 
                         <!-- Performance Metrics Grid -->
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 48px;">
                             <div style="text-align: center; padding: 12px; background: rgba(255,255,255,0.1); border-radius: 8px;">
                                 <div style="font-size: 20px; font-weight: 700; color: #4ade80;"><?php echo $api_analytics['summary']['calls_per_hour']; ?></div>
                                 <div style="font-size: 12px; color: rgba(255,255,255,0.8);">Calls/Hour</div>
@@ -881,7 +881,7 @@ input[type="checkbox"]:disabled {
                                     3. Make your first API call
                                 </div>
                             </div>
-                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 32px;">
                                 <div style="text-align: center; padding: 12px; background: rgba(255,255,255,0.1); border-radius: 8px;">
                                     <div style="font-size: 20px; font-weight: 700; color: #94a3b8;">0</div>
                                     <div style="font-size: 12px; color: rgba(255,255,255,0.8);">Calls/Hour</div>
@@ -1858,13 +1858,31 @@ function createAPIPerformanceChart() {
     const hourlyData = <?php echo json_encode(array_column($api_analytics['trends'], 'calls')); ?>;
     const hours = <?php echo json_encode(array_column($api_analytics['trends'], 'hour')); ?>;
     
+    // Ensure we always have 24 hours of data, filling with zeros if needed
+    const completeHours = [];
+    const completeData = [];
+    const now = new Date();
+    
+    for (let i = 23; i >= 0; i--) {
+        const hour = new Date(now.getTime() - (i * 60 * 60 * 1000));
+        const hourLabel = hour.getHours().toString().padStart(2, '0') + ':00';
+        completeHours.push(hourLabel);
+        
+        // Find matching data or default to 0
+        const hourIndex = hours.findIndex(h => h === hourLabel);
+        completeData.push(hourIndex >= 0 ? hourlyData[hourIndex] : 0);
+    }
+    
+    // Calculate max value for Y-axis with minimum of 10
+    const maxValue = Math.max(10, Math.max(...completeData) * 1.2);
+    
     new Chart(ctx, {
         type: 'line',
         data: {
-            labels: hours,
+            labels: completeHours,
             datasets: [{
                 label: 'API Calls',
-                data: hourlyData,
+                data: completeData,
                 borderColor: '#4ade80',
                 backgroundColor: 'rgba(74, 222, 128, 0.1)',
                 tension: 0.4,
@@ -1872,7 +1890,8 @@ function createAPIPerformanceChart() {
                 pointBackgroundColor: '#ffffff',
                 pointBorderColor: '#4ade80',
                 pointBorderWidth: 2,
-                pointRadius: 4
+                pointRadius: 3,
+                pointHoverRadius: 6
             }]
         },
         options: {
@@ -1887,25 +1906,44 @@ function createAPIPerformanceChart() {
                 x: {
                     display: true,
                     grid: {
-                        display: false
+                        display: true,
+                        color: 'rgba(255, 255, 255, 0.1)',
+                        lineWidth: 1
                     },
                     ticks: {
                         color: 'rgba(255, 255, 255, 0.7)',
                         font: {
                             size: 10
-                        }
+                        },
+                        maxTicksLimit: 6
+                    },
+                    border: {
+                        color: 'rgba(255, 255, 255, 0.3)',
+                        width: 1
                     }
                 },
                 y: {
                     display: true,
+                    min: 0,
+                    max: maxValue,
                     grid: {
-                        color: 'rgba(255, 255, 255, 0.1)'
+                        display: true,
+                        color: 'rgba(255, 255, 255, 0.1)',
+                        lineWidth: 1
                     },
                     ticks: {
                         color: 'rgba(255, 255, 255, 0.7)',
                         font: {
                             size: 10
+                        },
+                        stepSize: Math.ceil(maxValue / 5),
+                        callback: function(value) {
+                            return Math.round(value);
                         }
+                    },
+                    border: {
+                        color: 'rgba(255, 255, 255, 0.3)',
+                        width: 1
                     }
                 }
             },
@@ -1913,6 +1951,10 @@ function createAPIPerformanceChart() {
                 point: {
                     hoverRadius: 6
                 }
+            },
+            interaction: {
+                intersect: false,
+                mode: 'index'
             }
         }
     });
