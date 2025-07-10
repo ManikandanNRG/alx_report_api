@@ -1510,21 +1510,17 @@ input[type="checkbox"]:disabled {
             </div>
             <div class="card-body">
                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px;">
-                    <a href="<?php echo $CFG->wwwroot; ?>/local/alx_report_api/monitoring_dashboard.php" class="btn-modern btn-primary">
-                        <i class="fas fa-chart-line"></i>
-                        Monitoring Dashboard
-                    </a>
                     <a href="<?php echo $CFG->wwwroot; ?>/local/alx_report_api/auto_sync_status.php" class="btn-modern btn-info">
                         <i class="fas fa-sync-alt"></i>
-                        Auto-Sync Status
+                        Auto-Sync Intelligence
                     </a>
-                    <a href="<?php echo $CFG->wwwroot; ?>/local/alx_report_api/check_rate_limit.php" class="btn-modern btn-warning">
-                        <i class="fas fa-tachometer-alt"></i>
-                        Rate Limit Monitor
+                    <a href="<?php echo $CFG->wwwroot; ?>/local/alx_report_api/monitoring_dashboard.php" class="btn-modern btn-success">
+                        <i class="fas fa-heartbeat"></i>
+                        System Health & Alerts
                     </a>
                     <a href="<?php echo $CFG->wwwroot; ?>/local/alx_report_api/advanced_monitoring.php" class="btn-modern btn-primary">
-                        <i class="fas fa-microscope"></i>
-                        Advanced Monitoring
+                        <i class="fas fa-chart-line"></i>
+                        API Performance & Security
                     </a>
                 </div>
             </div>
