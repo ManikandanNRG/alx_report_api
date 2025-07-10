@@ -164,7 +164,7 @@ class sync_reporting_data_task extends \core\task\scheduled_task {
      */
     private function sync_company_changes($companyid, $hours_back) {
         global $DB;
-
+        
         // Ensure performance debugging is off, as it can interfere with cursors.
         $DB->set_debug(false);
         
@@ -190,7 +190,7 @@ class sync_reporting_data_task extends \core\task\scheduled_task {
         $enrollment_changes = [];
         $params = ['cutoff_time' => $cutoff_time, 'companyid' => $companyid];
 
-        // Find users with recent course completion changes
+            // Find users with recent course completion changes
         try {
             $completion_sql = "
                 SELECT DISTINCT cc.userid, cc.course as courseid
@@ -207,8 +207,8 @@ class sync_reporting_data_task extends \core\task\scheduled_task {
             }
             $stats['errors'][] = $error_message;
         }
-
-        // Find users with recent module completion changes
+            
+            // Find users with recent module completion changes
         try {
             $module_sql = "
                 SELECT DISTINCT cmc.userid, cm.course as courseid
@@ -222,8 +222,8 @@ class sync_reporting_data_task extends \core\task\scheduled_task {
         } catch (\Exception $e) {
             $stats['errors'][] = "Error querying module completions: " . $e->getMessage();
         }
-
-        // Find users with recent enrollment changes
+            
+            // Find users with recent enrollment changes
         try {
             $enrollment_sql = "
                 SELECT DISTINCT ue.userid, e.courseid
@@ -237,7 +237,7 @@ class sync_reporting_data_task extends \core\task\scheduled_task {
         } catch (\Exception $e) {
             $stats['errors'][] = "Error querying enrollments: " . $e->getMessage();
         }
-        
+            
         // Combine all changes and get unique users/courses to update
         $all_changes = array_merge($completion_changes, $module_changes, $enrollment_changes);
         

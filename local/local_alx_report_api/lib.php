@@ -4043,3 +4043,242 @@ function local_alx_report_api_trigger_security_alert($alert_data) {
         local_alx_report_api_send_alert('security', $alert_data['severity'], 'Authentication Security Alert', $message, $alert_data);
     }
 }
+
+/**
+ * Verify ALX Report API service installation and configuration
+ * This function checks all aspects of the service setup and can fix issues automatically
+ * 
+ * @return array Detailed status report with any issues found and fixes applied
+ */
+function local_alx_report_api_verify_service_installation() {
+    global $DB;
+    
+    $issues = [];
+    $fixes_applied = [];
+    $warnings = [];
+    
+    try {
+        // 1. Check if web services are enabled
+        if (!get_config('moodle', 'enablewebservices')) {
+            $issues[] = 'Web services not enabled';
+            set_config('enablewebservices', 1);
+            $fixes_applied[] = 'Enabled web services';
+        }
+        
+        // 2. Check if REST protocol is enabled
+        $enabledprotocols = get_config('moodle', 'webserviceprotocols');
+        if (strpos($enabledprotocols, 'rest') === false) {
+            $issues[] = 'REST protocol not enabled';
+            if (empty($enabledprotocols)) {
+                set_config('webserviceprotocols', 'rest');
+            } else {
+                set_config('webserviceprotocols', $enabledprotocols . ',rest');
+            }
+            $fixes_applied[] = 'Enabled REST protocol';
+        }
+        
+        // 3. Check service exists (try both service names for compatibility)
+        $service = $DB->get_record('external_services', ['shortname' => 'alx_report_api_custom']);
+        $legacy_service = $DB->get_record('external_services', ['shortname' => 'alx_report_api']);
+        
+        if (!$service && !$legacy_service) {
+            $issues[] = 'ALX Report API service not found';
+            
+            // Create the custom service
+            $service_obj = new stdClass();
+            $service_obj->name = 'ALX Report API Service';
+            $service_obj->shortname = 'alx_report_api_custom';
+            $service_obj->enabled = 1;
+            $service_obj->restrictedusers = 1;
+            $service_obj->downloadfiles = 0;
+            $service_obj->uploadfiles = 0;
+            $service_obj->timecreated = time();
+            $service_obj->timemodified = time();
+            
+            $serviceid = $DB->insert_record('external_services', $service_obj);
+            $service = $DB->get_record('external_services', ['id' => $serviceid]);
+            $fixes_applied[] = 'Created ALX Report API service';
+        } elseif (!$service && $legacy_service) {
+            $service = $legacy_service;
+            $warnings[] = 'Using legacy service name "alx_report_api" - consider upgrading to "alx_report_api_custom"';
+        }
+        
+        // 4. Check function mapping (CRITICAL - this is the main issue you reported)
+        if ($service) {
+            $function_mapped = $DB->record_exists('external_services_functions', [
+                'externalserviceid' => $service->id,
+                'functionname' => 'local_alx_report_api_get_course_progress'
+            ]);
+            
+            if (!$function_mapped) {
+                $issues[] = 'Function not mapped to service';
+                
+                // Clear any duplicate mappings first
+                $DB->delete_records('external_services_functions', [
+                    'externalserviceid' => $service->id,
+                    'functionname' => 'local_alx_report_api_get_course_progress'
+                ]);
+                
+                // Add function mapping
+                $function = new stdClass();
+                $function->externalserviceid = $service->id;
+                $function->functionname = 'local_alx_report_api_get_course_progress';
+                $function_id = $DB->insert_record('external_services_functions', $function);
+                
+                if ($function_id) {
+                    $fixes_applied[] = 'Mapped function to service';
+                    
+                    // Verify the mapping was successful
+                    $verify_mapping = $DB->record_exists('external_services_functions', [
+                        'externalserviceid' => $service->id,
+                        'functionname' => 'local_alx_report_api_get_course_progress'
+                    ]);
+                    
+                    if (!$verify_mapping) {
+                        $issues[] = 'Function mapping verification failed - may need manual intervention';
+                    }
+                } else {
+                    $issues[] = 'Failed to create function mapping';
+                }
+            }
+        }
+        
+        // 5. Check if service is enabled
+        if ($service && !$service->enabled) {
+            $issues[] = 'Service is disabled';
+            $service->enabled = 1;
+            $service->timemodified = time();
+            $DB->update_record('external_services', $service);
+            $fixes_applied[] = 'Enabled ALX Report API service';
+        }
+        
+        // 6. Check active tokens
+        $active_tokens = 0;
+        if ($service) {
+            $active_tokens = $DB->count_records_select('external_tokens', 
+                'externalserviceid = ? AND (validuntil IS NULL OR validuntil > ?)', 
+                [$service->id, time()]
+            );
+        }
+        
+        // 7. Clear caches to ensure changes take effect
+        if (!empty($fixes_applied)) {
+            if (function_exists('cache_helper')) {
+                cache_helper::purge_by_definition('core', 'external_services');
+                cache_helper::purge_by_definition('core', 'external_functions');
+            }
+            $fixes_applied[] = 'Cleared web service caches';
+        }
+        
+        // 8. Generate service status summary
+        $service_status = [
+            'service_exists' => !empty($service),
+            'service_enabled' => $service ? (bool)$service->enabled : false,
+            'function_mapped' => $service ? $DB->record_exists('external_services_functions', [
+                'externalserviceid' => $service->id,
+                'functionname' => 'local_alx_report_api_get_course_progress'
+            ]) : false,
+            'active_tokens' => $active_tokens,
+            'webservices_enabled' => (bool)get_config('moodle', 'enablewebservices'),
+            'rest_enabled' => strpos(get_config('moodle', 'webserviceprotocols'), 'rest') !== false,
+            'service_id' => $service ? $service->id : null,
+            'service_name' => $service ? $service->shortname : null
+        ];
+        
+        return [
+            'success' => true,
+            'issues_found' => $issues,
+            'fixes_applied' => $fixes_applied,
+            'warnings' => $warnings,
+            'service_status' => $service_status,
+            'service_ready' => empty($issues) && $service_status['function_mapped'],
+            'message' => empty($issues) ? 'Service configuration verified successfully!' : 'Issues found and fixed automatically.'
+        ];
+        
+    } catch (Exception $e) {
+        return [
+            'success' => false,
+            'error' => $e->getMessage(),
+            'issues_found' => $issues,
+            'fixes_applied' => $fixes_applied,
+            'warnings' => $warnings,
+            'service_ready' => false,
+            'message' => 'Error during service verification: ' . $e->getMessage()
+        ];
+    }
+}
+
+/**
+ * Quick service status check (lightweight version for dashboard display)
+ * 
+ * @return array Basic service status information
+ */
+function local_alx_report_api_get_service_status() {
+    global $DB;
+    
+    $status = [
+        'healthy' => false,
+        'service_exists' => false,
+        'function_mapped' => false,
+        'tokens_available' => false,
+        'config_valid' => false,
+        'issues' => []
+    ];
+    
+    try {
+        // Check web services configuration
+        $webservices_enabled = get_config('moodle', 'enablewebservices');
+        $rest_enabled = strpos(get_config('moodle', 'webserviceprotocols'), 'rest') !== false;
+        $status['config_valid'] = $webservices_enabled && $rest_enabled;
+        
+        if (!$webservices_enabled) {
+            $status['issues'][] = 'Web services disabled';
+        }
+        if (!$rest_enabled) {
+            $status['issues'][] = 'REST protocol disabled';
+        }
+        
+        // Check service exists
+        $service = $DB->get_record('external_services', ['shortname' => 'alx_report_api_custom']);
+        if (!$service) {
+            $service = $DB->get_record('external_services', ['shortname' => 'alx_report_api']);
+        }
+        
+        $status['service_exists'] = !empty($service);
+        if (!$service) {
+            $status['issues'][] = 'API service not found';
+            return $status;
+        }
+        
+        // Check function mapping
+        $status['function_mapped'] = $DB->record_exists('external_services_functions', [
+            'externalserviceid' => $service->id,
+            'functionname' => 'local_alx_report_api_get_course_progress'
+        ]);
+        
+        if (!$status['function_mapped']) {
+            $status['issues'][] = 'Function not mapped to service';
+        }
+        
+        // Check active tokens
+        $active_tokens = $DB->count_records_select('external_tokens', 
+            'externalserviceid = ? AND (validuntil IS NULL OR validuntil > ?)', 
+            [$service->id, time()]
+        );
+        $status['tokens_available'] = $active_tokens > 0;
+        
+        if ($active_tokens == 0) {
+            $status['issues'][] = 'No active API tokens';
+        }
+        
+        // Overall health assessment
+        $status['healthy'] = $status['config_valid'] && $status['service_exists'] && 
+                           $status['function_mapped'] && $status['tokens_available'];
+        
+        return $status;
+        
+    } catch (Exception $e) {
+        $status['issues'][] = 'Error checking service status: ' . $e->getMessage();
+        return $status;
+    }
+}

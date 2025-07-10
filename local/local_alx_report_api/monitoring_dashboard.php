@@ -1469,7 +1469,7 @@ body {
             <i class="fas fa-sync-alt"></i> Auto-Sync Status
         </a>
         <a href="<?php echo $CFG->wwwroot; ?>/local/alx_report_api/advanced_monitoring.php">
-            <i class="fas fa-chart-line"></i> API Analytics
+            <i class="fas fa-chart-line"></i> API Performance & Security
         </a>
     </div>
 </div>

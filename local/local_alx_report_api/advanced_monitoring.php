@@ -1272,16 +1272,13 @@ body {
     <!-- Navigation Links -->
     <div class="nav-links">
         <a href="<?php echo $CFG->wwwroot; ?>/local/alx_report_api/control_center.php">
-            <i class="fas fa-tachometer-alt"></i> Control Center
-        </a>
-        <a href="<?php echo $CFG->wwwroot; ?>/local/alx_report_api/monitoring_dashboard.php">
-            <i class="fas fa-chart-bar"></i> Standard Monitoring
-        </a>
-        <a href="<?php echo $CFG->wwwroot; ?>/local/alx_report_api/check_rate_limit.php">
-            <i class="fas fa-shield-alt"></i> Rate Limit Details
+            <i class="fas fa-arrow-left"></i> Back to Control Center
         </a>
         <a href="<?php echo $CFG->wwwroot; ?>/local/alx_report_api/auto_sync_status.php">
-            <i class="fas fa-sync-alt"></i> Sync Status
+            <i class="fas fa-sync-alt"></i> Auto-Sync Status
+        </a>
+        <a href="<?php echo $CFG->wwwroot; ?>/local/alx_report_api/monitoring_dashboard.php">
+            <i class="fas fa-chart-bar"></i> Database Intelligence
         </a>
     </div>
 </div>

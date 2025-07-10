@@ -1345,8 +1345,11 @@ body {
         <a href="<?php echo $CFG->wwwroot; ?>/local/alx_report_api/control_center.php">
             <i class="fas fa-arrow-left"></i> Back to Control Center
         </a>
+        <a href="<?php echo $CFG->wwwroot; ?>/local/alx_report_api/monitoring_dashboard.php">
+            <i class="fas fa-chart-bar"></i> Database Intelligence
+        </a>
         <a href="<?php echo $CFG->wwwroot; ?>/local/alx_report_api/advanced_monitoring.php">
-            <i class="fas fa-chart-line"></i> API Analytics
+            <i class="fas fa-chart-line"></i> API Performance & Security
         </a>
     </div>
 </div>
