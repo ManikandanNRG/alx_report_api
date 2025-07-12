@@ -60,6 +60,13 @@ if ($hassiteconfig) {
 
     // Add other monitoring pages
     $ADMIN->add('localplugins', new admin_externalpage(
+        'local_alx_report_api_unified_monitoring',
+        '🚀 Unified Tactical Dashboard',
+        $CFG->wwwroot . '/local/alx_report_api/unified_monitoring_dashboard.php',
+        'moodle/site:config'
+    ));
+
+    $ADMIN->add('localplugins', new admin_externalpage(
         'local_alx_report_api_monitoring',
         '📊 Standard Monitoring',
         $CFG->wwwroot . '/local/alx_report_api/monitoring_dashboard.php',
@@ -230,6 +237,11 @@ if ($hassiteconfig) {
         $CFG->wwwroot . '/admin/webservice/service_functions.php';
 
     $quicklinks_list = '<ul style="list-style: none; padding: 0; margin: 0;">
+        <li style="margin: 10px 0; padding: 10px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-left: 4px solid #667eea; border-radius: 4px;">
+            <a href="' . $CFG->wwwroot . '/local/alx_report_api/unified_monitoring_dashboard.php" style="text-decoration: none; color: white; font-weight: 600;">
+                🚀 Unified Tactical Dashboard <span style="background: rgba(255,255,255,0.2); padding: 2px 6px; border-radius: 4px; font-size: 10px; margin-left: 8px;">NEW</span>
+            </a>
+        </li>
         <li style="margin: 10px 0; padding: 10px; background: #f8f9fa; border-left: 4px solid #007cba; border-radius: 4px;">
             <a href="' . $CFG->wwwroot . '/admin/webservice/tokens.php" style="text-decoration: none; color: #007cba; font-weight: 500;">
                 🔑 ' . get_string('managetokens', 'local_alx_report_api') . '
@@ -247,7 +259,7 @@ if ($hassiteconfig) {
         </li>
         <li style="margin: 10px 0; padding: 10px; background: #f8f9fa; border-left: 4px solid #007cba; border-radius: 4px;">
             <a href="' . $CFG->wwwroot . '/local/alx_report_api/monitoring_dashboard.php" style="text-decoration: none; color: #007cba; font-weight: 500;">
-                📈 Monitoring Dashboard
+                📈 Standard Monitoring Dashboard
             </a>
         </li>
     </ul>';

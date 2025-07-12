@@ -1510,6 +1510,11 @@ input[type="checkbox"]:disabled {
             </div>
             <div class="card-body">
                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px;">
+                    <a href="<?php echo $CFG->wwwroot; ?>/local/alx_report_api/unified_monitoring_dashboard.php" class="btn-modern btn-primary" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none; position: relative; overflow: hidden;">
+                        <i class="fas fa-tachometer-alt"></i>
+                        <strong>🚀 Unified Tactical Dashboard</strong>
+                        <div style="position: absolute; top: 8px; right: 8px; background: rgba(255,255,255,0.2); padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 600;">NEW</div>
+                    </a>
                     <a href="<?php echo $CFG->wwwroot; ?>/local/alx_report_api/auto_sync_status.php" class="btn-modern btn-info">
                         <i class="fas fa-sync-alt"></i>
                         Auto-Sync Intelligence
