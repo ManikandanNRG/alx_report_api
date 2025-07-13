@@ -2114,15 +2114,20 @@ function local_alx_report_api_send_alert($alert_type, $severity, $message, $data
     $success = true;
     
     // Send email alerts
-    foreach ($recipients as $recipient) {
-        if (!empty($recipient['email'])) {
-            $email_sent = local_alx_report_api_send_email_alert($recipient, $alert);
-            if (!$email_sent) {
-                $success = false;
+    $email_enabled = get_config('local_alx_report_api', 'enable_email_alerts');
+    if ($email_enabled) {
+        foreach ($recipients as $recipient) {
+            if (!empty($recipient['email'])) {
+                $email_sent = local_alx_report_api_send_email_alert($recipient, $alert);
+                if (!$email_sent) {
+                    $success = false;
+                }
             }
         }
-        
-        // Send SMS if configured and high severity
+    }
+    
+    // Send SMS if configured and high severity
+    foreach ($recipients as $recipient) {
         if (!empty($recipient['phone']) && in_array($severity, ['high', 'critical'])) {
             $sms_enabled = get_config('local_alx_report_api', 'enable_sms_alerts');
             if ($sms_enabled) {

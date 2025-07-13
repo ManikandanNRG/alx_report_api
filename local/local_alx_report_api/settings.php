@@ -50,6 +50,14 @@ if ($hassiteconfig) {
         'moodle/site:config'
     ));
 
+    // Add export data page
+    $ADMIN->add('localplugins', new admin_externalpage(
+        'local_alx_report_api_export',
+        '📊 Export API Report',
+        $CFG->wwwroot . '/local/alx_report_api/export_data.php',
+        'moodle/site:config'
+    ));
+
     // Add historical trends dashboard
     $ADMIN->add('localplugins', new admin_externalpage(
         'local_alx_report_api_trends',
@@ -92,6 +100,22 @@ if ($hassiteconfig) {
         'local_alx_report_api_company_settings',
         get_string('company_settings_title', 'local_alx_report_api'),
         new moodle_url('/local/alx_report_api/company_settings.php'),
+        'moodle/site:config'
+    ));
+
+    // Add test alerts page
+    $ADMIN->add('localplugins', new admin_externalpage(
+        'local_alx_report_api_test_alerts',
+        '🧪 Test Alert System',
+        $CFG->wwwroot . '/local/alx_report_api/test_alerts.php',
+        'moodle/site:config'
+    ));
+
+    // Add system performance monitoring
+    $ADMIN->add('localplugins', new admin_externalpage(
+        'local_alx_report_api_system_performance',
+        '⚡ System Performance',
+        $CFG->wwwroot . '/local/alx_report_api/system_performance.php',
         'moodle/site:config'
     ));
 

@@ -28,13 +28,14 @@ require_once(__DIR__ . '/../../config.php');
 require_once($CFG->libdir . '/adminlib.php');
 require_once(__DIR__ . '/lib.php');
 
-// Require admin login
-admin_externalpage_setup('local_alx_report_api_settings');
+// Require admin login and use proper admin page setup
+admin_externalpage_setup('local_alx_report_api_test_alerts');
 
 // Page setup
 $PAGE->set_url('/local/alx_report_api/test_alerts.php');
 $PAGE->set_title('ALX Report API - Test Alerts');
 $PAGE->set_heading('Test Alert System');
+$PAGE->set_pagelayout('admin');
 
 // Handle form submission
 $action = optional_param('action', '', PARAM_ALPHA);

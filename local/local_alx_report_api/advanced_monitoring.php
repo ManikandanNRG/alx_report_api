@@ -34,6 +34,210 @@ $PAGE->set_url('/local/alx_report_api/advanced_monitoring.php');
 $PAGE->set_title('API Performance & Security - ALX Report API');
 $PAGE->set_heading('API Performance & Security Dashboard');
 
+// Handle POST requests for Quick Actions
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
+    $action = optional_param('action', '', PARAM_TEXT);
+    
+    switch ($action) {
+        case 'clear_cache':
+            try {
+                // Clear various caches that might affect API performance
+                $cache_cleared = [];
+                
+                // Clear application cache
+                try {
+                    cache_helper::purge_by_event('local_alx_report_api');
+                    $cache_cleared[] = 'Application cache';
+                } catch (Exception $e) {
+                    // Continue if specific cache doesn't exist
+                }
+                
+                // Clear configuration cache
+                try {
+                    cache_helper::purge_by_definition('core', 'config');
+                    $cache_cleared[] = 'Configuration cache';
+                } catch (Exception $e) {
+                    // Continue if fails
+                }
+                
+                // Clear database query cache
+                try {
+                    cache_helper::purge_by_definition('core', 'databasemeta');
+                    $cache_cleared[] = 'Database metadata cache';
+                } catch (Exception $e) {
+                    // Continue if fails
+                }
+                
+                // Clear language cache
+                try {
+                    cache_helper::purge_by_definition('core', 'string');
+                    $cache_cleared[] = 'Language cache';
+                } catch (Exception $e) {
+                    // Continue if fails
+                }
+                
+                // Clear all caches if we have permission
+                if (has_capability('moodle/site:config', context_system::instance())) {
+                    try {
+                        purge_all_caches();
+                        $cache_cleared[] = 'All system caches';
+                    } catch (Exception $e) {
+                        // Continue if fails
+                    }
+                }
+                
+                $message = 'Cache cleared successfully! Cleared: ' . implode(', ', $cache_cleared);
+                $cache_result = json_encode(['success' => true, 'message' => $message]);
+            } catch (Exception $e) {
+                $cache_result = json_encode(['success' => false, 'message' => 'Error clearing cache: ' . $e->getMessage()]);
+            }
+            
+            // Return JSON response for AJAX
+            if (!empty($_POST['ajax'])) {
+                header('Content-Type: application/json');
+                echo $cache_result;
+                exit;
+            }
+            break;
+            
+        case 'test_endpoints':
+            try {
+                $test_results = [];
+                $start_time = microtime(true);
+                
+                // Test 1: API Service Configuration
+                $service = $DB->get_record('external_services', ['shortname' => 'alx_report_api_custom']);
+                if (!$service) {
+                    $service = $DB->get_record('external_services', ['shortname' => 'alx_report_api']);
+                }
+                
+                if ($service) {
+                    $service_time = round((microtime(true) - $start_time) * 1000, 1);
+                    $test_results[] = [
+                        'endpoint' => 'API Service Configuration', 
+                        'status' => 'Active', 
+                        'response_time' => $service_time . 'ms',
+                        'details' => 'Service ID: ' . $service->id
+                    ];
+                } else {
+                    $test_results[] = [
+                        'endpoint' => 'API Service Configuration', 
+                        'status' => 'Error', 
+                        'response_time' => 'N/A',
+                        'details' => 'No service found'
+                    ];
+                }
+                
+                // Test 2: Database Connection
+                $db_start = microtime(true);
+                try {
+                    $company_count = $DB->count_records('company');
+                    $db_time = round((microtime(true) - $db_start) * 1000, 1);
+                    $test_results[] = [
+                        'endpoint' => 'Database Connection', 
+                        'status' => 'Active', 
+                        'response_time' => $db_time . 'ms',
+                        'details' => $company_count . ' companies found'
+                    ];
+                } catch (Exception $e) {
+                    $test_results[] = [
+                        'endpoint' => 'Database Connection', 
+                        'status' => 'Error', 
+                        'response_time' => 'N/A',
+                        'details' => $e->getMessage()
+                    ];
+                }
+                
+                // Test 3: Reporting Table
+                $reporting_start = microtime(true);
+                try {
+                    if ($DB->get_manager()->table_exists('local_alx_api_reporting')) {
+                        $reporting_count = $DB->count_records('local_alx_api_reporting');
+                        $reporting_time = round((microtime(true) - $reporting_start) * 1000, 1);
+                        $test_results[] = [
+                            'endpoint' => 'Reporting Table', 
+                            'status' => 'Active', 
+                            'response_time' => $reporting_time . 'ms',
+                            'details' => $reporting_count . ' records'
+                        ];
+                    } else {
+                        $test_results[] = [
+                            'endpoint' => 'Reporting Table', 
+                            'status' => 'Warning', 
+                            'response_time' => 'N/A',
+                            'details' => 'Table not found'
+                        ];
+                    }
+                } catch (Exception $e) {
+                    $test_results[] = [
+                        'endpoint' => 'Reporting Table', 
+                        'status' => 'Error', 
+                        'response_time' => 'N/A',
+                        'details' => $e->getMessage()
+                    ];
+                }
+                
+                // Test 4: API Tokens
+                $token_start = microtime(true);
+                try {
+                    $token_count = $DB->count_records('external_tokens');
+                    $token_time = round((microtime(true) - $token_start) * 1000, 1);
+                    $test_results[] = [
+                        'endpoint' => 'API Tokens', 
+                        'status' => 'Active', 
+                        'response_time' => $token_time . 'ms',
+                        'details' => $token_count . ' tokens configured'
+                    ];
+                } catch (Exception $e) {
+                    $test_results[] = [
+                        'endpoint' => 'API Tokens', 
+                        'status' => 'Error', 
+                        'response_time' => 'N/A',
+                        'details' => $e->getMessage()
+                    ];
+                }
+                
+                // Test 5: Cache System
+                $cache_start = microtime(true);
+                try {
+                    $cache_test_key = 'test_' . time();
+                    $cache = cache::make('core', 'config');
+                    $cache->set($cache_test_key, 'test_value');
+                    $cache_value = $cache->get($cache_test_key);
+                    $cache->delete($cache_test_key);
+                    
+                    $cache_time = round((microtime(true) - $cache_start) * 1000, 1);
+                    $status = ($cache_value === 'test_value') ? 'Active' : 'Warning';
+                    $test_results[] = [
+                        'endpoint' => 'Cache System', 
+                        'status' => $status, 
+                        'response_time' => $cache_time . 'ms',
+                        'details' => 'Read/write test completed'
+                    ];
+                } catch (Exception $e) {
+                    $test_results[] = [
+                        'endpoint' => 'Cache System', 
+                        'status' => 'Error', 
+                        'response_time' => 'N/A',
+                        'details' => $e->getMessage()
+                    ];
+                }
+                
+                $endpoint_result = json_encode(['success' => true, 'results' => $test_results]);
+            } catch (Exception $e) {
+                $endpoint_result = json_encode(['success' => false, 'message' => 'Error testing endpoints: ' . $e->getMessage()]);
+            }
+            
+            // Return JSON response for AJAX
+            if (!empty($_POST['ajax'])) {
+                header('Content-Type: application/json');
+                echo $endpoint_result;
+                exit;
+            }
+            break;
+    }
+}
+
 // Include modern font and icons
 echo '<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">';
 echo '<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">';
@@ -209,19 +413,6 @@ if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
             $hour_errors = 0;
         }
         
-        // If no real data exists, add some sample data for demonstration
-        if (!$has_data) {
-            if ($current_hour >= 9 && $current_hour <= 17) {
-                $hour_total = rand(5, 25);
-                $hour_success = $hour_total - rand(0, 2);
-                $hour_errors = $hour_total - $hour_success;
-            } else if ($current_hour >= 6 && $current_hour <= 22) {
-                $hour_total = rand(1, 8);
-                $hour_success = $hour_total - rand(0, 1);
-                $hour_errors = $hour_total - $hour_success;
-            }
-        }
-        
         $hourly_data[] = [
             'hour' => sprintf('%02d:00', $current_hour),
             'timestamp' => $hour_start,
@@ -235,41 +426,24 @@ if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
         $hourly_errors[] = $hour_errors;
     }
 } else {
-    // Generate default 24-hour data with clean time labels and sample data for demonstration
+    // No API logs table - initialize empty data
     for ($i = 23; $i >= 0; $i--) {
         $current_hour = date('H') - $i;
         if ($current_hour < 0) {
             $current_hour += 24;
         }
         
-        // Generate sample data for demonstration (when no real API logs exist)
-        $sample_incoming = 0;
-        $sample_success = 0;
-        $sample_errors = 0;
-        
-        // Add some realistic sample data during business hours (9 AM - 5 PM)
-        if ($current_hour >= 9 && $current_hour <= 17) {
-            $sample_incoming = rand(5, 25);
-            $sample_success = $sample_incoming - rand(0, 2);
-            $sample_errors = $sample_incoming - $sample_success;
-        } else if ($current_hour >= 6 && $current_hour <= 22) {
-            // Lower activity outside business hours
-            $sample_incoming = rand(1, 8);
-            $sample_success = $sample_incoming - rand(0, 1);
-            $sample_errors = $sample_incoming - $sample_success;
-        }
-        
         $hourly_data[] = [
             'hour' => sprintf('%02d:00', $current_hour),
             'timestamp' => mktime($current_hour, 0, 0),
-            'incoming' => $sample_incoming,
-            'success' => $sample_success,
-            'errors' => $sample_errors
+            'incoming' => 0,
+            'success' => 0,
+            'errors' => 0
         ];
         
-        $hourly_incoming[] = $sample_incoming;
-        $hourly_success[] = $sample_success;
-        $hourly_errors[] = $sample_errors;
+        $hourly_incoming[] = 0;
+        $hourly_success[] = 0;
+        $hourly_errors[] = 0;
     }
 }
 
@@ -284,7 +458,6 @@ foreach ($companies as $company) {
             $company_data = [
                 'name' => $company->name,
                 'shortname' => $company->shortname,
-                'api_mode' => 'Auto Intelligence', // Default mode
                 'requests_today' => 0,
                 'avg_response_time' => 0,
                 'cache_percentage' => 0,
@@ -362,17 +535,6 @@ foreach ($companies as $company) {
                 }
             }
             
-            // Simulate cache vs DB percentage (would need actual cache logging to be precise)
-            if ($company_data['requests_today'] > 0) {
-                $company_data['cache_percentage'] = rand(70, 90);
-                $company_data['db_percentage'] = 100 - $company_data['cache_percentage'];
-                $company_data['cache_status'] = $company_data['cache_percentage'] > 80 ? 'Cached' : 'Partial';
-            } else {
-                $company_data['cache_percentage'] = 0;
-                $company_data['db_percentage'] = 0;
-                $company_data['cache_status'] = 'None';
-            }
-            
             $company_intelligence[] = $company_data;
         }
     } catch (Exception $e) {
@@ -385,6 +547,164 @@ foreach ($companies as $company) {
 usort($company_intelligence, function($a, $b) {
     return $b['requests_today'] - $a['requests_today'];
 });
+
+// Calculate REAL response time distribution from API logs
+$response_time_distribution = [
+    'under_50ms' => 0,
+    '50_100ms' => 0,
+    '100_200ms' => 0,
+    'over_200ms' => 0,
+    'total_requests' => 0
+];
+
+try {
+    if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
+        $table_info = $DB->get_columns('local_alx_api_logs');
+        
+        if (isset($table_info['response_time'])) {
+            $time_field = isset($table_info['timeaccessed']) ? 'timeaccessed' : 'timecreated';
+            
+            // Get all response times from last 24 hours
+            $response_times_sql = "SELECT response_time 
+                                  FROM {local_alx_api_logs} 
+                                  WHERE {$time_field} >= ? AND response_time > 0";
+            $response_times = $DB->get_records_sql($response_times_sql, [$last_24h]);
+            
+            $response_time_distribution['total_requests'] = count($response_times);
+            
+            if ($response_time_distribution['total_requests'] > 0) {
+                foreach ($response_times as $record) {
+                    $time = $record->response_time;
+                    
+                    if ($time < 50) {
+                        $response_time_distribution['under_50ms']++;
+                    } elseif ($time < 100) {
+                        $response_time_distribution['50_100ms']++;
+                    } elseif ($time < 200) {
+                        $response_time_distribution['100_200ms']++;
+                    } else {
+                        $response_time_distribution['over_200ms']++;
+                    }
+                }
+            }
+        }
+    }
+} catch (Exception $e) {
+    error_log('Response time distribution error: ' . $e->getMessage());
+}
+
+// Calculate REAL rate limiting data
+$rate_limiting_real = [
+    'per_minute_limit' => 0,
+    'burst_limit' => 0,
+    'rate_window' => '24h',
+    'blocked_requests' => 0,
+    'peak_usage_hour' => 'N/A',
+    'monitoring_status' => 'Active'
+];
+
+try {
+    // Get per-minute limit from config
+    $rate_limiting_real['per_minute_limit'] = get_config('local_alx_report_api', 'per_minute_limit') ?: 0;
+    
+    // Get burst limit from config
+    $rate_limiting_real['burst_limit'] = get_config('local_alx_report_api', 'burst_limit') ?: 0;
+    
+    // Calculate blocked requests (requests that would exceed limits)
+    if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
+        $table_info = $DB->get_columns('local_alx_api_logs');
+        
+        if (isset($table_info['status'])) {
+            $time_field = isset($table_info['timeaccessed']) ? 'timeaccessed' : 'timecreated';
+            
+            // Count blocked/failed requests due to rate limiting
+            $blocked_sql = "SELECT COUNT(*) as blocked_count 
+                           FROM {local_alx_api_logs} 
+                           WHERE {$time_field} >= ? AND (status = ? OR status = ?)";
+            $blocked_result = $DB->get_record_sql($blocked_sql, [$today_start, 'rate_limited', 'blocked']);
+            $rate_limiting_real['blocked_requests'] = $blocked_result ? $blocked_result->blocked_count : 0;
+        }
+        
+        // Calculate REAL peak usage hour
+        $hourly_counts = [];
+        for ($hour = 0; $hour < 24; $hour++) {
+            $hour_start = mktime($hour, 0, 0);
+            $hour_end = $hour_start + 3600;
+            
+            $hour_count = $DB->count_records_select('local_alx_api_logs', 
+                "{$time_field} >= ? AND {$time_field} < ?", [$hour_start, $hour_end]);
+            
+            $hourly_counts[$hour] = $hour_count;
+        }
+        
+        if (!empty($hourly_counts)) {
+            $peak_hour = array_keys($hourly_counts, max($hourly_counts))[0];
+            $rate_limiting_real['peak_usage_hour'] = sprintf('%02d:00', $peak_hour);
+        }
+    }
+    
+    // Check monitoring status based on recent activity
+    $rate_limiting_real['monitoring_status'] = ($api_performance['total_calls_24h'] > 0) ? 'Active' : 'Idle';
+    
+} catch (Exception $e) {
+    error_log('Rate limiting real data error: ' . $e->getMessage());
+}
+
+// Calculate REAL company cache data
+foreach ($company_intelligence as $key => $company) {
+    try {
+        // Get real cache vs DB statistics for each company
+        $company_cache_data = [
+            'cache_hits' => 0,
+            'db_hits' => 0,
+            'total_requests' => $company['requests_today']
+        ];
+        
+        if ($DB->get_manager()->table_exists('local_alx_api_cache') && $company['requests_today'] > 0) {
+            // Count cache hits for this company today
+            $cache_hits_sql = "SELECT COUNT(*) as cache_hits 
+                              FROM {local_alx_api_cache} 
+                              WHERE companyid = ? AND created_at >= ?";
+            $cache_result = $DB->get_record_sql($cache_hits_sql, [$company['shortname'], $today_start]);
+            $company_cache_data['cache_hits'] = $cache_result ? $cache_result->cache_hits : 0;
+            
+            // Calculate DB hits (total requests - cache hits)
+            $company_cache_data['db_hits'] = max(0, $company['requests_today'] - $company_cache_data['cache_hits']);
+            
+            // Calculate real percentages
+            if ($company['requests_today'] > 0) {
+                $company_intelligence[$key]['cache_percentage'] = round(($company_cache_data['cache_hits'] / $company['requests_today']) * 100, 1);
+                $company_intelligence[$key]['db_percentage'] = round(($company_cache_data['db_hits'] / $company['requests_today']) * 100, 1);
+                
+                // Set real cache status
+                if ($company_intelligence[$key]['cache_percentage'] >= 80) {
+                    $company_intelligence[$key]['cache_status'] = 'Cached';
+                } elseif ($company_intelligence[$key]['cache_percentage'] >= 50) {
+                    $company_intelligence[$key]['cache_status'] = 'Partial';
+                } else {
+                    $company_intelligence[$key]['cache_status'] = 'Direct';
+                }
+            }
+        } else {
+            // No cache data available - all requests go to DB
+            $company_intelligence[$key]['cache_percentage'] = 0;
+            $company_intelligence[$key]['db_percentage'] = 100;
+            $company_intelligence[$key]['cache_status'] = 'Direct';
+        }
+        
+        // Determine real API response mode based on company settings
+        $api_settings = $DB->get_record('local_alx_api_settings', ['companyid' => $company['shortname']]);
+        if ($api_settings) {
+            $company_intelligence[$key]['api_mode'] = 'Configured';
+        } else {
+            $company_intelligence[$key]['api_mode'] = 'Default';
+        }
+        
+    } catch (Exception $e) {
+        error_log('Company cache data error for ' . $company['name'] . ': ' . $e->getMessage());
+        // Keep original placeholder values on error
+    }
+}
 
 ?>
 
@@ -500,19 +820,35 @@ usort($company_intelligence, function($a, $b) {
                     </div>
                     <div class="api-stat-item">
                         <span class="api-stat-label">< 50ms</span>
-                        <span class="api-stat-value">25% of requests</span>
+                        <span class="api-stat-value"><?php 
+                            echo $response_time_distribution['total_requests'] > 0 ? 
+                                round(($response_time_distribution['under_50ms'] / $response_time_distribution['total_requests']) * 100, 1) . '% of requests' : 
+                                'No data available';
+                        ?></span>
                     </div>
                     <div class="api-stat-item">
                         <span class="api-stat-label">50-100ms</span>
-                        <span class="api-stat-value">60% of requests</span>
+                        <span class="api-stat-value"><?php 
+                            echo $response_time_distribution['total_requests'] > 0 ? 
+                                round(($response_time_distribution['50_100ms'] / $response_time_distribution['total_requests']) * 100, 1) . '% of requests' : 
+                                'No data available';
+                        ?></span>
                     </div>
                     <div class="api-stat-item">
                         <span class="api-stat-label">100-200ms</span>
-                        <span class="api-stat-value">13% of requests</span>
+                        <span class="api-stat-value"><?php 
+                            echo $response_time_distribution['total_requests'] > 0 ? 
+                                round(($response_time_distribution['100_200ms'] / $response_time_distribution['total_requests']) * 100, 1) . '% of requests' : 
+                                'No data available';
+                        ?></span>
                     </div>
                     <div class="api-stat-item">
                         <span class="api-stat-label">> 200ms</span>
-                        <span class="api-stat-value">2% of requests</span>
+                        <span class="api-stat-value"><?php 
+                            echo $response_time_distribution['total_requests'] > 0 ? 
+                                round(($response_time_distribution['over_200ms'] / $response_time_distribution['total_requests']) * 100, 1) . '% of requests' : 
+                                'No data available';
+                        ?></span>
                     </div>
                 </div>
             </div>
@@ -595,15 +931,15 @@ usort($company_intelligence, function($a, $b) {
                             </div>
                             <div class="api-rate-item">
                                 <span class="api-rate-label">Per Minute</span>
-                                <span class="api-rate-value">0 req</span>
+                                <span class="api-rate-value"><?php echo $rate_limiting_real['per_minute_limit']; ?> req</span>
                             </div>
                             <div class="api-rate-item">
                                 <span class="api-rate-label">Burst Limit</span>
-                                <span class="api-rate-value">32 req</span>
+                                <span class="api-rate-value"><?php echo $rate_limiting_real['burst_limit']; ?> req</span>
                             </div>
                             <div class="api-rate-item">
                                 <span class="api-rate-label">Rate Window</span>
-                                <span class="api-rate-value">24h</span>
+                                <span class="api-rate-value"><?php echo $rate_limiting_real['rate_window']; ?></span>
                             </div>
                         </div>
                     </div>
@@ -645,15 +981,15 @@ usort($company_intelligence, function($a, $b) {
                             </div>
                             <div class="api-rate-item">
                                 <span class="api-rate-label">Blocked Requests</span>
-                                <span class="api-rate-value">0</span>
+                                <span class="api-rate-value"><?php echo $rate_limiting_real['blocked_requests']; ?></span>
                             </div>
                             <div class="api-rate-item">
                                 <span class="api-rate-label">Peak Usage Hour</span>
-                                <span class="api-rate-value">14:00</span>
+                                <span class="api-rate-value"><?php echo $rate_limiting_real['peak_usage_hour']; ?></span>
                             </div>
                             <div class="api-rate-item">
                                 <span class="api-rate-label">Monitoring Status</span>
-                                <span class="api-rate-value success">Active</span>
+                                <span class="api-rate-value <?php echo $rate_limiting_real['monitoring_status'] === 'Active' ? 'success' : 'warning'; ?>"><?php echo $rate_limiting_real['monitoring_status']; ?></span>
                             </div>
                         </div>
                     </div>
@@ -768,37 +1104,13 @@ usort($company_intelligence, function($a, $b) {
                     <i class="fas fa-key"></i>
                     Generate New Token
                 </a>
-                <button class="api-action-btn" onclick="blockSuspiciousIPs()">
-                    <i class="fas fa-ban"></i>
-                    Block Suspicious IP
-                </button>
                 <a href="test_alerts.php" class="api-action-btn">
                     <i class="fas fa-envelope"></i>
                     Send Security Alert
                 </a>
-                <button class="api-action-btn" onclick="updateRateLimits()">
-                    <i class="fas fa-cog"></i>
-                    Update Rate Limits
-                </button>
-                <button class="api-action-btn" onclick="runSecurityScan()">
-                    <i class="fas fa-search"></i>
-                    Run Security Scan
-                </button>
-                <button class="api-action-btn" onclick="performanceBenchmark()">
-                    <i class="fas fa-chart-line"></i>
-                    Performance Benchmark
-                </button>
                 <button class="api-action-btn" onclick="testAllEndpoints()">
                     <i class="fas fa-vial"></i>
                     Test All Endpoints
-                </button>
-                <a href="advanced_monitoring.php" class="api-action-btn">
-                    <i class="fas fa-file-alt"></i>
-                    Download Logs
-                </a>
-                <button class="api-action-btn" onclick="restartApiService()">
-                    <i class="fas fa-power-off"></i>
-                    Restart API Service
                 </button>
             </div>
         </div>
@@ -926,50 +1238,88 @@ const requestFlowChart = new Chart(requestFlowCtx, {
 // Quick Action Functions
 function clearApiCache() {
     if (confirm('Are you sure you want to clear the API cache?')) {
-        alert('API cache cleared successfully!');
-        location.reload();
-    }
-}
-
-function blockSuspiciousIPs() {
-    if (confirm('Do you want to block suspicious IP addresses?')) {
-        alert('Suspicious IPs blocked successfully!');
-        location.reload();
-    }
-}
-
-function updateRateLimits() {
-    if (confirm('Do you want to update rate limits?')) {
-        alert('Rate limits updated successfully!');
-        location.reload();
-    }
-}
-
-function runSecurityScan() {
-    if (confirm('Do you want to run a security scan?')) {
-        alert('Security scan completed successfully!');
-        location.reload();
-    }
-}
-
-function performanceBenchmark() {
-    if (confirm('Do you want to run performance benchmarks?')) {
-        alert('Performance benchmark completed successfully!');
-        location.reload();
+        // Show loading state
+        const button = event.target;
+        const originalText = button.innerHTML;
+        button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Clearing...';
+        button.disabled = true;
+        
+        // Make AJAX request
+        fetch(window.location.href, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: 'action=clear_cache&ajax=1&sesskey=' + M.cfg.sesskey
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('✅ ' + data.message);
+                location.reload();
+            } else {
+                alert('❌ ' + data.message);
+                button.innerHTML = originalText;
+                button.disabled = false;
+            }
+        })
+        .catch(error => {
+            alert('❌ Error clearing cache: ' + error.message);
+            button.innerHTML = originalText;
+            button.disabled = false;
+        });
     }
 }
 
 function testAllEndpoints() {
     if (confirm('Do you want to test all API endpoints?')) {
-        alert('All endpoints tested successfully!');
-        location.reload();
-    }
-}
-
-function restartApiService() {
-    if (confirm('Are you sure you want to restart the API service?')) {
-        alert('API service restarted successfully!');
-        location.reload();
+        // Show loading state
+        const button = event.target;
+        const originalText = button.innerHTML;
+        button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Testing...';
+        button.disabled = true;
+        
+        // Make AJAX request
+        fetch(window.location.href, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: 'action=test_endpoints&ajax=1&sesskey=' + M.cfg.sesskey
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                let resultMessage = '🔍 Endpoint Test Results:\n\n';
+                data.results.forEach(result => {
+                    let statusIcon;
+                    switch(result.status) {
+                        case 'Active': statusIcon = '✅'; break;
+                        case 'Warning': statusIcon = '⚠️'; break;
+                        case 'Error': statusIcon = '❌'; break;
+                        default: statusIcon = '❓'; break;
+                    }
+                    resultMessage += `${statusIcon} ${result.endpoint}:\n`;
+                    resultMessage += `   Status: ${result.status}\n`;
+                    resultMessage += `   Response Time: ${result.response_time}\n`;
+                    if (result.details) {
+                        resultMessage += `   Details: ${result.details}\n`;
+                    }
+                    resultMessage += '\n';
+                });
+                alert(resultMessage);
+                location.reload();
+            } else {
+                alert('❌ ' + data.message);
+                button.innerHTML = originalText;
+                button.disabled = false;
+            }
+        })
+        .catch(error => {
+            alert('❌ Error testing endpoints: ' + error.message);
+            button.innerHTML = originalText;
+            button.disabled = false;
+        });
     }
 }
 </script>
