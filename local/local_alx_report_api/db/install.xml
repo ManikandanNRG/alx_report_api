@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="UTF-8" ?>
-<XMLDB PATH="local/alx_report_api/db" VERSION="20240115" COMMENT="XMLDB file for Moodle local/alx_report_api"
+<XMLDB PATH="local/alx_report_api/db" VERSION="20240628"
+    COMMENT="XMLDB file for Moodle local/alx_report_api"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
     xsi:noNamespaceSchemaLocation="../../../lib/xmldb/xmldb.xsd"
 >

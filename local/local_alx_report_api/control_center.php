@@ -1112,8 +1112,7 @@ input[type="checkbox"]:disabled {
                         }
                         ?>
                         
-                        <?php if ($has_api_data): ?>
-                        <!-- Response Time with Progress Bar -->
+                        <!-- Response Time with Progress Bar - Always visible -->
                         <div style="margin-bottom: 20px;">
                             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                                 <strong style="color: white;">Response Time</strong>
@@ -1127,7 +1126,7 @@ input[type="checkbox"]:disabled {
                             </div>
                         </div>
 
-                        <!-- Success Rate with Progress Bar -->
+                        <!-- Success Rate with Progress Bar - Always visible -->
                         <div style="margin-bottom: 20px;">
                             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                                 <strong style="color: white;">Success Rate</strong>
@@ -1138,13 +1137,14 @@ input[type="checkbox"]:disabled {
                             </div>
                         </div>
 
-                        <!-- Mini Chart Container -->
+                        <!-- Mini Chart Container - Always visible -->
                         <div style="margin-bottom: 20px;">
                             <canvas id="api-performance-chart" width="300" height="100" style="max-width: 100%;"></canvas>
                         </div>
 
-                        <!-- Performance Metrics Grid -->
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 48px;">
+                        <?php if ($has_api_data): ?>
+                        <!-- Performance Metrics Grid - Only when there's data -->
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 20px;">
                             <div style="text-align: center; padding: 12px; background: rgba(255,255,255,0.1); border-radius: 8px;">
                                 <div style="font-size: 20px; font-weight: 700; color: #4ade80;"><?php echo $api_analytics['summary']['calls_per_hour']; ?></div>
                                 <div style="font-size: 12px; color: rgba(255,255,255,0.8);">Calls/Hour</div>
@@ -1154,34 +1154,16 @@ input[type="checkbox"]:disabled {
                                 <div style="font-size: 12px; color: rgba(255,255,255,0.8);">Unique Users</div>
                             </div>
                         </div>
-                        
                         <?php else: ?>
-                        <!-- No Data State -->
-                        <div style="text-align: center; padding: 40px 20px;">
-                            <div style="font-size: 48px; margin-bottom: 16px; opacity: 0.5;">📊</div>
-                            <h4 style="color: white; margin-bottom: 8px;">No API Activity Yet</h4>
-                            <p style="color: rgba(255,255,255,0.7); margin-bottom: 20px; font-size: 14px;">
-                                Create API tokens and start making calls to see performance metrics here.
-                            </p>
-                            <div style="background: rgba(255,255,255,0.1); padding: 16px; border-radius: 8px; margin-bottom: 20px;">
-                                <div style="font-size: 14px; color: rgba(255,255,255,0.8); margin-bottom: 8px;">
-                                    <strong>To get started:</strong>
-                                </div>
-                                <div style="font-size: 13px; color: rgba(255,255,255,0.7); text-align: left;">
-                                    1. Configure web services<br>
-                                    2. Create API tokens<br>
-                                    3. Make your first API call
-                                </div>
+                        <!-- No Data State - Show metrics with zeros -->
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 20px;">
+                            <div style="text-align: center; padding: 12px; background: rgba(255,255,255,0.1); border-radius: 8px;">
+                                <div style="font-size: 20px; font-weight: 700; color: #94a3b8;">0</div>
+                                <div style="font-size: 12px; color: rgba(255,255,255,0.8);">Calls/Hour</div>
                             </div>
-                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 32px;">
-                                <div style="text-align: center; padding: 12px; background: rgba(255,255,255,0.1); border-radius: 8px;">
-                                    <div style="font-size: 20px; font-weight: 700; color: #94a3b8;">0</div>
-                                    <div style="font-size: 12px; color: rgba(255,255,255,0.8);">Calls/Hour</div>
-                                </div>
-                                <div style="text-align: center; padding: 12px; background: rgba(255,255,255,0.1); border-radius: 8px;">
-                                    <div style="font-size: 20px; font-weight: 700; color: #94a3b8;">0</div>
-                                    <div style="font-size: 12px; color: rgba(255,255,255,0.8);">Unique Users</div>
-                                </div>
+                            <div style="text-align: center; padding: 12px; background: rgba(255,255,255,0.1); border-radius: 8px;">
+                                <div style="font-size: 20px; font-weight: 700; color: #94a3b8;">0</div>
+                                <div style="font-size: 12px; color: rgba(255,255,255,0.8);">Unique Users</div>
                             </div>
                         </div>
                         <?php endif; ?>

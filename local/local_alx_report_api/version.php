@@ -25,7 +25,7 @@
 defined('MOODLE_INTERNAL') || die();
 
 $plugin->component = 'local_alx_report_api';
-$plugin->version = 2024062404; // YYYYMMDDHH - Added MEDIUM PRIORITY features: Historical trends, bottleneck identification, auth logging
+$plugin->version   = 2024071601; // Updated version to trigger upgrade and fix missing tables
 $plugin->requires = 2022112800; // Moodle 4.2.6
 $plugin->maturity = MATURITY_STABLE;
-$plugin->release = '1.3.0'; 
+$plugin->release = '1.4.1'; // Fixed table creation issue 
