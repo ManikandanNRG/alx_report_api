@@ -128,5 +128,26 @@
         <INDEX NAME="cache_timestamp" UNIQUE="false" FIELDS="cache_timestamp"/>
       </INDEXES>
     </TABLE>
+    <TABLE NAME="local_alx_api_alerts" COMMENT="Alert system for monitoring API security and performance issues">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="alert_type" TYPE="char" LENGTH="50" NOTNULL="true" COMMENT="Type of alert (performance, security, rate_limit, etc.)"/>
+        <FIELD NAME="severity" TYPE="char" LENGTH="20" NOTNULL="true" COMMENT="Alert severity level (low, medium, high, critical)"/>
+        <FIELD NAME="message" TYPE="text" NOTNULL="true" COMMENT="Human-readable alert message"/>
+        <FIELD NAME="alert_data" TYPE="text" NOTNULL="false" COMMENT="Additional alert data in JSON format"/>
+        <FIELD NAME="hostname" TYPE="char" LENGTH="255" NOTNULL="false" COMMENT="Hostname where alert was generated"/>
+        <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" COMMENT="Timestamp when alert was created"/>
+        <FIELD NAME="resolved" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="0" COMMENT="Whether alert has been resolved (0=open, 1=resolved)"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="alert_type" UNIQUE="false" FIELDS="alert_type"/>
+        <INDEX NAME="severity" UNIQUE="false" FIELDS="severity"/>
+        <INDEX NAME="timecreated" UNIQUE="false" FIELDS="timecreated"/>
+        <INDEX NAME="resolved" UNIQUE="false" FIELDS="resolved"/>
+      </INDEXES>
+    </TABLE>
   </TABLES>
 </XMLDB> 
