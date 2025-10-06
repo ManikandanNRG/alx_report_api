@@ -168,6 +168,7 @@ class local_alx_report_api_external extends external_api {
 
     /**
      * Check if the user has exceeded the daily rate limit.
+     * Uses per-company rate limit if set, otherwise falls back to global default.
      *
      * @param int $userid User ID to check
      * @throws moodle_exception If rate limit is exceeded
@@ -175,7 +176,21 @@ class local_alx_report_api_external extends external_api {
     private static function check_rate_limit($userid) {
         global $DB, $CFG;
         
-        $rate_limit = get_config('local_alx_report_api', 'rate_limit') ?: 100;
+        // Get user's company ID
+        $companyid = self::get_user_company($userid);
+        
+        // Get company-specific rate limit or global default
+        $company_rate_limit = null;
+        if ($companyid) {
+            $company_rate_limit = local_alx_report_api_get_company_setting($companyid, 'rate_limit', null);
+        }
+        
+        // Use company rate limit if set, otherwise use global default
+        if ($company_rate_limit !== null && $company_rate_limit > 0) {
+            $rate_limit = (int)$company_rate_limit;
+        } else {
+            $rate_limit = get_config('local_alx_report_api', 'rate_limit') ?: 100;
+        }
         
         // Calculate start of today (midnight)
         $today_start = mktime(0, 0, 0, date('n'), date('j'), date('Y'));
@@ -311,6 +326,7 @@ class local_alx_report_api_external extends external_api {
         $endpoint = 'get_course_progress';
         $error_message = null;
         $record_count = 0;
+        $is_rate_limit_error = false;  // Track if error is rate limit
 
         try {
             // 1. Validate parameters
@@ -371,6 +387,13 @@ class local_alx_report_api_external extends external_api {
 
         } catch (Exception $e) {
             $error_message = $e->getMessage();
+            
+            // Check if this is a rate limit error
+            if (strpos($error_message, 'rate limit') !== false || 
+                (isset($e->errorcode) && $e->errorcode === 'ratelimitexceeded')) {
+                $is_rate_limit_error = true;
+            }
+            
             throw $e;
         } finally {
             // Calculate response time in milliseconds
@@ -391,21 +414,23 @@ class local_alx_report_api_external extends external_api {
                 }
             }
             
-            // Log API call with response time using the enhanced logging function
-            $userid = isset($USER) && $USER->id > 0 ? $USER->id : 0;
-            local_alx_report_api_log_api_call(
-                $userid,
-                $company_shortname, 
-                $endpoint,
-                $record_count,
-                $error_message,
-                $response_time_ms,
-                [
-                    'limit' => $limit,
-                    'offset' => $offset,
-                    'request_method' => $_SERVER['REQUEST_METHOD'] ?? 'unknown'
-                ]
-            );
+            // Only log if NOT a rate limit error (FIX: Don't log rate-limited requests)
+            if (!$is_rate_limit_error) {
+                $userid = isset($USER) && $USER->id > 0 ? $USER->id : 0;
+                local_alx_report_api_log_api_call(
+                    $userid,
+                    $company_shortname, 
+                    $endpoint,
+                    $record_count,
+                    $error_message,
+                    $response_time_ms,
+                    [
+                        'limit' => $limit,
+                        'offset' => $offset,
+                        'request_method' => $_SERVER['REQUEST_METHOD'] ?? 'unknown'
+                    ]
+                );
+            }
         }
     }
 
@@ -476,15 +501,14 @@ class local_alx_report_api_external extends external_api {
         $sync_mode = local_alx_report_api_determine_sync_mode($companyid, $token);
         self::debug_log("Sync mode determined: $sync_mode");
         
-        // Check cache first for incremental syncs
+        // Check cache for ALL sync modes (universal caching)
         $cache_key = "api_response_{$companyid}_{$limit}_{$offset}_{$sync_mode}";
-        if ($sync_mode === 'incremental') {
-            $cached_data = local_alx_report_api_cache_get($cache_key, $companyid);
-            if ($cached_data !== false) {
-                self::debug_log("Cache hit - returning cached data");
-                return $cached_data;
-            }
+        $cached_data = local_alx_report_api_cache_get($cache_key, $companyid);
+        if ($cached_data !== false) {
+            self::debug_log("Cache hit - returning cached data for sync mode: {$sync_mode}");
+            return $cached_data;
         }
+        self::debug_log("Cache miss - will fetch fresh data");
 
         // Get enabled courses for this company
         $enabled_courses = local_alx_report_api_get_enabled_courses($companyid);
@@ -682,10 +706,14 @@ class local_alx_report_api_external extends external_api {
             local_alx_report_api_update_sync_status($companyid, $token, count($result), 'success');
         }
         
-        // Cache the result for incremental syncs
-        if ($sync_mode === 'incremental' && !empty($result)) {
-            local_alx_report_api_cache_set($cache_key, $companyid, $result, 1800); // 30 minutes cache
-        }
+        // Universal cache storage for ALL sync modes
+        // Get TTL from company settings or use default (60 minutes)
+        $cache_ttl_minutes = local_alx_report_api_get_company_setting($companyid, 'cache_ttl_minutes', 60);
+        $cache_ttl = $cache_ttl_minutes * 60; // Convert to seconds
+        
+        // Cache all results (including empty) for all sync modes
+        local_alx_report_api_cache_set($cache_key, $companyid, $result, $cache_ttl);
+        self::debug_log("Cached result for sync mode: {$sync_mode}, TTL: {$cache_ttl} seconds");
         
         // Handle empty results - must return empty array for Moodle external API compliance
         if (empty($result)) {

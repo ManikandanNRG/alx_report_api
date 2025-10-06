@@ -1457,7 +1457,7 @@ input[type="checkbox"]:disabled {
                         
                         // Save incremental sync settings
                         $sync_settings = [
-                            'sync_mode', 'sync_window_hours', 'first_sync_hours', 'cache_enabled', 'cache_ttl_minutes'
+                            'sync_mode', 'sync_window_hours', 'first_sync_hours', 'cache_enabled', 'cache_ttl_minutes', 'rate_limit'
                         ];
                         
                         foreach ($sync_settings as $setting) {
@@ -1466,6 +1466,25 @@ input[type="checkbox"]:disabled {
                                 // Validate sync_mode values: 0=Auto, 1=Always Incremental, 2=Always Full, 3=Disabled
                                 if (!in_array($value, [0, 1, 2, 3])) {
                                     $value = 0; // Default to Auto if invalid value
+                                }
+                            } else if ($setting === 'rate_limit') {
+                                // Handle rate_limit specially - allow empty value to use global default
+                                $value = optional_param($setting, '', PARAM_INT);
+                                if ($value !== '' && $value !== null) {
+                                    // Validate rate limit range (1-10000)
+                                    $value = (int)$value;
+                                    if ($value < 1 || $value > 10000) {
+                                        $errors[] = 'Rate limit must be between 1 and 10000';
+                                        continue;
+                                    }
+                                } else {
+                                    // Empty value - delete the setting to use global default
+                                    $DB->delete_records('local_alx_api_settings', [
+                                        'companyid' => $companyid,
+                                        'setting_name' => 'rate_limit'
+                                    ]);
+                                    $success_count++;
+                                    continue;
                                 }
                             } else {
                                 $value = optional_param($setting, 0, PARAM_INT);
@@ -1720,6 +1739,55 @@ input[type="checkbox"]:disabled {
                                         <small id="cache_ttl_help" style="color: #6c757d; display: block; margin-top: 8px;">
                                             <strong>Default: 60 minutes</strong> - How long to cache responses (1-1440 minutes)
                                         </small>
+                                    </div>
+                                    
+                                    <!-- Rate Limit -->
+                                    <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; border: 2px solid #e9ecef;">
+                                        <label style="display: block; font-weight: 600; color: #495057; margin-bottom: 10px;">
+                                            <i class="fas fa-tachometer-alt"></i> Rate Limit (Requests/Day)
+                                        </label>
+                                        <?php 
+                                        $global_rate_limit = get_config('local_alx_report_api', 'rate_limit') ?: 100;
+                                        $company_rate_limit = isset($current_settings['rate_limit']) ? $current_settings['rate_limit'] : '';
+                                        ?>
+                                        <input type="number" name="rate_limit" id="rate_limit" min="1" max="10000" 
+                                               value="<?php echo $company_rate_limit; ?>"
+                                               placeholder="Using global default: <?php echo $global_rate_limit; ?>"
+                                               style="width: 100%; padding: 10px; border: 2px solid #e9ecef; border-radius: 6px;">
+                                        <small style="color: #6c757d; display: block; margin-top: 8px;">
+                                            <strong>Default: <?php echo $global_rate_limit; ?> requests/day</strong> - Maximum API requests per day for this company. Leave empty to use global default.
+                                        </small>
+                                        <?php
+                                        // Show current usage
+                                        $today_start = mktime(0, 0, 0, date('n'), date('j'), date('Y'));
+                                        if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
+                                            $table_info = $DB->get_columns('local_alx_api_logs');
+                                            $time_field = isset($table_info['timeaccessed']) ? 'timeaccessed' : 'timecreated';
+                                            
+                                            // Get company users
+                                            $company_users = $DB->get_records('company_users', ['companyid' => $companyid], '', 'userid');
+                                            if (!empty($company_users)) {
+                                                $userids = array_keys($company_users);
+                                                list($user_sql, $user_params) = $DB->get_in_or_equal($userids, SQL_PARAMS_NAMED);
+                                                
+                                                $sql = "SELECT COUNT(*) as request_count
+                                                        FROM {local_alx_api_logs}
+                                                        WHERE userid {$user_sql} AND {$time_field} >= :today_start";
+                                                $params = array_merge($user_params, ['today_start' => $today_start]);
+                                                
+                                                $usage = $DB->get_record_sql($sql, $params);
+                                                if ($usage && $usage->request_count > 0) {
+                                                    $effective_limit = $company_rate_limit !== '' ? $company_rate_limit : $global_rate_limit;
+                                                    $percentage = $effective_limit > 0 ? round(($usage->request_count / $effective_limit) * 100) : 0;
+                                                    $alert_class = $percentage >= 80 ? 'alert-warning' : 'alert-info';
+                                                    
+                                                    echo '<div class="alert ' . $alert_class . '" style="margin-top: 10px; padding: 10px; border-radius: 6px;">';
+                                                    echo '<strong>Today\'s Usage:</strong> ' . $usage->request_count . ' / ' . $effective_limit . ' requests (' . $percentage . '%)';
+                                                    echo '</div>';
+                                                }
+                                            }
+                                        }
+                                        ?>
                                     </div>
                                 </div>
                                 
