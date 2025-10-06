@@ -103,6 +103,14 @@ if ($hassiteconfig) {
         'moodle/site:config'
     ));
 
+    // Add manual sync page
+    $ADMIN->add('localplugins', new admin_externalpage(
+        'local_alx_report_api_sync',
+        '🔄 Manual Data Sync',
+        new moodle_url('/local/alx_report_api/sync_reporting_data.php'),
+        'moodle/site:config'
+    ));
+
     // Add test alerts page
     $ADMIN->add('localplugins', new admin_externalpage(
         'local_alx_report_api_test_alerts',

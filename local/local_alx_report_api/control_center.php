@@ -1059,7 +1059,7 @@ input[type="checkbox"]:disabled {
                     <div class="card-header" style="border-bottom: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.1);">
                         <h3 class="card-title" style="color: white; margin: 0;">
                             <i class="fas fa-tachometer-alt"></i>
-                            API Performance
+                            API Status
                         </h3>
                         <p class="card-subtitle" style="color: rgba(255,255,255,0.8); margin: 4px 0 0 0;">Real-time performance metrics with visual indicators</p>
                     </div>
@@ -1295,7 +1295,7 @@ input[type="checkbox"]:disabled {
                     <div class="card-header" style="border-bottom: 1px solid rgba(31,41,55,0.1); background: rgba(255,255,255,0.1);">
                         <h3 class="card-title" style="color: #1f2937; margin: 0;">
                             <i class="fas fa-shield-alt" style="color: #10b981;"></i>
-                            Security Status
+                            Performance Status
                         </h3>
                         <p class="card-subtitle" style="color: #6b7280; margin: 4px 0 0 0;">API security and access control</p>
                     </div>
@@ -1374,8 +1374,8 @@ input[type="checkbox"]:disabled {
             </div>
         </div>
 
-        <!-- Quick Actions -->
-        <div class="dashboard-card" style="margin-top: 20px; margin-bottom: 0;">
+        <!-- Quick Actions (Hidden) -->
+        <div class="dashboard-card" style="margin-top: 20px; margin-bottom: 0; display: none;">
             <div class="card-header" style="background: linear-gradient(135deg, #28a745, #20c997); color: white; padding: 16px 20px 12px 20px;">
                 <h3 class="card-title" style="color: white; margin: 0;">
                     <i class="fas fa-bolt"></i>

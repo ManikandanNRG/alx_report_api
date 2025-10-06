@@ -503,6 +503,79 @@ if ($action === 'populate' && $confirm) {
         
         echo '<script>showCompletion(`' . $summary . '`);</script>';
         echo '</div>'; // Close progress-data div
+        
+        // Add detailed results tables like in sync page
+        echo '<div style="max-width: 1400px; margin: 30px auto; padding: 0 20px;">';
+        
+        // Get affected companies details
+        $affected_companies_sql = "SELECT c.id, c.name, COUNT(r.id) as record_count
+                                   FROM {local_alx_api_reporting} r
+                                   JOIN {company} c ON c.id = r.companyid
+                                   WHERE r.last_updated >= ?
+                                   GROUP BY c.id, c.name
+                                   ORDER BY record_count DESC";
+        $affected_companies = $DB->get_records_sql($affected_companies_sql, [$start_time]);
+        
+        if (!empty($affected_companies)) {
+            echo '<h2 style="margin: 30px 0 20px 0; color: #2d3748; font-size: 24px; font-weight: 600;"><i class="fas fa-building"></i> Affected Companies</h2>';
+            echo '<div style="background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 20px;">';
+            echo '<table style="width: 100%; border-collapse: collapse;">';
+            echo '<thead style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">';
+            echo '<tr>';
+            echo '<th style="padding: 16px; text-align: left; font-weight: 600;">Company Name</th>';
+            echo '<th style="padding: 16px; text-align: center; font-weight: 600;">Records Populated</th>';
+            echo '<th style="padding: 16px; text-align: center; font-weight: 600;">Status</th>';
+            echo '</tr>';
+            echo '</thead>';
+            echo '<tbody>';
+            foreach ($affected_companies as $company) {
+                echo '<tr style="border-bottom: 1px solid #e2e8f0;">';
+                echo '<td style="padding: 14px 16px; color: #2d3748;">' . htmlspecialchars($company->name) . '</td>';
+                echo '<td style="padding: 14px 16px; text-align: center; font-weight: 600; color: #2d3748;">' . $company->record_count . '</td>';
+                echo '<td style="padding: 14px 16px; text-align: center;"><span style="display: inline-block; padding: 4px 12px; background: #d1fae5; color: #065f46; border-radius: 12px; font-size: 12px; font-weight: 600;">✓ Populated</span></td>';
+                echo '</tr>';
+            }
+            echo '</tbody>';
+            echo '</table>';
+            echo '</div>';
+        }
+        
+        // Get affected courses details
+        $affected_courses_sql = "SELECT c.id, c.fullname, COUNT(r.id) as record_count
+                                FROM {local_alx_api_reporting} r
+                                JOIN {course} c ON c.id = r.courseid
+                                WHERE r.last_updated >= ?
+                                GROUP BY c.id, c.fullname
+                                ORDER BY record_count DESC
+                                LIMIT 20";
+        $affected_courses = $DB->get_records_sql($affected_courses_sql, [$start_time]);
+        
+        if (!empty($affected_courses)) {
+            echo '<h2 style="margin: 30px 0 20px 0; color: #2d3748; font-size: 24px; font-weight: 600;"><i class="fas fa-book"></i> Top Affected Courses</h2>';
+            echo '<div style="background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 20px;">';
+            echo '<table style="width: 100%; border-collapse: collapse;">';
+            echo '<thead style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">';
+            echo '<tr>';
+            echo '<th style="padding: 16px; text-align: left; font-weight: 600;">Course Name</th>';
+            echo '<th style="padding: 16px; text-align: center; font-weight: 600;">Records Populated</th>';
+            echo '<th style="padding: 16px; text-align: center; font-weight: 600;">Status</th>';
+            echo '</tr>';
+            echo '</thead>';
+            echo '<tbody>';
+            foreach ($affected_courses as $course) {
+                echo '<tr style="border-bottom: 1px solid #e2e8f0;">';
+                echo '<td style="padding: 14px 16px; color: #2d3748;">' . htmlspecialchars($course->fullname) . '</td>';
+                echo '<td style="padding: 14px 16px; text-align: center; font-weight: 600; color: #2d3748;">' . $course->record_count . '</td>';
+                echo '<td style="padding: 14px 16px; text-align: center;"><span style="display: inline-block; padding: 4px 12px; background: #d1fae5; color: #065f46; border-radius: 12px; font-size: 12px; font-weight: 600;">✓ Populated</span></td>';
+                echo '</tr>';
+            }
+            echo '</tbody>';
+            echo '</table>';
+            echo '</div>';
+        }
+        
+        echo '</div>';
+        
         echo $OUTPUT->footer();
     } else {
         echo "\n" . str_repeat('-', 50) . "\n";
@@ -576,9 +649,84 @@ if ($is_cli) {
 // Web interface
 echo $OUTPUT->header();
 
+// Modern UI styling
+echo '<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">';
+echo '<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">';
+
+echo '<style>
+* { font-family: "Inter", sans-serif; }
+.populate-container {
+    max-width: 1400px;
+    margin: 20px auto;
+    padding: 0 20px;
+}
+.page-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 40px;
+    border-radius: 12px;
+    margin-bottom: 30px;
+    box-shadow: 0 10px 30px rgba(102, 126, 234, 0.3);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.dashboard-card {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    overflow: hidden;
+    margin-bottom: 20px;
+    width: 100%;
+}
+.card-header {
+    padding: 20px 24px;
+    border-bottom: 1px solid #e2e8f0;
+    background: linear-gradient(to right, #f8f9fa, #ffffff);
+}
+.card-title {
+    margin: 0 0 8px 0;
+    color: #2d3748;
+    font-size: 20px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.card-subtitle {
+    margin: 0;
+    color: #64748b;
+    font-size: 14px;
+    font-weight: 400;
+}
+.card-body {
+    padding: 24px;
+}
+.btn-populate {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 12px 24px;
+    border: none;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s;
+    font-size: 15px;
+}
+.btn-populate:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 16px rgba(102, 126, 234, 0.4);
+}
+.btn-danger {
+    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+}
+</style>';
+
 // Check if reporting table exists
 if (!$DB->get_manager()->table_exists('local_alx_api_reporting')) {
-    echo $OUTPUT->notification('Reporting table does not exist. Please upgrade the plugin first.', 'error');
+    echo '<div class="populate-container">';
+    echo '<div class="alert alert-danger">Reporting table does not exist. Please upgrade the plugin first.</div>';
+    echo '</div>';
     echo $OUTPUT->footer();
     exit;
 }
@@ -587,49 +735,66 @@ if (!$DB->get_manager()->table_exists('local_alx_api_reporting')) {
 $total_reporting_records = $DB->count_records('local_alx_api_reporting');
 $companies = local_alx_report_api_get_companies();
 
-echo $OUTPUT->heading('ALX Report API - Populate Reporting Table');
+echo '<div class="populate-container">';
 
-echo '<div class="alert alert-info">';
-echo '<h4>About This Tool</h4>';
-echo '<p>This tool populates the reporting table with existing data from your main database. ';
+echo '<div class="page-header">';
+echo '<div>';
+echo '<h1 style="margin: 0 0 10px 0; font-size: 32px;"><i class="fas fa-database"></i> Populate Reporting Table</h1>';
+echo '<p style="margin: 0; opacity: 0.9; font-size: 16px;">Initial data population for the reporting table</p>';
+echo '</div>';
+echo '<a href="control_center.php" style="background: rgba(255,255,255,0.2); color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 600; transition: all 0.3s; display: inline-flex; align-items: center; gap: 8px;" onmouseover="this.style.background=\'rgba(255,255,255,0.3)\'" onmouseout="this.style.background=\'rgba(255,255,255,0.2)\'">';
+echo '<i class="fas fa-arrow-left"></i> Back to Control Center';
+echo '</a>';
+echo '</div>';
+
+echo '<div class="dashboard-card">';
+echo '<div class="card-header">';
+echo '<h3 class="card-title"><i class="fas fa-info-circle"></i> About This Tool</h3>';
+echo '<p class="card-subtitle">Important information about the population process</p>';
+echo '</div>';
+echo '<div class="card-body">';
+echo '<p style="margin: 0 0 10px 0;">This tool populates the reporting table with existing data from your main database. ';
 echo 'This is required for the combined approach (separate reporting table + incremental sync) to work properly.</p>';
-echo '<p><strong>Important:</strong> This process may take several minutes depending on your data size. ';
+echo '<p style="margin: 0; color: #f59e0b; font-weight: 500;"><i class="fas fa-exclamation-triangle"></i> <strong>Important:</strong> This process may take several minutes depending on your data size. ';
 echo 'It is recommended to run this during off-peak hours.</p>';
+echo '</div>';
 echo '</div>';
 
 // Show current status
-echo '<div class="card mb-4">';
-echo '<div class="card-header"><h5>Current Status</h5></div>';
-echo '<div class="card-body">';
-echo '<div class="row">';
-echo '<div class="col-md-6">';
-echo '<p><strong>Companies Available:</strong> ' . count($companies) . '</p>';
-echo '<p><strong>Reporting Records:</strong> ' . number_format($total_reporting_records) . '</p>';
+echo '<div class="dashboard-card">';
+echo '<div class="card-header">';
+echo '<h3 class="card-title"><i class="fas fa-chart-bar"></i> Current Status</h3>';
+echo '<p class="card-subtitle">Overview of your reporting table data</p>';
 echo '</div>';
-echo '<div class="col-md-6">';
+echo '<div class="card-body">';
+echo '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px;">';
+echo '<div><strong style="color: #64748b;">Companies Available:</strong><br><span style="font-size: 24px; color: #2d3748; font-weight: 600;">' . count($companies) . '</span></div>';
+echo '<div><strong style="color: #64748b;">Reporting Records:</strong><br><span style="font-size: 24px; color: #2d3748; font-weight: 600;">' . number_format($total_reporting_records) . '</span></div>';
 if ($total_reporting_records > 0) {
     $last_update = $DB->get_field_select('local_alx_api_reporting', 'MAX(last_updated)', '1=1');
-    echo '<p><strong>Last Update:</strong> ' . ($last_update ? date('Y-m-d H:i:s', $last_update) : 'Never') . '</p>';
-    echo '<p><strong>Status:</strong> <span class="badge badge-success">Data Available</span></p>';
+    echo '<div><strong style="color: #64748b;">Last Update:</strong><br><span style="font-size: 18px; color: #2d3748;">' . ($last_update ? date('Y-m-d H:i:s', $last_update) : 'Never') . '</span></div>';
+    echo '<div><strong style="color: #64748b;">Status:</strong><br><span style="display: inline-block; padding: 6px 12px; background: #d1fae5; color: #065f46; border-radius: 12px; font-size: 14px; font-weight: 600; margin-top: 8px;">✓ Data Available</span></div>';
 } else {
-    echo '<p><strong>Last Update:</strong> Never</p>';
-    echo '<p><strong>Status:</strong> <span class="badge badge-warning">No Data</span></p>';
+    echo '<div><strong style="color: #64748b;">Last Update:</strong><br><span style="font-size: 18px; color: #2d3748;">Never</span></div>';
+    echo '<div><strong style="color: #64748b;">Status:</strong><br><span style="display: inline-block; padding: 6px 12px; background: #fef3c7; color: #92400e; border-radius: 12px; font-size: 14px; font-weight: 600; margin-top: 8px;">⚠ No Data</span></div>';
 }
-echo '</div>';
 echo '</div>';
 echo '</div>';
 echo '</div>';
 
 // Population form
-echo '<div class="card">';
-echo '<div class="card-header"><h5>Populate Reporting Table</h5></div>';
+echo '<div class="dashboard-card">';
+echo '<div class="card-header">';
+echo '<h3 class="card-title"><i class="fas fa-play-circle"></i> Populate Reporting Table</h3>';
+echo '<p class="card-subtitle">Select companies and configure population settings</p>';
+echo '</div>';
 echo '<div class="card-body">';
 
 echo '<form method="post" id="populate-form">';
 echo '<input type="hidden" name="action" value="populate">';
 
-echo '<div class="form-group">';
-echo '<label for="company-dropdown">Companies to Populate:</label>';
+echo '<div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px;">';
+echo '<label for="company-dropdown" style="display: block; margin-bottom: 12px; font-weight: 600; color: #495057;">Companies to Populate:</label>';
 echo '<div class="company-dropdown-container">';
 echo '<div class="company-dropdown-toggle" id="company-dropdown" onclick="toggleDropdown()">';
 echo '<span class="selection-text" id="dropdown-text">Select Companies</span>';
@@ -669,32 +834,33 @@ foreach ($companies as $company) {
 
 echo '</div>';
 echo '</div>';
-echo '<small class="form-text text-muted">Click to select one or more companies. You can select multiple companies at once.</small>';
+echo '<small style="color: #64748b; font-size: 13px;">Click to select one or more companies. You can select multiple companies at once.</small>';
 echo '</div>';
 
-echo '<div class="form-group">';
-echo '<label for="batch_size">Batch Size:</label>';
-echo '<input type="number" name="batch_size" id="batch_size" class="form-control" value="1000" min="100" max="5000">';
-echo '<small class="form-text text-muted">Number of records to process per batch. Larger batches are faster but use more memory.</small>';
+echo '<div style="margin-top: 20px;">';
+echo '<label for="batch_size" style="display: block; margin-bottom: 8px; font-weight: 600; color: #495057;">Batch Size:</label>';
+echo '<input type="number" name="batch_size" id="batch_size" value="1000" min="100" max="5000" style="width: 100%; padding: 10px 15px; border: 2px solid #e9ecef; border-radius: 8px; font-size: 15px;">';
+echo '<small style="color: #64748b; font-size: 13px;">Number of records to process per batch. Larger batches are faster but use more memory.</small>';
 echo '</div>';
 
-echo '<div class="form-check mb-3">';
-echo '<input type="checkbox" name="confirm" value="1" id="confirm" class="form-check-input" required>';
-echo '<label for="confirm" class="form-check-label">';
+echo '<div style="display: flex; align-items: center; gap: 8px; margin-top: 20px;">';
+echo '<input type="checkbox" name="confirm" value="1" id="confirm" required style="width: 18px; height: 18px;">';
+echo '<label for="confirm" style="margin: 0; color: #495057; font-weight: 500;">';
 echo 'I understand this process may take several minutes and should be run during off-peak hours.';
 echo '</label>';
 echo '</div>';
+echo '</div>';
 
 if ($total_reporting_records > 0) {
-    echo '<div class="alert alert-warning">';
-    echo '<strong>Warning:</strong> You already have ' . number_format($total_reporting_records) . ' records in the reporting table. ';
+    echo '<div style="background: #fef3c7; border-left: 4px solid #f59e0b; padding: 16px; border-radius: 8px; margin-top: 20px;">';
+    echo '<p style="margin: 0; color: #92400e;"><strong><i class="fas fa-exclamation-triangle"></i> Warning:</strong> You already have ' . number_format($total_reporting_records) . ' records in the reporting table. ';
     echo 'This process will add new records but will not update existing ones. ';
-    echo 'If you want to refresh existing data, you may need to clear the reporting table first.';
+    echo 'If you want to refresh existing data, you may need to clear the reporting table first.</p>';
     echo '</div>';
 }
 
-echo '<button type="submit" class="btn btn-primary btn-lg" id="populate-btn">';
-echo '<i class="fa fa-database"></i> Start Population Process';
+echo '<button type="submit" class="btn-populate" id="populate-btn" style="margin-top: 20px;">';
+echo '<i class="fas fa-database"></i> Start Population Process';
 echo '</button>';
 
 echo '</form>';
@@ -703,39 +869,42 @@ echo '</div>';
 
 // Add cleanup section
 if ($total_reporting_records > 0) {
-    echo '<div class="card mt-4" style="border-left: 4px solid #dc3545;">';
-    echo '<div class="card-header bg-danger"><h5 class="text-white mb-0">🗑️ Clear Reporting Table Data</h5></div>';
+    echo '<div class="dashboard-card" style="border-left: 4px solid #ef4444;">';
+    echo '<div class="card-header" style="background: linear-gradient(to right, #fee2e2, #ffffff);">';
+    echo '<h3 class="card-title" style="color: #dc2626;"><i class="fas fa-trash-alt"></i> Clear Reporting Table Data</h3>';
+    echo '<p class="card-subtitle" style="color: #991b1b;">Permanently delete data from the reporting table</p>';
+    echo '</div>';
     echo '<div class="card-body">';
     
-    echo '<div class="alert alert-warning">';
-    echo '<strong>⚠️ Warning:</strong> This action will permanently delete data from the reporting table. ';
-    echo 'This cannot be undone. Use with caution!';
+    echo '<div style="background: #fef3c7; border-left: 4px solid #f59e0b; padding: 16px; border-radius: 8px; margin-bottom: 20px;">';
+    echo '<p style="margin: 0; color: #92400e;"><strong><i class="fas fa-exclamation-triangle"></i> Warning:</strong> This action will permanently delete data from the reporting table. ';
+    echo 'This cannot be undone. Use with caution!</p>';
     echo '</div>';
     
     echo '<form method="post" id="cleanup-form">';
     echo '<input type="hidden" name="cleanup_action" value="clear">';
     
-    echo '<div class="form-group">';
-    echo '<label for="cleanup_companyid">Company to Clear:</label>';
-    echo '<select name="cleanup_companyid" id="cleanup_companyid" class="form-control">';
+    echo '<div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px;">';
+    echo '<label for="cleanup_companyid" style="display: block; margin-bottom: 8px; font-weight: 600; color: #495057;">Company to Clear:</label>';
+    echo '<select name="cleanup_companyid" id="cleanup_companyid" style="width: 100%; padding: 10px 15px; border: 2px solid #e9ecef; border-radius: 8px; font-size: 15px; background: white;">';
     echo '<option value="0">⚠️ All Companies (Clear Everything)</option>';
     foreach ($companies as $company) {
         $company_records = $DB->count_records('local_alx_api_reporting', ['companyid' => $company->id]);
         echo '<option value="' . $company->id . '">' . htmlspecialchars($company->name) . ' (' . number_format($company_records) . ' records)</option>';
     }
     echo '</select>';
-    echo '<small class="form-text text-muted">Select which company data to remove, or clear all data.</small>';
-    echo '</div>';
+    echo '<small style="color: #64748b; font-size: 13px; display: block; margin-top: 8px;">Select which company data to remove, or clear all data.</small>';
     
-    echo '<div class="form-check mb-3">';
-    echo '<input type="checkbox" name="cleanup_confirm" value="1" id="cleanup_confirm" class="form-check-input" required>';
-    echo '<label for="cleanup_confirm" class="form-check-label text-danger">';
-    echo '<strong>I understand this will permanently delete the selected data and cannot be undone.</strong>';
+    echo '<div style="display: flex; align-items: center; gap: 8px; margin-top: 20px;">';
+    echo '<input type="checkbox" name="cleanup_confirm" value="1" id="cleanup_confirm" required style="width: 18px; height: 18px;">';
+    echo '<label for="cleanup_confirm" style="margin: 0; color: #dc2626; font-weight: 600;">';
+    echo 'I understand this will permanently delete the selected data and cannot be undone.';
     echo '</label>';
     echo '</div>';
+    echo '</div>';
     
-    echo '<button type="submit" class="btn btn-danger" id="cleanup-btn">';
-    echo '<i class="fa fa-trash"></i> Clear Selected Data';
+    echo '<button type="submit" class="btn-populate btn-danger" id="cleanup-btn">';
+    echo '<i class="fas fa-trash"></i> Clear Selected Data';
     echo '</button>';
     
     echo '</form>';
@@ -743,31 +912,77 @@ if ($total_reporting_records > 0) {
     echo '</div>';
 }
 
-// Statistics by company
+// Statistics by company - Intelligence Dashboard Style
 if (!empty($companies) && $total_reporting_records > 0) {
-    echo '<div class="card mt-4">';
-    echo '<div class="card-header"><h5>Records by Company</h5></div>';
-    echo '<div class="card-body">';
-    echo '<div class="table-responsive">';
-    echo '<table class="table table-striped">';
-    echo '<thead><tr><th>Company</th><th>Total Records</th><th>Active Records</th><th>Last Updated</th></tr></thead>';
+    echo '<div class="dashboard-card">';
+    echo '<div class="card-header">';
+    echo '<h3 class="card-title"><i class="fas fa-building"></i> 📊 Complete Company Reporting Intelligence Dashboard</h3>';
+    echo '<p class="card-subtitle">Comprehensive overview of reporting records across all companies</p>';
+    echo '</div>';
+    echo '<div class="card-body" style="padding: 0; overflow-x: auto;">';
+    echo '<table style="width: 100%; border-collapse: collapse; font-size: 14px;">';
+    echo '<thead>';
+    echo '<tr style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">';
+    echo '<th style="padding: 16px; text-align: left; font-weight: 600; white-space: nowrap;">Company Name</th>';
+    echo '<th style="padding: 16px; text-align: center; font-weight: 600; white-space: nowrap;">Total Records</th>';
+    echo '<th style="padding: 16px; text-align: center; font-weight: 600; white-space: nowrap;">Active Records</th>';
+    echo '<th style="padding: 16px; text-align: center; font-weight: 600; white-space: nowrap;">Deleted Records</th>';
+    echo '<th style="padding: 16px; text-align: center; font-weight: 600; white-space: nowrap;">Active %</th>';
+    echo '<th style="padding: 16px; text-align: center; font-weight: 600; white-space: nowrap;">Last Updated</th>';
+    echo '<th style="padding: 16px; text-align: center; font-weight: 600; white-space: nowrap;">Status</th>';
+    echo '</tr>';
+    echo '</thead>';
     echo '<tbody>';
     
-    foreach ($companies as $company) {
-        $stats = local_alx_report_api_get_reporting_stats($company->id);
-        $last_update = $stats['last_update'] ? date('Y-m-d H:i:s', $stats['last_update']) : 'Never';
-        
+    if (empty($companies)) {
         echo '<tr>';
-        echo '<td>' . htmlspecialchars($company->name) . '</td>';
-        echo '<td>' . number_format($stats['total_records']) . '</td>';
-        echo '<td>' . number_format($stats['active_records']) . '</td>';
-        echo '<td>' . $last_update . '</td>';
+        echo '<td colspan="7" style="text-align: center; padding: 40px; color: #64748b;">No companies found.</td>';
         echo '</tr>';
+    } else {
+        foreach ($companies as $company) {
+            $stats = local_alx_report_api_get_reporting_stats($company->id);
+            $last_update = $stats['last_update'] ? date('Y-m-d H:i:s', $stats['last_update']) : 'Never';
+            $active_percentage = $stats['total_records'] > 0 ? round(($stats['active_records'] / $stats['total_records']) * 100, 1) : 0;
+            
+            // Determine status color
+            $status_color = '#10b981'; // green
+            $status_text = 'Healthy';
+            if ($stats['total_records'] == 0) {
+                $status_color = '#f59e0b'; // orange
+                $status_text = 'No Data';
+            } elseif ($active_percentage < 80) {
+                $status_color = '#ef4444'; // red
+                $status_text = 'Needs Cleanup';
+            }
+            
+            echo '<tr style="border-bottom: 1px solid #e2e8f0; transition: background 0.2s;">';
+            echo '<td style="padding: 16px; font-weight: 600; color: #2d3748;">' . htmlspecialchars($company->name) . '</td>';
+            echo '<td style="padding: 16px; text-align: center; color: #2d3748; font-weight: 600;">' . number_format($stats['total_records']) . '</td>';
+            echo '<td style="padding: 16px; text-align: center;">';
+            echo '<span style="display: inline-block; padding: 4px 12px; background: #d1fae5; color: #065f46; border-radius: 12px; font-size: 13px; font-weight: 600;">';
+            echo number_format($stats['active_records']);
+            echo '</span>';
+            echo '</td>';
+            echo '<td style="padding: 16px; text-align: center;">';
+            echo '<span style="display: inline-block; padding: 4px 12px; background: #fee2e2; color: #991b1b; border-radius: 12px; font-size: 13px; font-weight: 600;">';
+            echo number_format($stats['total_records'] - $stats['active_records']);
+            echo '</span>';
+            echo '</td>';
+            echo '<td style="padding: 16px; text-align: center; font-weight: 600; color: ' . ($active_percentage >= 90 ? '#10b981' : ($active_percentage >= 80 ? '#f59e0b' : '#ef4444')) . ';">';
+            echo $active_percentage . '%';
+            echo '</td>';
+            echo '<td style="padding: 16px; text-align: center; color: #64748b; font-size: 13px;">' . $last_update . '</td>';
+            echo '<td style="padding: 16px; text-align: center;">';
+            echo '<span style="display: inline-block; padding: 6px 12px; background: ' . $status_color . '20; color: ' . $status_color . '; border-radius: 12px; font-size: 13px; font-weight: 600;">';
+            echo $status_text;
+            echo '</span>';
+            echo '</td>';
+            echo '</tr>';
+        }
     }
     
     echo '</tbody>';
     echo '</table>';
-    echo '</div>';
     echo '</div>';
     echo '</div>';
 }
@@ -1158,4 +1373,5 @@ if (cleanupForm) {
 }
 </script>';
 
+echo '</div>'; // Close populate-container
 echo $OUTPUT->footer(); 
