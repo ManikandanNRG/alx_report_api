@@ -203,3 +203,976 @@ if ($DB->get_manager()->table_exists('local_alx_api_alerts')) {
     from { opacity: 0; transform: translateY(10px); }
     to { opacity: 1; transform: translateY(0); }
 }
+
+/* Metric Cards */
+.metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 20px;
+    margin-bottom: 30px;
+}
+
+.metric-card {
+    background: white;
+    border-radius: 12px;
+    padding: 24px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    text-align: center;
+    transition: all 0.3s;
+}
+
+.metric-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+}
+
+.metric-value {
+    font-size: 36px;
+    font-weight: 700;
+    color: #2d3748;
+    margin-bottom: 8px;
+}
+
+.metric-label {
+    color: #718096;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.metric-icon {
+    font-size: 24px;
+    margin-bottom: 12px;
+}
+
+/* Tables */
+.monitoring-table {
+    background: white;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    margin-bottom: 30px;
+}
+
+.monitoring-table table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.monitoring-table th {
+    background: #f7fafc;
+    padding: 16px;
+    text-align: left;
+    font-weight: 600;
+    color: #2d3748;
+    font-size: 14px;
+    border-bottom: 2px solid #e2e8f0;
+}
+
+.monitoring-table td {
+    padding: 16px;
+    border-bottom: 1px solid #e2e8f0;
+    color: #4a5568;
+    font-size: 14px;
+}
+
+.monitoring-table tr:hover {
+    background: #f7fafc;
+}
+
+/* Status Badges */
+.badge {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.badge-success {
+    background: #d4edda;
+    color: #155724;
+}
+
+.badge-warning {
+    background: #fff3cd;
+    color: #856404;
+}
+
+.badge-danger {
+    background: #f8d7da;
+    color: #721c24;
+}
+
+.badge-info {
+    background: #d1ecf1;
+    color: #0c5460;
+}
+
+.badge-default {
+    background: #e2e8f0;
+    color: #4a5568;
+}
+
+/* Chart Container */
+.chart-container {
+    background: white;
+    border-radius: 12px;
+    padding: 24px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    margin-bottom: 30px;
+}
+
+.chart-container h3 {
+    margin: 0 0 20px 0;
+    font-size: 18px;
+    font-weight: 600;
+    color: #2d3748;
+}
+
+/* Error Details Eye Icon */
+.error-eye {
+    cursor: pointer;
+    font-size: 16px;
+    color: #4a5568;
+    position: relative;
+}
+
+.error-eye:hover {
+    color: #2d3748;
+}
+
+.error-tooltip {
+    display: none;
+    position: absolute;
+    background: #2d3748;
+    color: white;
+    padding: 12px;
+    border-radius: 8px;
+    font-size: 12px;
+    z-index: 1000;
+    min-width: 200px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+}
+
+.error-eye:hover .error-tooltip {
+    display: block;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .monitoring-header {
+        flex-direction: column;
+        text-align: center;
+        gap: 16px;
+    }
+    
+    .tab-navigation {
+        flex-direction: column;
+    }
+    
+    .metrics-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .monitoring-table {
+        overflow-x: auto;
+    }
+}
+</style>
+
+<div class="monitoring-container">
+    <!-- Header -->
+    <div class="monitoring-header">
+        <div>
+            <h1>📊 Monitoring Dashboard</h1>
+            <p>Comprehensive monitoring for Auto-Sync, Performance, and Security</p>
+        </div>
+        <a href="control_center.php" class="back-button">
+            <i class="fas fa-arrow-left"></i> Back to Control Center
+        </a>
+    </div>
+
+    <!-- Tab Navigation -->
+    <div class="tab-navigation">
+        <button class="tab-button <?php echo $active_tab === 'autosync' ? 'active' : ''; ?>" onclick="switchTab('autosync')">
+            <i class="fas fa-sync"></i> Auto-Sync Intelligence
+        </button>
+        <button class="tab-button <?php echo $active_tab === 'performance' ? 'active' : ''; ?>" onclick="switchTab('performance')">
+            <i class="fas fa-tachometer-alt"></i> API Monitor
+        </button>
+        <button class="tab-button <?php echo $active_tab === 'security' ? 'active' : ''; ?>" onclick="switchTab('security')">
+            <i class="fas fa-shield-alt"></i> Security & Alerts
+        </button>
+    </div>
+
+    <!-- AUTO-SYNC TAB -->
+    <div id="autosync-tab" class="tab-content <?php echo $active_tab === 'autosync' ? 'active' : ''; ?>">
+        <!-- Metric Cards -->
+        <div class="metrics-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));">
+            <div class="metric-card">
+                <div class="metric-icon">🕐</div>
+                <div class="metric-value"><?php echo $last_sync ? date('H:i', $last_sync) : 'Never'; ?></div>
+                <div class="metric-label">Last Sync</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-icon">⏰</div>
+                <div class="metric-value"><?php echo $next_sync_time ? date('H:i', $next_sync_time) : 'N/A'; ?></div>
+                <div class="metric-label">Next Sync</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-icon">➕</div>
+                <div class="metric-value"><?php 
+                    // Get records created today
+                    $records_created = 0;
+                    if ($DB->get_manager()->table_exists('local_alx_api_reporting')) {
+                        $today_start = mktime(0, 0, 0);
+                        $table_info = $DB->get_columns('local_alx_api_reporting');
+                        if (isset($table_info['timecreated'])) {
+                            $records_created = $DB->count_records_select('local_alx_api_reporting', 
+                                'timecreated >= ?', [$today_start]);
+                        }
+                    }
+                    echo number_format($records_created);
+                ?></div>
+                <div class="metric-label">Records Created</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-icon">🔄</div>
+                <div class="metric-value"><?php 
+                    // Get records updated today
+                    $records_updated = 0;
+                    if ($DB->get_manager()->table_exists('local_alx_api_reporting')) {
+                        $today_start = mktime(0, 0, 0);
+                        $table_info = $DB->get_columns('local_alx_api_reporting');
+                        if (isset($table_info['timemodified'])) {
+                            $records_updated = $DB->count_records_select('local_alx_api_reporting', 
+                                'timemodified >= ? AND timecreated < ?', [$today_start, $today_start]);
+                        }
+                    }
+                    echo number_format($records_updated);
+                ?></div>
+                <div class="metric-label">Records Updated</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-icon">🏢</div>
+                <div class="metric-value"><?php echo $total_companies; ?></div>
+                <div class="metric-label">Total Companies</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-icon">✅</div>
+                <div class="metric-value"><?php echo $task_record && !$task_record->disabled ? 'Active' : 'Inactive'; ?></div>
+                <div class="metric-label">Sync Status</div>
+            </div>
+        </div>
+
+        <!-- Sync Trend Chart -->
+        <div class="chart-container">
+            <h3>📈 Sync Trends (Last 24 Hours)</h3>
+            <canvas id="syncTrendChart" height="80"></canvas>
+        </div>
+
+        <!-- Company Sync Status Table -->
+        <div class="monitoring-table">
+            <h3 style="padding: 20px 20px 0 20px; margin: 0; font-size: 18px; font-weight: 600;">Company Sync Status</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Company Name</th>
+                        <th>Total Records</th>
+                        <th>Created Today</th>
+                        <th>Updated Today</th>
+                        <th>Last Sync</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php 
+                    if (empty($companies)) {
+                        echo '<tr><td colspan="6" style="text-align: center; padding: 40px; color: #718096;">No companies found</td></tr>';
+                    } else {
+                        foreach ($companies as $company): 
+                            try {
+                                // Get company-specific data with error handling
+                                $company_records = 0;
+                                $created_today = 0;
+                                $updated_today = 0;
+                                $company_last_sync = 'Never';
+                                $sync_status = 'Unknown';
+                                
+                                if ($DB->get_manager()->table_exists('local_alx_api_reporting')) {
+                                    $table_info = $DB->get_columns('local_alx_api_reporting');
+                                    $today_start = mktime(0, 0, 0);
+                                    
+                                    // Check if required fields exist
+                                    if (isset($table_info['companyid'])) {
+                                        // Total records
+                                        if (isset($table_info['is_deleted'])) {
+                                            $company_records = $DB->count_records('local_alx_api_reporting', 
+                                                ['companyid' => $company->id, 'is_deleted' => 0]);
+                                        } else {
+                                            $company_records = $DB->count_records('local_alx_api_reporting', 
+                                                ['companyid' => $company->id]);
+                                        }
+                                        
+                                        // Created today
+                                        if (isset($table_info['timecreated'])) {
+                                            $created_today = $DB->count_records_select('local_alx_api_reporting', 
+                                                'companyid = ? AND timecreated >= ?', [$company->id, $today_start]);
+                                        }
+                                        
+                                        // Updated today
+                                        if (isset($table_info['timemodified'])) {
+                                            $updated_today = $DB->count_records_select('local_alx_api_reporting', 
+                                                'companyid = ? AND timemodified >= ? AND timecreated < ?', 
+                                                [$company->id, $today_start, $today_start]);
+                                        }
+                                        
+                                        // Last sync time for this company - try multiple fields
+                                        if (isset($table_info['last_updated'])) {
+                                            $last_record = $DB->get_record_sql(
+                                                "SELECT MAX(last_updated) as last_time FROM {local_alx_api_reporting} WHERE companyid = ?",
+                                                [$company->id]
+                                            );
+                                            if ($last_record && $last_record->last_time) {
+                                                $company_last_sync = date('H:i', $last_record->last_time);
+                                            }
+                                        } elseif (isset($table_info['timemodified'])) {
+                                            $last_record = $DB->get_record_sql(
+                                                "SELECT MAX(timemodified) as last_time FROM {local_alx_api_reporting} WHERE companyid = ?",
+                                                [$company->id]
+                                            );
+                                            if ($last_record && $last_record->last_time) {
+                                                $company_last_sync = date('H:i', $last_record->last_time);
+                                            }
+                                        } elseif (isset($table_info['timecreated'])) {
+                                            $last_record = $DB->get_record_sql(
+                                                "SELECT MAX(timecreated) as last_time FROM {local_alx_api_reporting} WHERE companyid = ?",
+                                                [$company->id]
+                                            );
+                                            if ($last_record && $last_record->last_time) {
+                                                $company_last_sync = date('H:i', $last_record->last_time);
+                                            }
+                                        }
+                                        
+                                        // Determine sync status
+                                        if ($created_today > 0 || $updated_today > 0) {
+                                            $sync_status = 'Active';
+                                        } elseif ($company_records > 0) {
+                                            $sync_status = 'Synced';
+                                        } else {
+                                            $sync_status = 'No Data';
+                                        }
+                                    }
+                                }
+                            } catch (Exception $e) {
+                                // If error, set defaults
+                                $company_records = 0;
+                                $created_today = 0;
+                                $updated_today = 0;
+                                $company_last_sync = 'Error';
+                                $sync_status = 'Error';
+                                error_log('Company sync data error for ' . $company->name . ': ' . $e->getMessage());
+                            }
+                    ?>
+                    <tr>
+                        <td><strong><?php echo htmlspecialchars($company->name); ?></strong></td>
+                        <td><?php echo number_format($company_records); ?></td>
+                        <td><?php echo $created_today; ?></td>
+                        <td><?php echo $updated_today; ?></td>
+                        <td><?php echo $company_last_sync; ?></td>
+                        <td><span class="badge badge-<?php 
+                            echo $sync_status === 'Active' ? 'success' : 
+                                 ($sync_status === 'Synced' ? 'info' : 
+                                 ($sync_status === 'Error' ? 'danger' : 'warning')); 
+                        ?>"><?php echo $sync_status; ?></span></td>
+                    </tr>
+                    <?php 
+                        endforeach;
+                    }
+                    ?>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- PERFORMANCE TAB -->
+    <div id="performance-tab" class="tab-content <?php echo $active_tab === 'performance' ? 'active' : ''; ?>">
+        <!-- Metric Cards -->
+        <div class="metrics-grid" style="grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));">
+            <div class="metric-card">
+                <div class="metric-icon">📞</div>
+                <div class="metric-value"><?php echo number_format($api_calls_today); ?></div>
+                <div class="metric-label">API Calls (24h)</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-icon">⚡</div>
+                <div class="metric-value"><?php echo $avg_response_time; ?>s</div>
+                <div class="metric-label">Avg Response Time</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-icon">✅</div>
+                <div class="metric-value"><?php echo $success_rate; ?>%</div>
+                <div class="metric-label">Success Rate</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-icon">💾</div>
+                <div class="metric-value"><?php echo $cache_hit_rate; ?>%</div>
+                <div class="metric-label">Cache Hit Rate</div>
+            </div>
+        </div>
+
+        <!-- 24h API Request Flow Chart -->
+        <div class="chart-container">
+            <h3>📊 24h API Request Flow (3-Line Chart)</h3>
+            <canvas id="performanceChart" height="80"></canvas>
+        </div>
+
+        <!-- Company Performance Table (Updated with all required columns) -->
+        <div class="monitoring-table">
+            <h3 style="padding: 20px 20px 0 20px; margin: 0; font-size: 18px; font-weight: 600;">Company API Performance</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Company Name</th>
+                        <th>Response Mode</th>
+                        <th>Max Req/Day</th>
+                        <th>No of Req (Today)</th>
+                        <th>Response Time</th>
+                        <th>Data Source</th>
+                        <th>Success Rate</th>
+                        <th>Last Request</th>
+                        <th>Total Request</th>
+                        <th>Average Request</th>
+                        <th>Error Details</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php 
+                    if (empty($companies)) {
+                        echo '<tr><td colspan="11" style="text-align: center; padding: 40px; color: #718096;">No companies found</td></tr>';
+                    } else {
+                        foreach ($companies as $company):
+                        try { 
+                        // Get company performance data
+                        $today_start = mktime(0, 0, 0);
+                        $company_calls = 0;
+                        $company_response_time = '0.0s';
+                        $last_request_time = 'Never';
+                        $error_count = 0;
+                        
+                        if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
+                            $table_info = $DB->get_columns('local_alx_api_logs');
+                            $time_field = isset($table_info['timeaccessed']) ? 'timeaccessed' : 'timecreated';
+                            
+                            // Get calls today for this company
+                            $company_calls = $DB->count_records_select('local_alx_api_logs', 
+                                "{$time_field} >= ? AND company_shortname = ?", [$today_start, $company->shortname]);
+                            
+                            // Get average response time
+                            if (isset($table_info['response_time_ms'])) {
+                                $avg_result = $DB->get_record_sql(
+                                    "SELECT AVG(response_time_ms) as avg_time FROM {local_alx_api_logs} 
+                                     WHERE {$time_field} >= ? AND company_shortname = ? AND response_time_ms > 0", 
+                                    [$today_start, $company->shortname]
+                                );
+                                if ($avg_result && $avg_result->avg_time && $avg_result->avg_time > 0) {
+                                    $company_response_time = round($avg_result->avg_time / 1000, 2) . 's';
+                                } else {
+                                    // Try to get any response time from all time
+                                    $all_time_avg = $DB->get_record_sql(
+                                        "SELECT AVG(response_time_ms) as avg_time FROM {local_alx_api_logs} 
+                                         WHERE company_shortname = ? AND response_time_ms > 0", 
+                                        [$company->shortname]
+                                    );
+                                    $company_response_time = ($all_time_avg && $all_time_avg->avg_time > 0) ? 
+                                        round($all_time_avg->avg_time / 1000, 2) . 's' : 'N/A';
+                                }
+                            }
+                            
+                            // Get last request time
+                            $last_log = $DB->get_record_sql(
+                                "SELECT MAX({$time_field}) as last_time FROM {local_alx_api_logs} WHERE company_shortname = ?",
+                                [$company->shortname]
+                            );
+                            if ($last_log && $last_log->last_time) {
+                                $minutes_ago = round((time() - $last_log->last_time) / 60);
+                                $last_request_time = $minutes_ago . 'm ago';
+                            }
+                            
+                            // Get error count
+                            if (isset($table_info['error_message'])) {
+                                $error_count = $DB->count_records_select('local_alx_api_logs',
+                                    "{$time_field} >= ? AND company_shortname = ? AND error_message IS NOT NULL",
+                                    [$today_start, $company->shortname]
+                                );
+                            }
+                        }
+                        
+                        // Calculate success rate
+                        $company_success_rate = $company_calls > 0 ? 
+                            round((($company_calls - $error_count) / $company_calls) * 100, 1) . '%' : '100%';
+                        
+                        // Get response mode from company settings
+                        $company_settings = local_alx_report_api_get_company_settings($company->id);
+                        $sync_mode_value = isset($company_settings['sync_mode']) ? $company_settings['sync_mode'] : 0;
+                        
+                        // Map sync_mode values: 0=Auto, 1=Incremental, 2=Full, 3=Disabled
+                        $response_mode_map = [
+                            0 => 'auto',
+                            1 => 'incremental',
+                            2 => 'full',
+                            3 => 'disabled'
+                        ];
+                        $response_mode = isset($response_mode_map[$sync_mode_value]) ? $response_mode_map[$sync_mode_value] : 'auto';
+                        
+                        // Get max requests per day from company settings (rate_limit)
+                        $max_req_per_day = isset($company_settings['rate_limit']) ? $company_settings['rate_limit'] : get_config('local_alx_report_api', 'rate_limit');
+                        if (empty($max_req_per_day)) {
+                            $max_req_per_day = 1000; // Default fallback
+                        }
+                        
+                        // Get total requests (all time) for this company
+                        $total_requests = 0;
+                        if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
+                            $total_requests = $DB->count_records_select('local_alx_api_logs', 
+                                'company_shortname = ?', [$company->shortname]);
+                        }
+                        
+                        // Calculate average requests per day (last 30 days)
+                        $avg_requests = 0;
+                        if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
+                            $thirty_days_ago = time() - (30 * 86400);
+                            $table_info = $DB->get_columns('local_alx_api_logs');
+                            $time_field = isset($table_info['timeaccessed']) ? 'timeaccessed' : 'timecreated';
+                            $recent_requests = $DB->count_records_select('local_alx_api_logs', 
+                                "{$time_field} >= ? AND company_shortname = ?", [$thirty_days_ago, $company->shortname]);
+                            $avg_requests = round($recent_requests / 30);
+                        }
+                        
+                        // Check data source (cache or direct)
+                        $data_source = 'Direct';
+                        if ($DB->get_manager()->table_exists('local_alx_api_cache')) {
+                            $cache_exists = $DB->record_exists_select('local_alx_api_cache',
+                                'companyid = ? AND expires_at > ?', [$company->id, time()]);
+                            if ($cache_exists) {
+                                $data_source = 'Cache';
+                            }
+                        }
+                        
+                        // Map response mode to badge color
+                        $response_mode_badge_map = [
+                            'auto' => 'info',           // Blue
+                            'incremental' => 'warning', // Orange
+                            'full' => 'success',        // Green
+                            'disabled' => 'danger'      // Red
+                        ];
+                        $badge_class = isset($response_mode_badge_map[$response_mode]) ? 
+                            $response_mode_badge_map[$response_mode] : 'info';
+                    ?>
+                    <tr>
+                        <td><strong><?php echo htmlspecialchars($company->name); ?></strong></td>
+                        <td><span class="badge badge-<?php echo $badge_class; ?>"><?php echo strtoupper($response_mode); ?></span></td>
+                        <td><?php echo number_format($max_req_per_day); ?></td>
+                        <td><?php echo number_format($company_calls); ?></td>
+                        <td><?php echo $company_response_time; ?></td>
+                        <td><span class="badge badge-<?php echo $data_source === 'Cache' ? 'success' : 'default'; ?>"><?php echo $data_source; ?></span></td>
+                        <td><?php echo $company_success_rate; ?></td>
+                        <td><?php echo $last_request_time; ?></td>
+                        <td><?php echo number_format($total_requests); ?></td>
+                        <td><?php echo number_format($avg_requests); ?>/day</td>
+                        <td>
+                            <?php if ($error_count > 0): ?>
+                            <span class="error-eye">
+                                👁️
+                                <div class="error-tooltip">
+                                    <strong>Errors Today:</strong> <?php echo $error_count; ?><br>
+                                    <small>Click to view details</small>
+                                </div>
+                            </span>
+                            <?php else: ?>
+                            <span style="color: #10b981;">✓</span>
+                            <?php endif; ?>
+                        </td>
+                    </tr>
+                    <?php 
+                        } catch (Exception $e) {
+                            // Show error row (11 columns total)
+                            echo '<tr><td colspan="11" style="text-align: center; padding: 20px; color: #ef4444;">Error loading data for ' . htmlspecialchars($company->name) . '</td></tr>';
+                            error_log('Company performance data error: ' . $e->getMessage());
+                        }
+                        endforeach;
+                    }
+                    ?>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- SECURITY TAB -->
+    <div id="security-tab" class="tab-content <?php echo $active_tab === 'security' ? 'active' : ''; ?>">
+        <!-- Metric Cards -->
+        <div class="metrics-grid">
+            <div class="metric-card">
+                <div class="metric-icon">🔑</div>
+                <div class="metric-value"><?php echo $active_tokens; ?></div>
+                <div class="metric-label">Active Tokens</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-icon">⚠️</div>
+                <div class="metric-value"><?php echo $rate_limit_violations; ?></div>
+                <div class="metric-label">Rate Limit Violations</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-icon">🚫</div>
+                <div class="metric-value"><?php echo $failed_auth; ?></div>
+                <div class="metric-label">Failed Auth Attempts</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-icon">🛡️</div>
+                <div class="metric-value"><?php echo $rate_limit_violations + $failed_auth === 0 ? 'Secure' : 'Alert'; ?></div>
+                <div class="metric-label">Security Status</div>
+            </div>
+        </div>
+
+        <!-- Recent Security Events -->
+        <div class="monitoring-table">
+            <h3 style="padding: 20px 20px 0 20px; margin: 0; font-size: 18px; font-weight: 600;">Recent Security Events</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>Event Type</th>
+                        <th>User/IP</th>
+                        <th>Details</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php 
+                    // Get recent security events
+                    if ($DB->get_manager()->table_exists('local_alx_api_alerts')) {
+                        $alerts = $DB->get_records('local_alx_api_alerts', null, 'timecreated DESC', '*', 0, 10);
+                        foreach ($alerts as $alert):
+                    ?>
+                    <tr>
+                        <td><?php echo date('H:i', $alert->timecreated); ?></td>
+                        <td><?php echo ucfirst(str_replace('_', ' ', $alert->alert_type)); ?></td>
+                        <td><?php echo $alert->hostname ?: 'N/A'; ?></td>
+                        <td><?php echo $alert->message; ?></td>
+                        <td><span class="badge badge-<?php echo $alert->resolved ? 'success' : 'warning'; ?>">
+                            <?php echo $alert->resolved ? 'Resolved' : 'Active'; ?>
+                        </span></td>
+                    </tr>
+                    <?php 
+                        endforeach;
+                    } else {
+                        echo '<tr><td colspan="5" style="text-align: center; color: #718096;">No security events recorded</td></tr>';
+                    }
+                    ?>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Active System Alerts -->
+        <div class="monitoring-table">
+            <h3 style="padding: 20px 20px 0 20px; margin: 0; font-size: 18px; font-weight: 600;">Active System Alerts</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Alert Type</th>
+                        <th>Severity</th>
+                        <th>Message</th>
+                        <th>Time</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php
+                    // Get active alerts
+                    if ($DB->get_manager()->table_exists('local_alx_api_alerts')) {
+                        $active_alerts = $DB->get_records('local_alx_api_alerts', ['resolved' => 0], 'timecreated DESC', '*', 0, 10);
+                        if (empty($active_alerts)) {
+                            echo '<tr><td colspan="5" style="text-align: center; color: #10b981;">✅ No active alerts - All systems operating normally</td></tr>';
+                        } else {
+                            foreach ($active_alerts as $alert):
+                    ?>
+                    <tr>
+                        <td><?php echo ucfirst(str_replace('_', ' ', $alert->alert_type)); ?></td>
+                        <td><span class="badge badge-<?php echo $alert->severity === 'high' ? 'danger' : ($alert->severity === 'medium' ? 'warning' : 'info'); ?>">
+                            <?php echo ucfirst($alert->severity); ?>
+                        </span></td>
+                        <td><?php echo $alert->message; ?></td>
+                        <td><?php echo date('H:i', $alert->timecreated); ?></td>
+                        <td><span class="badge badge-warning">Active</span></td>
+                    </tr>
+                    <?php 
+                            endforeach;
+                        }
+                    } else {
+                        echo '<tr><td colspan="5" style="text-align: center; color: #10b981;">✅ No active alerts - All systems operating normally</td></tr>';
+                    }
+                    ?>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+// Tab switching function
+function switchTab(tabName) {
+    // Update URL without reload
+    const url = new URL(window.location);
+    url.searchParams.set('tab', tabName);
+    window.history.pushState({}, '', url);
+    
+    // Hide all tabs
+    document.querySelectorAll('.tab-content').forEach(tab => {
+        tab.classList.remove('active');
+    });
+    
+    // Remove active class from all buttons
+    document.querySelectorAll('.tab-button').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    
+    // Show selected tab
+    document.getElementById(tabName + '-tab').classList.add('active');
+    
+    // Add active class to clicked button
+    event.target.closest('.tab-button').classList.add('active');
+}
+
+// Initialize charts
+document.addEventListener('DOMContentLoaded', function() {
+    // Sync Trend Chart
+    const syncCtx = document.getElementById('syncTrendChart');
+    if (syncCtx) {
+        new Chart(syncCtx, {
+            type: 'line',
+            data: {
+                labels: <?php 
+                    // Generate round hour labels from 00:00 to 23:00
+                    $hours = [];
+                    for ($i = 0; $i < 24; $i++) {
+                        $hours[] = sprintf('%02d:00', $i);
+                    }
+                    echo json_encode($hours);
+                ?>,
+                datasets: [{
+                    label: 'Records Synced',
+                    data: <?php 
+                        // Get REAL hourly sync data from database
+                        $sync_data = [];
+                        $today_start = mktime(0, 0, 0); // Start of today
+                        
+                        if ($DB->get_manager()->table_exists('local_alx_api_reporting')) {
+                            $table_info = $DB->get_columns('local_alx_api_reporting');
+                            
+                            // Get data for each hour (00:00 to 23:00)
+                            for ($hour = 0; $hour < 24; $hour++) {
+                                $hour_start = $today_start + ($hour * 3600);
+                                $hour_end = $hour_start + 3600;
+                                
+                                $count = 0;
+                                if (isset($table_info['timecreated'])) {
+                                    $count = $DB->count_records_select('local_alx_api_reporting',
+                                        'timecreated >= ? AND timecreated < ?',
+                                        [$hour_start, $hour_end]
+                                    );
+                                }
+                                $sync_data[] = $count;
+                            }
+                        } else {
+                            // No table = no data
+                            $sync_data = array_fill(0, 24, 0);
+                        }
+                        
+                        echo json_encode($sync_data);
+                    ?>,
+                    borderColor: '#667eea',
+                    backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                    tension: 0.4,
+                    fill: true
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                plugins: {
+                    legend: { display: false }
+                },
+                scales: {
+                    y: { beginAtZero: true }
+                }
+            }
+        });
+    }
+    
+    <?php
+    // Pre-calculate all chart data for 24h API Request Flow
+    $incoming_data = [];
+    $success_data = [];
+    $error_data = [];
+    $today_start = mktime(0, 0, 0);
+    
+    if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
+        $table_info = $DB->get_columns('local_alx_api_logs');
+        $time_field = isset($table_info['timeaccessed']) ? 'timeaccessed' : 'timecreated';
+        $has_error_field = isset($table_info['error_message']);
+        
+        for ($hour = 0; $hour < 24; $hour++) {
+            $hour_start = $today_start + ($hour * 3600);
+            $hour_end = $hour_start + 3600;
+            
+            // Incoming requests
+            $incoming_count = $DB->count_records_select('local_alx_api_logs',
+                "{$time_field} >= ? AND {$time_field} < ?",
+                [$hour_start, $hour_end]
+            );
+            $incoming_data[] = $incoming_count;
+            
+            // Successful responses
+            if ($has_error_field) {
+                $success_count = $DB->count_records_select('local_alx_api_logs',
+                    "{$time_field} >= ? AND {$time_field} < ? AND (error_message IS NULL OR error_message = '')",
+                    [$hour_start, $hour_end]
+                );
+                $error_count = $DB->count_records_select('local_alx_api_logs',
+                    "{$time_field} >= ? AND {$time_field} < ? AND error_message IS NOT NULL AND error_message != ''",
+                    [$hour_start, $hour_end]
+                );
+            } else {
+                $success_count = $incoming_count;
+                $error_count = 0;
+            }
+            $success_data[] = $success_count;
+            $error_data[] = $error_count;
+        }
+    } else {
+        $incoming_data = array_fill(0, 24, 0);
+        $success_data = array_fill(0, 24, 0);
+        $error_data = array_fill(0, 24, 0);
+    }
+    
+    // Calculate max value for Y-axis scaling
+    $all_data = array_merge($incoming_data, $success_data, $error_data);
+    $chart_max_value = max($all_data);
+    
+    // Determine suggested max and step size
+    if ($chart_max_value == 0) {
+        $suggested_max = 10;
+        $step_size = 2;
+    } else if ($chart_max_value <= 5) {
+        $suggested_max = 10;
+        $step_size = 1;
+    } else if ($chart_max_value <= 10) {
+        $suggested_max = 15;
+        $step_size = 2;
+    } else if ($chart_max_value <= 20) {
+        $suggested_max = 25;
+        $step_size = 5;
+    } else if ($chart_max_value <= 50) {
+        $suggested_max = ceil($chart_max_value * 1.2);
+        $step_size = 10;
+    } else {
+        $suggested_max = ceil($chart_max_value * 1.2);
+        $step_size = null; // Auto
+    }
+    ?>
+    
+    // 24h API Request Flow Chart (3-Line Chart)
+    const perfCtx = document.getElementById('performanceChart');
+    if (perfCtx) {
+        new Chart(perfCtx, {
+            type: 'line',
+            data: {
+                labels: <?php 
+                    // Generate 24 hour labels (00:00 to 23:00)
+                    $hours = [];
+                    for ($i = 0; $i < 24; $i++) {
+                        $hours[] = sprintf('%02d:00', $i);
+                    }
+                    echo json_encode($hours);
+                ?>,
+                datasets: [
+                    {
+                        label: 'Incoming Requests',
+                        data: <?php echo json_encode($incoming_data); ?>,
+                        borderColor: '#3b82f6',
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        tension: 0.4,
+                        fill: false,
+                        borderWidth: 2
+                    },
+                    {
+                        label: 'Successful Responses',
+                        data: <?php echo json_encode($success_data); ?>,
+                        borderColor: '#10b981',
+                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                        tension: 0.4,
+                        fill: false,
+                        borderWidth: 2
+                    },
+                    {
+                        label: 'Error Responses',
+                        data: <?php echo json_encode($error_data); ?>,
+                        borderColor: '#ef4444',
+                        backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                        tension: 0.4,
+                        fill: false,
+                        borderWidth: 2
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                plugins: {
+                    legend: { 
+                        display: true,
+                        position: 'top',
+                        labels: {
+                            usePointStyle: true,
+                            padding: 15
+                        }
+                    }
+                },
+                scales: {
+                    y: { 
+                        beginAtZero: true,
+                        max: <?php echo $suggested_max; ?>,
+                        ticks: {
+                            <?php if ($step_size !== null): ?>
+                            stepSize: <?php echo $step_size; ?>,
+                            <?php endif; ?>
+                            precision: 0,
+                            callback: function(value) {
+                                return Number.isInteger(value) ? value : null;
+                            }
+                        },
+                        title: {
+                            display: true,
+                            text: 'Number of Requests'
+                        },
+                        grid: {
+                            display: true,
+                            drawBorder: true
+                        }
+                    },
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Time (24h)'
+                        }
+                    }
+                }
+            }
+        });
+    }
+});
+</script>
+
+<?php
+echo $OUTPUT->footer();
+?>

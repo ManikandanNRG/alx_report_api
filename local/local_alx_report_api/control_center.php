@@ -993,6 +993,55 @@ input[type="checkbox"]:disabled {
     width: 100%;
     margin: 20px 0;
 }
+
+/* Hover Dropdown Menu for Monitoring Tab */
+.tab-navigation {
+    position: relative;
+    overflow: visible !important;
+}
+
+.tab-button {
+    position: relative;
+}
+
+.tab-dropdown {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    width: 100%;
+    background: white;
+    border-radius: 0 0 8px 8px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+    z-index: 9999;
+    padding: 4px 0;
+    border: 1px solid #e2e8f0;
+    border-top: none;
+    margin-top: 0;
+}
+
+.tab-button:hover .tab-dropdown,
+.tab-dropdown:hover {
+    display: block;
+}
+
+.tab-dropdown a {
+    display: block;
+    padding: 12px 20px;
+    text-decoration: none;
+    color: #2d3748;
+    transition: all 0.2s;
+    font-size: 14px;
+    font-weight: 500;
+    border-left: 3px solid transparent;
+}
+
+.tab-dropdown a:hover {
+    background: #f7fafc;
+    border-left-color: #667eea;
+    color: #667eea;
+}
 </style>
 
 <div class="control-center-container">
@@ -1042,6 +1091,12 @@ input[type="checkbox"]:disabled {
         <button class="tab-button" onclick="switchTab(event, 'monitoring')">
             <i class="fas fa-chart-bar"></i>
             Monitoring & Analytics
+            <!-- Hover Dropdown Menu -->
+            <div class="tab-dropdown" onclick="event.stopPropagation();">
+                <a href="monitoring_dashboard_new.php?tab=autosync">🔄 Auto-Sync Intelligence</a>
+                <a href="monitoring_dashboard_new.php?tab=performance">⚡ API Monitor</a>
+                <a href="monitoring_dashboard_new.php?tab=security">🔒 Security & Alerts</a>
+            </div>
         </button>
         <button class="tab-button" onclick="switchTab(event, 'settings')">
             <i class="fas fa-cog"></i>
@@ -1839,13 +1894,57 @@ input[type="checkbox"]:disabled {
     </div>
 
     <div id="monitoring-tab" class="tab-content">
+        <!-- Simple Instruction Card -->
+        <div class="dashboard-card" style="max-width: 800px; margin: 60px auto; text-align: center;">
+            <div class="card-body" style="padding: 60px 40px;">
+                <div style="font-size: 64px; margin-bottom: 24px;">💡</div>
+                <h2 style="font-size: 28px; font-weight: 700; color: #2d3748; margin-bottom: 16px;">
+                    Monitoring & Analytics
+                </h2>
+                <p style="font-size: 16px; color: #718096; margin-bottom: 32px; line-height: 1.6;">
+                    Hover over the "Monitoring & Analytics" tab above to access:
+                </p>
+                <ul style="list-style: none; padding: 0; margin: 0 0 32px 0; text-align: left; max-width: 400px; margin-left: auto; margin-right: auto;">
+                    <li style="padding: 12px 0; font-size: 16px; color: #4a5568;">
+                        <span style="margin-right: 12px;">🔄</span> Auto-Sync Intelligence
+                    </li>
+                    <li style="padding: 12px 0; font-size: 16px; color: #4a5568;">
+                        <span style="margin-right: 12px;">⚡</span> Performance Monitoring
+                    </li>
+                    <li style="padding: 12px 0; font-size: 16px; color: #4a5568;">
+                        <span style="margin-right: 12px;">🔒</span> Security & Alerts
+                    </li>
+                </ul>
+                <p style="font-size: 14px; color: #a0aec0; margin-bottom: 24px;">
+                    Or click below to view the unified monitoring dashboard:
+                </p>
+                <a href="monitoring_dashboard_new.php" class="btn-modern btn-primary" style="font-size: 18px; padding: 16px 32px;">
+                    <i class="fas fa-chart-bar"></i>
+                    Open Monitoring Dashboard
+                </a>
+            </div>
+        </div>
         <?php
-        // Get additional monitoring data for overview
+        // Minimal data for compatibility
         $monitoring_data = [];
-        
-        try {
-            // Get system health data
-            $system_health_data = local_alx_report_api_get_system_health();
+        ?>
+    </div>
+
+    <div id="settings-tab" class="tab-content">
+    </div>
+
+    <div id="settings-tab" class="tab-content">
+        <div class="dashboard-card">
+            <div class="card-header">
+                <h3 class="card-title">
+                    <i class="fas fa-cog"></i>
+                    System Configuration
+                </h3>
+            </div>
+            <div class="card-body">
+                <p>System configuration will be integrated here...</p>
+                <a href="<?php echo $CFG->wwwroot; ?>/admin/settings.php?section=local_alx_report_api" class="btn-modern btn-primary">
+                    <i class="fas fa-external-link-alt"></i>
             
             // Get API analytics for today - REAL DATA ONLY
             $api_analytics = local_alx_report_api_get_api_analytics(24);
