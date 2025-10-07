@@ -622,9 +622,11 @@ if ($DB->get_manager()->table_exists('local_alx_api_alerts')) {
         </div>
 
         <!-- 24h API Request Flow Chart -->
-        <div class="chart-container">
+        <div class="chart-container" style="margin-bottom: 30px;">
             <h3>📊 24h API Request Flow (3-Line Chart)</h3>
-            <canvas id="performanceChart" height="80"></canvas>
+            <div style="position: relative; height: 300px; width: 100%;">
+                <canvas id="performanceChart"></canvas>
+            </div>
         </div>
 
         <!-- Company Performance Table (Updated with all required columns) -->
@@ -918,6 +920,79 @@ if ($DB->get_manager()->table_exists('local_alx_api_alerts')) {
     </div>
 </div>
 
+<?php
+// Generate hourly performance data for charts - LIVE DATA (copied from advanced_monitoring.php)
+$hourly_data = [];
+$hourly_incoming = [];
+$hourly_success = [];
+$hourly_errors = [];
+
+if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
+    $table_info = $DB->get_columns('local_alx_api_logs');
+    $time_field = isset($table_info['timeaccessed']) ? 'timeaccessed' : 'timecreated';
+    
+    for ($i = 23; $i >= 0; $i--) {
+        // Create clean hourly timestamps (00:00, 01:00, 02:00, etc.)
+        $current_hour = date('H') - $i;
+        if ($current_hour < 0) {
+            $current_hour += 24;
+        }
+        
+        $hour_start = mktime($current_hour, 0, 0);
+        $hour_end = $hour_start + 3600;
+        
+        // Get hourly request counts
+        $hour_total = $DB->count_records_select('local_alx_api_logs', 
+            "{$time_field} >= ? AND {$time_field} < ?", [$hour_start, $hour_end]);
+        
+        $hour_success = 0;
+        $hour_errors = 0;
+        
+        if (isset($table_info['status'])) {
+            $hour_success = $DB->count_records_select('local_alx_api_logs', 
+                "{$time_field} >= ? AND {$time_field} < ? AND status = ?", 
+                [$hour_start, $hour_end, 'success']);
+            $hour_errors = $hour_total - $hour_success;
+        } else {
+            $hour_success = $hour_total;
+            $hour_errors = 0;
+        }
+        
+        $hourly_data[] = [
+            'hour' => sprintf('%02d:00', $current_hour),
+            'timestamp' => $hour_start,
+            'incoming' => $hour_total,
+            'success' => $hour_success,
+            'errors' => $hour_errors
+        ];
+        
+        $hourly_incoming[] = $hour_total;
+        $hourly_success[] = $hour_success;
+        $hourly_errors[] = $hour_errors;
+    }
+} else {
+    // No API logs table - initialize empty data
+    for ($i = 23; $i >= 0; $i--) {
+        $current_hour = date('H') - $i;
+        if ($current_hour < 0) {
+            $current_hour += 24;
+        }
+        
+        $hourly_data[] = [
+            'hour' => sprintf('%02d:00', $current_hour),
+            'timestamp' => mktime($current_hour, 0, 0),
+            'incoming' => 0,
+            'success' => 0,
+            'errors' => 0
+        ];
+        
+        $hourly_incoming[] = 0;
+        $hourly_success[] = 0;
+        $hourly_errors[] = 0;
+    }
+}
+?>
+
 <script>
 // Tab switching function
 function switchTab(tabName) {
@@ -1009,161 +1084,91 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
-    <?php
-    // Pre-calculate all chart data for 24h API Request Flow
-    $incoming_data = [];
-    $success_data = [];
-    $error_data = [];
-    $today_start = mktime(0, 0, 0);
-    
-    if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
-        $table_info = $DB->get_columns('local_alx_api_logs');
-        $time_field = isset($table_info['timeaccessed']) ? 'timeaccessed' : 'timecreated';
-        $has_error_field = isset($table_info['error_message']);
-        
-        for ($hour = 0; $hour < 24; $hour++) {
-            $hour_start = $today_start + ($hour * 3600);
-            $hour_end = $hour_start + 3600;
-            
-            // Incoming requests
-            $incoming_count = $DB->count_records_select('local_alx_api_logs',
-                "{$time_field} >= ? AND {$time_field} < ?",
-                [$hour_start, $hour_end]
-            );
-            $incoming_data[] = $incoming_count;
-            
-            // Successful responses
-            if ($has_error_field) {
-                $success_count = $DB->count_records_select('local_alx_api_logs',
-                    "{$time_field} >= ? AND {$time_field} < ? AND (error_message IS NULL OR error_message = '')",
-                    [$hour_start, $hour_end]
-                );
-                $error_count = $DB->count_records_select('local_alx_api_logs',
-                    "{$time_field} >= ? AND {$time_field} < ? AND error_message IS NOT NULL AND error_message != ''",
-                    [$hour_start, $hour_end]
-                );
-            } else {
-                $success_count = $incoming_count;
-                $error_count = 0;
-            }
-            $success_data[] = $success_count;
-            $error_data[] = $error_count;
-        }
-    } else {
-        $incoming_data = array_fill(0, 24, 0);
-        $success_data = array_fill(0, 24, 0);
-        $error_data = array_fill(0, 24, 0);
-    }
-    
-    // Calculate max value for Y-axis scaling
-    $all_data = array_merge($incoming_data, $success_data, $error_data);
-    $chart_max_value = max($all_data);
-    
-    // Determine suggested max and step size
-    if ($chart_max_value == 0) {
-        $suggested_max = 10;
-        $step_size = 2;
-    } else if ($chart_max_value <= 5) {
-        $suggested_max = 10;
-        $step_size = 1;
-    } else if ($chart_max_value <= 10) {
-        $suggested_max = 15;
-        $step_size = 2;
-    } else if ($chart_max_value <= 20) {
-        $suggested_max = 25;
-        $step_size = 5;
-    } else if ($chart_max_value <= 50) {
-        $suggested_max = ceil($chart_max_value * 1.2);
-        $step_size = 10;
-    } else {
-        $suggested_max = ceil($chart_max_value * 1.2);
-        $step_size = null; // Auto
-    }
-    ?>
-    
-    // 24h API Request Flow Chart (3-Line Chart)
+    // 24h API Request Flow Chart (3-Line Chart) - Copied from advanced_monitoring.php
     const perfCtx = document.getElementById('performanceChart');
     if (perfCtx) {
         new Chart(perfCtx, {
             type: 'line',
             data: {
-                labels: <?php 
-                    // Generate 24 hour labels (00:00 to 23:00)
-                    $hours = [];
-                    for ($i = 0; $i < 24; $i++) {
-                        $hours[] = sprintf('%02d:00', $i);
-                    }
-                    echo json_encode($hours);
-                ?>,
+                labels: <?php echo json_encode(array_column($hourly_data, 'hour')); ?>,
                 datasets: [
                     {
-                        label: 'Incoming Requests',
-                        data: <?php echo json_encode($incoming_data); ?>,
+                        label: '📥 Incoming Requests',
+                        data: <?php echo json_encode($hourly_incoming); ?>,
                         borderColor: '#3b82f6',
                         backgroundColor: 'rgba(59, 130, 246, 0.1)',
-                        tension: 0.4,
+                        borderWidth: 3,
                         fill: false,
-                        borderWidth: 2
+                        tension: 0.4
                     },
                     {
-                        label: 'Successful Responses',
-                        data: <?php echo json_encode($success_data); ?>,
+                        label: '📤 Successful Responses',
+                        data: <?php echo json_encode($hourly_success); ?>,
                         borderColor: '#10b981',
                         backgroundColor: 'rgba(16, 185, 129, 0.1)',
-                        tension: 0.4,
+                        borderWidth: 3,
                         fill: false,
-                        borderWidth: 2
+                        tension: 0.4
                     },
                     {
-                        label: 'Error Responses',
-                        data: <?php echo json_encode($error_data); ?>,
+                        label: '❌ Error Responses',
+                        data: <?php echo json_encode($hourly_errors); ?>,
                         borderColor: '#ef4444',
                         backgroundColor: 'rgba(239, 68, 68, 0.1)',
-                        tension: 0.4,
+                        borderWidth: 3,
                         fill: false,
-                        borderWidth: 2
+                        tension: 0.4
                     }
                 ]
             },
             options: {
                 responsive: true,
-                maintainAspectRatio: true,
+                maintainAspectRatio: false,
                 plugins: {
-                    legend: { 
+                    legend: {
                         display: true,
                         position: 'top',
                         labels: {
-                            usePointStyle: true,
-                            padding: 15
+                            boxWidth: 12,
+                            padding: 10,
+                            font: {
+                                size: 11
+                            }
                         }
                     }
                 },
                 scales: {
-                    y: { 
+                    y: {
                         beginAtZero: true,
-                        max: <?php echo $suggested_max; ?>,
-                        ticks: {
-                            <?php if ($step_size !== null): ?>
-                            stepSize: <?php echo $step_size; ?>,
-                            <?php endif; ?>
-                            precision: 0,
-                            callback: function(value) {
-                                return Number.isInteger(value) ? value : null;
-                            }
-                        },
+                        min: 0,
                         title: {
                             display: true,
-                            text: 'Number of Requests'
+                            text: 'Number of Requests',
+                            font: {
+                                size: 12
+                            }
                         },
-                        grid: {
-                            display: true,
-                            drawBorder: true
+                        ticks: {
+                            font: {
+                                size: 11
+                            }
                         }
                     },
                     x: {
                         title: {
                             display: true,
-                            text: 'Time (24h)'
+                            text: 'Time (24h)',
+                            font: {
+                                size: 12
+                            }
+                        },
+                        ticks: {
+                            font: {
+                                size: 10
+                            },
+                            maxRotation: 0,
+                            autoSkip: true,
+                            maxTicksLimit: 12
                         }
                     }
                 }
