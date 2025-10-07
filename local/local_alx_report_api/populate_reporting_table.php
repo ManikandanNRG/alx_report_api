@@ -504,17 +504,95 @@ if ($action === 'populate' && $confirm) {
         echo '<script>showCompletion(`' . $summary . '`);</script>';
         echo '</div>'; // Close progress-data div
         
-        // Add detailed results tables like in sync page
+        // Add comprehensive detailed results section
         echo '<div style="max-width: 1400px; margin: 30px auto; padding: 0 20px;">';
         
-        // Get affected companies details
-        $affected_companies_sql = "SELECT c.id, c.name, COUNT(r.id) as record_count
-                                   FROM {local_alx_api_reporting} r
-                                   JOIN {company} c ON c.id = r.companyid
-                                   WHERE r.last_updated >= ?
-                                   GROUP BY c.id, c.name
-                                   ORDER BY record_count DESC";
-        $affected_companies = $DB->get_records_sql($affected_companies_sql, [$start_time]);
+        // Section Header
+        echo '<div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px 30px; border-radius: 12px 12px 0 0; margin-top: 30px;">';
+        echo '<h2 style="margin: 0; font-size: 24px; font-weight: 700;"><i class="fas fa-chart-bar"></i> Detailed Population Results</h2>';
+        echo '<p style="margin: 8px 0 0 0; opacity: 0.9;">Comprehensive breakdown of populated data</p>';
+        echo '</div>';
+        
+        echo '<div style="background: white; padding: 30px; border-radius: 0 0 12px 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); margin-bottom: 30px;">';
+        
+        // Get detailed company information
+        if (!empty($companies_to_process) && !in_array(0, $companies_to_process)) {
+            list($company_sql, $company_params) = $DB->get_in_or_equal($companies_to_process, SQL_PARAMS_NAMED);
+            $where_clause = "WHERE c.id $company_sql";
+        } else {
+            $company_sql = "";
+            $company_params = [];
+            $where_clause = "";
+        }
+        
+        // 1. COMPANY INFORMATION CARDS
+        echo '<h3 style="color: #2d3748; font-size: 20px; font-weight: 600; margin: 0 0 20px 0; padding-bottom: 10px; border-bottom: 2px solid #e2e8f0;"><i class="fas fa-building"></i> Company Information</h3>';
+        
+        // Get detailed company stats
+        $company_stats_sql = "SELECT 
+                                c.id,
+                                c.name,
+                                c.shortname,
+                                COUNT(DISTINCT r.userid) as total_users,
+                                COUNT(DISTINCT r.courseid) as active_courses,
+                                COUNT(r.id) as total_records,
+                                SUM(CASE WHEN r.created_at >= :starttime1 THEN 1 ELSE 0 END) as records_created,
+                                SUM(CASE WHEN r.updated_at >= :starttime2 AND r.created_at < :starttime3 THEN 1 ELSE 0 END) as records_updated
+                              FROM {company} c
+                              LEFT JOIN {local_alx_api_reporting} r ON r.companyid = c.id
+                              " . $where_clause . "
+                              GROUP BY c.id, c.name, c.shortname
+                              HAVING COUNT(r.id) > 0
+                              ORDER BY total_records DESC";
+        
+        $params = array_merge(['starttime1' => $start_time, 'starttime2' => $start_time, 'starttime3' => $start_time], $company_params);
+        $company_stats = $DB->get_records_sql($company_stats_sql, $params);
+        
+        if (!empty($company_stats)) {
+            echo '<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 20px; margin-bottom: 30px;">';
+            
+            foreach ($company_stats as $company) {
+                echo '<div style="background: linear-gradient(135deg, #f7fafc 0%, #edf2f7 100%); border-radius: 10px; padding: 20px; border-left: 4px solid #667eea;">';
+                echo '<div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 15px;">';
+                echo '<div>';
+                echo '<h4 style="margin: 0 0 5px 0; color: #2d3748; font-size: 18px; font-weight: 600;">' . htmlspecialchars($company->name) . '</h4>';
+                echo '<p style="margin: 0; color: #718096; font-size: 13px;">ID: ' . $company->id . ' | ' . htmlspecialchars($company->shortname) . '</p>';
+                echo '</div>';
+                echo '<span style="background: #667eea; color: white; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 600;">Company</span>';
+                echo '</div>';
+                
+                echo '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 15px;">';
+                echo '<div style="background: white; padding: 12px; border-radius: 8px; text-align: center;">';
+                echo '<div style="font-size: 24px; font-weight: 700; color: #667eea;">' . $company->total_users . '</div>';
+                echo '<div style="font-size: 12px; color: #718096; margin-top: 4px;">Total Users</div>';
+                echo '</div>';
+                echo '<div style="background: white; padding: 12px; border-radius: 8px; text-align: center;">';
+                echo '<div style="font-size: 24px; font-weight: 700; color: #ed8936;">' . $company->active_courses . '</div>';
+                echo '<div style="font-size: 12px; color: #718096; margin-top: 4px;">Active Courses</div>';
+                echo '</div>';
+                echo '</div>';
+                
+                echo '<div style="background: white; padding: 15px; border-radius: 8px;">';
+                echo '<div style="font-size: 13px; font-weight: 600; color: #4a5568; margin-bottom: 10px;">Population Statistics</div>';
+                echo '<div style="display: flex; justify-content: space-between; margin-bottom: 6px;">';
+                echo '<span style="color: #718096; font-size: 13px;">Records Created:</span>';
+                echo '<span style="color: #48bb78; font-weight: 600; font-size: 13px;">' . $company->records_created . '</span>';
+                echo '</div>';
+                echo '<div style="display: flex; justify-content: space-between; margin-bottom: 6px;">';
+                echo '<span style="color: #718096; font-size: 13px;">Records Updated:</span>';
+                echo '<span style="color: #3182ce; font-weight: 600; font-size: 13px;">' . $company->records_updated . '</span>';
+                echo '</div>';
+                echo '<div style="display: flex; justify-content: space-between; padding-top: 6px; border-top: 1px solid #e2e8f0;">';
+                echo '<span style="color: #2d3748; font-weight: 600; font-size: 13px;">Total Records:</span>';
+                echo '<span style="color: #2d3748; font-weight: 700; font-size: 13px;">' . $company->total_records . '</span>';
+                echo '</div>';
+                echo '</div>';
+                
+                echo '</div>';
+            }
+            
+            echo '</div>';
+        }
         
         if (!empty($affected_companies)) {
             echo '<h2 style="margin: 30px 0 20px 0; color: #2d3748; font-size: 24px; font-weight: 600;"><i class="fas fa-building"></i> Affected Companies</h2>';
@@ -540,41 +618,161 @@ if ($action === 'populate' && $confirm) {
             echo '</div>';
         }
         
-        // Get affected courses details
-        $affected_courses_sql = "SELECT c.id, c.fullname, COUNT(r.id) as record_count
+        // 2. AFFECTED COURSES TABLE
+        echo '<h3 style="color: #2d3748; font-size: 20px; font-weight: 600; margin: 30px 0 20px 0; padding-bottom: 10px; border-bottom: 2px solid #e2e8f0;"><i class="fas fa-book"></i> Affected Courses</h3>';
+        
+        // Get detailed course stats
+        if (!empty($companies_to_process) && !in_array(0, $companies_to_process)) {
+            list($company_sql, $company_params) = $DB->get_in_or_equal($companies_to_process, SQL_PARAMS_NAMED);
+            $course_where = "WHERE r.companyid $company_sql";
+            $course_params = array_merge(['coursetime1' => $start_time, 'coursetime2' => $start_time, 'coursetime3' => $start_time], $company_params);
+        } else {
+            $course_where = "";
+            $course_params = ['coursetime1' => $start_time, 'coursetime2' => $start_time, 'coursetime3' => $start_time];
+        }
+        
+        $affected_courses_sql = "SELECT 
+                                    c.id,
+                                    c.fullname,
+                                    COUNT(r.id) as total_changes,
+                                    SUM(CASE WHEN r.created_at >= :coursetime1 THEN 1 ELSE 0 END) as records_created,
+                                    SUM(CASE WHEN r.updated_at >= :coursetime2 AND r.created_at < :coursetime3 THEN 1 ELSE 0 END) as records_updated
                                 FROM {local_alx_api_reporting} r
                                 JOIN {course} c ON c.id = r.courseid
-                                WHERE r.last_updated >= ?
+                                $course_where
                                 GROUP BY c.id, c.fullname
-                                ORDER BY record_count DESC
+                                HAVING COUNT(r.id) > 0
+                                ORDER BY total_changes DESC
                                 LIMIT 20";
-        $affected_courses = $DB->get_records_sql($affected_courses_sql, [$start_time]);
+        $affected_courses = $DB->get_records_sql($affected_courses_sql, $course_params);
         
         if (!empty($affected_courses)) {
-            echo '<h2 style="margin: 30px 0 20px 0; color: #2d3748; font-size: 24px; font-weight: 600;"><i class="fas fa-book"></i> Top Affected Courses</h2>';
-            echo '<div style="background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 20px;">';
+            echo '<div style="background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 30px;">';
             echo '<table style="width: 100%; border-collapse: collapse;">';
             echo '<thead style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">';
             echo '<tr>';
-            echo '<th style="padding: 16px; text-align: left; font-weight: 600;">Course Name</th>';
-            echo '<th style="padding: 16px; text-align: center; font-weight: 600;">Records Populated</th>';
-            echo '<th style="padding: 16px; text-align: center; font-weight: 600;">Status</th>';
+            echo '<th style="padding: 16px; text-align: left; font-weight: 600; width: 50%;">Course Name</th>';
+            echo '<th style="padding: 16px; text-align: center; font-weight: 600; width: 15%;">Created</th>';
+            echo '<th style="padding: 16px; text-align: center; font-weight: 600; width: 15%;">Updated</th>';
+            echo '<th style="padding: 16px; text-align: center; font-weight: 600; width: 20%;">Total Changes</th>';
             echo '</tr>';
             echo '</thead>';
             echo '<tbody>';
             foreach ($affected_courses as $course) {
-                echo '<tr style="border-bottom: 1px solid #e2e8f0;">';
+                echo '<tr style="border-bottom: 1px solid #e2e8f0; transition: background 0.2s;" onmouseover="this.style.background=\'#f7fafc\'" onmouseout="this.style.background=\'white\'">';
                 echo '<td style="padding: 14px 16px; color: #2d3748;">' . htmlspecialchars($course->fullname) . '</td>';
-                echo '<td style="padding: 14px 16px; text-align: center; font-weight: 600; color: #2d3748;">' . $course->record_count . '</td>';
-                echo '<td style="padding: 14px 16px; text-align: center;"><span style="display: inline-block; padding: 4px 12px; background: #d1fae5; color: #065f46; border-radius: 12px; font-size: 12px; font-weight: 600;">✓ Populated</span></td>';
+                echo '<td style="padding: 14px 16px; text-align: center;">';
+                if ($course->records_created > 0) {
+                    echo '<span style="display: inline-block; padding: 4px 12px; background: #d1fae5; color: #065f46; border-radius: 12px; font-size: 13px; font-weight: 600;">' . $course->records_created . '</span>';
+                } else {
+                    echo '<span style="color: #a0aec0;">0</span>';
+                }
+                echo '</td>';
+                echo '<td style="padding: 14px 16px; text-align: center;">';
+                if ($course->records_updated > 0) {
+                    echo '<span style="display: inline-block; padding: 4px 12px; background: #bee3f8; color: #2c5282; border-radius: 12px; font-size: 13px; font-weight: 600;">' . $course->records_updated . '</span>';
+                } else {
+                    echo '<span style="color: #a0aec0;">0</span>';
+                }
+                echo '</td>';
+                echo '<td style="padding: 14px 16px; text-align: center; font-weight: 700; color: #2d3748; font-size: 15px;">' . $course->total_changes . '</td>';
                 echo '</tr>';
             }
             echo '</tbody>';
             echo '</table>';
             echo '</div>';
+        } else {
+            echo '<div style="background: #f7fafc; border: 2px dashed #cbd5e0; border-radius: 8px; padding: 30px; text-align: center; color: #718096; margin-bottom: 30px;">';
+            echo '<i class="fas fa-inbox" style="font-size: 48px; opacity: 0.3; margin-bottom: 10px;"></i>';
+            echo '<p style="margin: 0; font-size: 16px;">No course data available for the selected companies.</p>';
+            echo '</div>';
         }
         
-        echo '</div>';
+        // 3. AFFECTED USERS TABLE
+        echo '<h3 style="color: #2d3748; font-size: 20px; font-weight: 600; margin: 30px 0 20px 0; padding-bottom: 10px; border-bottom: 2px solid #e2e8f0;"><i class="fas fa-users"></i> Affected Users (Top 50)</h3>';
+        
+        // Get detailed user stats
+        if (!empty($companies_to_process) && !in_array(0, $companies_to_process)) {
+            list($company_sql, $company_params) = $DB->get_in_or_equal($companies_to_process, SQL_PARAMS_NAMED);
+            $user_where = "WHERE r.companyid $company_sql";
+            $user_params = array_merge(['usertime1' => $start_time, 'usertime2' => $start_time, 'usertime3' => $start_time, 'usertime4' => $start_time], $company_params);
+        } else {
+            $user_where = "";
+            $user_params = ['usertime1' => $start_time, 'usertime2' => $start_time, 'usertime3' => $start_time, 'usertime4' => $start_time];
+        }
+        
+        $affected_users_sql = "SELECT 
+                                u.id,
+                                u.firstname,
+                                u.lastname,
+                                u.email,
+                                COUNT(DISTINCT r.courseid) as courses_synced,
+                                SUM(CASE WHEN r.created_at >= :usertime1 THEN 1 ELSE 0 END) as records_created,
+                                SUM(CASE WHEN r.updated_at >= :usertime2 AND r.created_at < :usertime3 THEN 1 ELSE 0 END) as records_updated,
+                                CASE 
+                                    WHEN SUM(CASE WHEN r.created_at >= :usertime4 THEN 1 ELSE 0 END) > 0 THEN 'Created'
+                                    ELSE 'Updated'
+                                END as status
+                            FROM {user} u
+                            JOIN {local_alx_api_reporting} r ON r.userid = u.id
+                            $user_where
+                            GROUP BY u.id, u.firstname, u.lastname, u.email
+                            ORDER BY courses_synced DESC, records_created DESC
+                            LIMIT 50";
+        $affected_users = $DB->get_records_sql($affected_users_sql, $user_params);
+        
+        if (!empty($affected_users)) {
+            echo '<div style="background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 30px;">';
+            echo '<table style="width: 100%; border-collapse: collapse;">';
+            echo '<thead style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">';
+            echo '<tr>';
+            echo '<th style="padding: 16px; text-align: left; font-weight: 600; width: 25%;">User Name</th>';
+            echo '<th style="padding: 16px; text-align: left; font-weight: 600; width: 30%;">Email</th>';
+            echo '<th style="padding: 16px; text-align: center; font-weight: 600; width: 15%;">Courses Synced</th>';
+            echo '<th style="padding: 16px; text-align: center; font-weight: 600; width: 15%;">Records</th>';
+            echo '<th style="padding: 16px; text-align: center; font-weight: 600; width: 15%;">Status</th>';
+            echo '</tr>';
+            echo '</thead>';
+            echo '<tbody>';
+            foreach ($affected_users as $user) {
+                $total_records = $user->records_created + $user->records_updated;
+                echo '<tr style="border-bottom: 1px solid #e2e8f0; transition: background 0.2s;" onmouseover="this.style.background=\'#f7fafc\'" onmouseout="this.style.background=\'white\'">';
+                echo '<td style="padding: 14px 16px; color: #2d3748; font-weight: 500;">' . htmlspecialchars($user->firstname . ' ' . $user->lastname) . '</td>';
+                echo '<td style="padding: 14px 16px; color: #718096; font-size: 13px;">' . htmlspecialchars($user->email) . '</td>';
+                echo '<td style="padding: 14px 16px; text-align: center; font-weight: 600; color: #667eea; font-size: 15px;">' . $user->courses_synced . '</td>';
+                echo '<td style="padding: 14px 16px; text-align: center;">';
+                echo '<div style="font-size: 13px; color: #4a5568;">';
+                if ($user->records_created > 0) {
+                    echo '<span style="color: #48bb78; font-weight: 600;">+' . $user->records_created . '</span>';
+                }
+                if ($user->records_updated > 0) {
+                    if ($user->records_created > 0) echo ' / ';
+                    echo '<span style="color: #3182ce; font-weight: 600;">~' . $user->records_updated . '</span>';
+                }
+                echo '</div>';
+                echo '</td>';
+                echo '<td style="padding: 14px 16px; text-align: center;">';
+                if ($user->status === 'Created') {
+                    echo '<span style="display: inline-block; padding: 4px 12px; background: #d1fae5; color: #065f46; border-radius: 12px; font-size: 12px; font-weight: 600;">✓ Created</span>';
+                } else {
+                    echo '<span style="display: inline-block; padding: 4px 12px; background: #bee3f8; color: #2c5282; border-radius: 12px; font-size: 12px; font-weight: 600;">↻ Updated</span>';
+                }
+                echo '</td>';
+                echo '</tr>';
+            }
+            echo '</tbody>';
+            echo '</table>';
+            echo '</div>';
+        } else {
+            echo '<div style="background: #f7fafc; border: 2px dashed #cbd5e0; border-radius: 8px; padding: 30px; text-align: center; color: #718096; margin-bottom: 30px;">';
+            echo '<i class="fas fa-user-slash" style="font-size: 48px; opacity: 0.3; margin-bottom: 10px;"></i>';
+            echo '<p style="margin: 0; font-size: 16px;">No user data available for the selected companies.</p>';
+            echo '</div>';
+        }
+        
+        echo '</div>'; // Close detailed results white container
+        
+        echo '</div>'; // Close max-width container
         
         echo $OUTPUT->footer();
     } else {

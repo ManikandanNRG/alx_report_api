@@ -1833,10 +1833,6 @@ input[type="checkbox"]:disabled {
                         <i class="fas fa-sync"></i>
                         Manual Sync Data
                     </a>
-                    <a href="<?php echo $CFG->wwwroot; ?>/local/alx_report_api/verify_reporting_data.php" class="btn-modern btn-success">
-                        <i class="fas fa-check"></i>
-                        Verify Data
-                    </a>
                 </div>
             </div>
         </div>
