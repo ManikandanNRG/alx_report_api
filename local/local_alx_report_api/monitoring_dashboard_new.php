@@ -90,15 +90,77 @@ if ($DB->get_manager()->table_exists('local_alx_api_reporting')) {
     $total_records = $DB->count_records('local_alx_api_reporting', ['is_deleted' => 0]);
 }
 
-// Get security data
-$active_tokens = $DB->count_records('external_tokens');
+// Get security data - LIVE DATA with proper error handling
+$active_tokens = 0;
 $rate_limit_violations = 0;
 $failed_auth = 0;
+$today_start = mktime(0, 0, 0);
 
-if ($DB->get_manager()->table_exists('local_alx_api_alerts')) {
-    $today_start = mktime(0, 0, 0);
-    $rate_limit_violations = $DB->count_records_select('local_alx_api_alerts', 
-        "alert_type = 'rate_limit_exceeded' AND timecreated >= ?", [$today_start]);
+try {
+    // Count ACTIVE tokens only (not expired)
+    $active_tokens = $DB->count_records_select('external_tokens', 
+        'validuntil IS NULL OR validuntil > ?', [time()]);
+    
+    // Calculate rate limit violations by checking company-specific limits
+    if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
+        $table_info = $DB->get_columns('local_alx_api_logs');
+        $time_field = isset($table_info['timeaccessed']) ? 'timeaccessed' : 'timecreated';
+        
+        // Get all companies and check each one's usage against their specific limit
+        $companies = local_alx_report_api_get_companies();
+        
+        foreach ($companies as $company) {
+            // Get company-specific rate limit
+            $company_settings = local_alx_report_api_get_company_settings($company->id);
+            $company_rate_limit = isset($company_settings['rate_limit']) ? $company_settings['rate_limit'] : get_config('local_alx_report_api', 'rate_limit');
+            
+            if (empty($company_rate_limit)) {
+                $company_rate_limit = 100; // Default fallback
+            }
+            
+            // Count today's API calls for this company
+            $company_calls_today = $DB->count_records_select('local_alx_api_logs',
+                "{$time_field} >= ? AND company_shortname = ?",
+                [$today_start, $company->shortname]
+            );
+            
+            // Check if company exceeded their specific limit
+            if ($company_calls_today > $company_rate_limit) {
+                $rate_limit_violations++;
+            }
+        }
+        
+        // Also count failed authentication attempts from error_message
+        if (isset($table_info['error_message'])) {
+            $failed_auth = $DB->count_records_select('local_alx_api_logs',
+                "{$time_field} >= ? AND error_message IS NOT NULL AND (
+                    error_message LIKE ? OR 
+                    error_message LIKE ? OR 
+                    error_message LIKE ? OR 
+                    error_message LIKE ? OR
+                    error_message LIKE ?
+                )",
+                [$today_start, '%auth%', '%unauthorized%', '%forbidden%', '%authentication%', '%permission%']
+            );
+        }
+    }
+    
+    // Also check alerts table as backup/supplement
+    if ($DB->get_manager()->table_exists('local_alx_api_alerts')) {
+        $alert_violations = $DB->count_records_select('local_alx_api_alerts', 
+            "(alert_type = ? OR alert_type = ?) AND timecreated >= ?", 
+            ['rate_limit_exceeded', 'rate_limit', $today_start]);
+        $rate_limit_violations = max($rate_limit_violations, $alert_violations);
+        
+        $alert_auth_failures = $DB->count_records_select('local_alx_api_alerts', 
+            "(alert_type = ? OR alert_type = ?) AND timecreated >= ?", 
+            ['auth_failed', 'authentication_failed', $today_start]);
+        $failed_auth = max($failed_auth, $alert_auth_failures);
+    }
+    
+} catch (Exception $e) {
+    error_log('Security data calculation error: ' . $e->getMessage());
+    // Keep safe defaults (0 values already set)
 }
 
 ?>
@@ -836,9 +898,123 @@ if ($DB->get_manager()->table_exists('local_alx_api_alerts')) {
             </div>
         </div>
 
+        <!-- Alert System Configuration Status -->
+        <div class="monitoring-table">
+            <h3 style="padding: 20px 20px 0 20px; margin: 0; font-size: 18px; font-weight: 600;">🔔 Alert System Configuration</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Setting</th>
+                        <th>Status</th>
+                        <th>Details</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php
+                    $alerting_enabled = get_config('local_alx_report_api', 'enable_alerting');
+                    $email_enabled = get_config('local_alx_report_api', 'enable_email_alerts');
+                    $sms_enabled = get_config('local_alx_report_api', 'enable_sms_alerts');
+                    $alert_threshold = get_config('local_alx_report_api', 'alert_threshold') ?: 'medium';
+                    $alert_emails = get_config('local_alx_report_api', 'alert_emails');
+                    $sms_service = get_config('local_alx_report_api', 'sms_service') ?: 'disabled';
+                    ?>
+                    <tr>
+                        <td><strong>Alert System</strong></td>
+                        <td>
+                            <span class="badge badge-<?php echo $alerting_enabled ? 'success' : 'danger'; ?>">
+                                <?php echo $alerting_enabled ? 'Enabled' : 'Disabled'; ?>
+                            </span>
+                        </td>
+                        <td><?php echo $alerting_enabled ? 'System is monitoring and sending alerts' : 'Alerts are disabled - configure in settings'; ?></td>
+                    </tr>
+                    <tr>
+                        <td><strong>Email Alerts</strong></td>
+                        <td>
+                            <span class="badge badge-<?php echo $email_enabled ? 'success' : 'warning'; ?>">
+                                <?php echo $email_enabled ? 'Enabled' : 'Disabled'; ?>
+                            </span>
+                        </td>
+                        <td><?php echo $alert_emails ? count(array_filter(array_map('trim', explode(',', $alert_emails)))) . ' recipients configured' : 'No recipients configured'; ?></td>
+                    </tr>
+                    <tr>
+                        <td><strong>SMS Alerts</strong></td>
+                        <td>
+                            <span class="badge badge-<?php echo ($sms_enabled && $sms_service !== 'disabled') ? 'success' : 'default'; ?>">
+                                <?php echo ($sms_enabled && $sms_service !== 'disabled') ? 'Enabled' : 'Disabled'; ?>
+                            </span>
+                        </td>
+                        <td>Service: <?php echo ucfirst(str_replace('_', ' ', $sms_service)); ?></td>
+                    </tr>
+                    <tr>
+                        <td><strong>Alert Threshold</strong></td>
+                        <td>
+                            <span class="badge badge-<?php 
+                                echo $alert_threshold === 'critical' ? 'danger' : 
+                                     ($alert_threshold === 'high' ? 'warning' : 
+                                     ($alert_threshold === 'medium' ? 'info' : 'default')); 
+                            ?>">
+                                <?php echo ucfirst($alert_threshold); ?>
+                            </span>
+                        </td>
+                        <td>Only alerts at <?php echo $alert_threshold; ?> level or higher will be sent</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Quick Security Actions -->
+        <div class="monitoring-table">
+            <h3 style="padding: 20px 20px 0 20px; margin: 0; font-size: 18px; font-weight: 600;">⚡ Quick Security Actions</h3>
+            <div style="padding: 20px; display: flex; gap: 15px; flex-wrap: wrap;">
+                <button onclick="sendTestSecurityAlert()" class="btn-modern btn-primary" style="padding: 12px 24px; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; transition: all 0.3s;">
+                    <i class="fas fa-envelope"></i> Send Test Alert
+                </button>
+                <a href="<?php echo $CFG->wwwroot; ?>/admin/settings.php?section=local_alx_report_api_settings" class="btn-modern btn-secondary" style="padding: 12px 24px; border: none; border-radius: 8px; font-weight: 600; text-decoration: none; display: inline-block; background: #6c757d; color: white;">
+                    <i class="fas fa-cog"></i> Configure Alerts
+                </a>
+                <a href="<?php echo $CFG->wwwroot; ?>/local/alx_report_api/test_alerts.php" class="btn-modern btn-info" style="padding: 12px 24px; border: none; border-radius: 8px; font-weight: 600; text-decoration: none; display: inline-block; background: #17a2b8; color: white;">
+                    <i class="fas fa-vial"></i> Advanced Testing
+                </a>
+            </div>
+        </div>
+
+        <!-- Alert Recipients -->
+        <?php if ($alert_emails || $alerting_enabled): ?>
+        <div class="monitoring-table">
+            <h3 style="padding: 20px 20px 0 20px; margin: 0; font-size: 18px; font-weight: 600;">📧 Alert Recipients</h3>
+            <div style="padding: 20px;">
+                <?php if ($alert_emails): ?>
+                <div style="margin-bottom: 15px;">
+                    <strong>Configured Email Recipients:</strong><br>
+                    <div style="margin-top: 8px;">
+                    <?php 
+                    $emails = array_filter(array_map('trim', explode(',', $alert_emails)));
+                    foreach ($emails as $email) {
+                        echo "<span class='badge badge-info' style='margin: 2px; padding: 6px 12px;'>{$email}</span> ";
+                    }
+                    ?>
+                    </div>
+                </div>
+                <?php endif; ?>
+                
+                <div>
+                    <strong>Site Administrators (receive critical alerts):</strong><br>
+                    <div style="margin-top: 8px;">
+                    <?php 
+                    $admins = get_admins();
+                    foreach ($admins as $admin) {
+                        echo "<span class='badge badge-success' style='margin: 2px; padding: 6px 12px;'>" . fullname($admin) . " ({$admin->email})</span> ";
+                    }
+                    ?>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <?php endif; ?>
+
         <!-- Recent Security Events -->
         <div class="monitoring-table">
-            <h3 style="padding: 20px 20px 0 20px; margin: 0; font-size: 18px; font-weight: 600;">Recent Security Events</h3>
+            <h3 style="padding: 20px 20px 0 20px; margin: 0; font-size: 18px; font-weight: 600;">🔒 Recent Security Events</h3>
             <table>
                 <thead>
                     <tr>
@@ -1176,6 +1352,41 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 });
+
+// Send Test Security Alert Function
+function sendTestSecurityAlert() {
+    if (confirm('Send a test security alert to all configured recipients?')) {
+        const btn = event.target;
+        const originalHTML = btn.innerHTML;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending...';
+        btn.disabled = true;
+        
+        // Create form data
+        const formData = new FormData();
+        formData.append('action', 'send_test');
+        formData.append('alert_type', 'security');
+        formData.append('severity', 'medium');
+        formData.append('sesskey', M.cfg.sesskey);
+        
+        // Send to test_alerts.php
+        fetch('<?php echo $CFG->wwwroot; ?>/local/alx_report_api/test_alerts.php', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.text())
+        .then(data => {
+            alert('✅ Test security alert sent successfully! Check your email inbox.');
+            btn.innerHTML = originalHTML;
+            btn.disabled = false;
+        })
+        .catch(error => {
+            alert('❌ Error sending test alert. Please check your alert configuration.');
+            console.error('Error:', error);
+            btn.innerHTML = originalHTML;
+            btn.disabled = false;
+        });
+    }
+}
 </script>
 
 <?php

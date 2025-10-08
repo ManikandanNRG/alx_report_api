@@ -1356,19 +1356,69 @@ input[type="checkbox"]:disabled {
                     </div>
                     <div class="card-body">
                         <?php
-                        // Get rate limiting monitoring data
-                        $rate_monitoring = local_alx_report_api_get_rate_limit_monitoring();
-                        $violations_today = count($rate_monitoring['violations']);
-                        $users_today = count($rate_monitoring['usage_today']);
-                        $alerts_count = count($rate_monitoring['alerts']);
-                        $high_priority_alerts = array_filter($rate_monitoring['alerts'], function($alert) {
-                            return $alert['severity'] === 'high';
-                        });
+                        // Calculate rate limit violations using company-specific limits (same logic as Security tab)
+                        $violations_today = 0;
+                        $users_today = 0;
+                        $today_start = mktime(0, 0, 0);
+                        $debug_info = [];
+                        
+                        try {
+                            if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
+                                $table_info = $DB->get_columns('local_alx_api_logs');
+                                $time_field = isset($table_info['timeaccessed']) ? 'timeaccessed' : 'timecreated';
+                                
+                                // Get all companies and check each one's usage against their specific limit
+                                $companies = local_alx_report_api_get_companies();
+                                $debug_info[] = "Found " . count($companies) . " companies";
+                                
+                                foreach ($companies as $company) {
+                                    // Get company-specific rate limit
+                                    $company_settings = local_alx_report_api_get_company_settings($company->id);
+                                    $company_rate_limit = isset($company_settings['rate_limit']) ? 
+                                        $company_settings['rate_limit'] : 
+                                        get_config('local_alx_report_api', 'rate_limit');
+                                    
+                                    if (empty($company_rate_limit)) {
+                                        $company_rate_limit = 100; // Default fallback
+                                    }
+                                    
+                                    // Count today's API calls for this company
+                                    $company_calls_today = $DB->count_records_select('local_alx_api_logs',
+                                        "{$time_field} >= ? AND company_shortname = ?",
+                                        [$today_start, $company->shortname]
+                                    );
+                                    
+                                    $debug_info[] = "Company: {$company->name} (shortname: {$company->shortname}) - Limit: {$company_rate_limit}, Calls: {$company_calls_today}";
+                                    
+                                    // Check if company exceeded their specific limit
+                                    if ($company_calls_today > $company_rate_limit) {
+                                        $violations_today++;
+                                        $debug_info[] = "  -> VIOLATION DETECTED!";
+                                    }
+                                    
+                                    // Count users with activity today
+                                    if ($company_calls_today > 0) {
+                                        $users_today++;
+                                    }
+                                }
+                            }
+                        } catch (Exception $e) {
+                            error_log('Control Center rate limit calculation error: ' . $e->getMessage());
+                            $debug_info[] = "ERROR: " . $e->getMessage();
+                        }
+                        
+                        // Output debug info as HTML comments
+                        echo "<!-- DEBUG RATE LIMIT CHECK -->\n";
+                        echo "<!-- Today Start: " . date('Y-m-d H:i:s', $today_start) . " -->\n";
+                        foreach ($debug_info as $info) {
+                            echo "<!-- " . htmlspecialchars($info) . " -->\n";
+                        }
+                        echo "<!-- Total Violations: {$violations_today} -->\n";
+                        echo "<!-- END DEBUG -->\n";
                         
                         // Security score calculation
                         $security_score = 100;
                         if ($violations_today > 0) $security_score -= ($violations_today * 10);
-                        if (count($high_priority_alerts) > 0) $security_score -= (count($high_priority_alerts) * 15);
                         $security_score = max(0, $security_score);
                         ?>
 

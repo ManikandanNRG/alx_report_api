@@ -211,6 +211,32 @@ class local_alx_report_api_external extends external_api {
         
         // Check if limit exceeded
         if ($request_count >= $rate_limit) {
+            // Log ONLY the first rejection (limit + 1) so we can detect violation
+            // Don't log subsequent rejections to avoid inflating the count
+            if ($request_count == $rate_limit && $DB->get_manager()->table_exists('local_alx_api_logs')) {
+                // Get company shortname for logging
+                $company_shortname = '';
+                if ($companyid) {
+                    $company = $DB->get_record('company', ['id' => $companyid], 'shortname');
+                    if ($company) {
+                        $company_shortname = $company->shortname;
+                    }
+                }
+                
+                $log = new stdClass();
+                $log->userid = $userid;
+                $log->company_shortname = $company_shortname;
+                $log->endpoint = 'get_course_progress';
+                $log->record_count = 0;
+                $log->error_message = "Rate limit exceeded: {$request_count}/{$rate_limit} requests";
+                $log->response_time_ms = 0;
+                $log->timeaccessed = time();
+                $log->ip_address = $_SERVER['REMOTE_ADDR'] ?? '';
+                $log->user_agent = $_SERVER['HTTP_USER_AGENT'] ?? '';
+                
+                $DB->insert_record('local_alx_api_logs', $log);
+            }
+            
             throw new moodle_exception('ratelimitexceeded', 'local_alx_report_api', '', null, 
                 "Daily rate limit exceeded. You have made {$request_count} requests today. Limit is {$rate_limit} requests per day. Try again tomorrow.");
         }
