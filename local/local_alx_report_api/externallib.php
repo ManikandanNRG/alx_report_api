@@ -213,28 +213,49 @@ class local_alx_report_api_external extends external_api {
         if ($request_count >= $rate_limit) {
             // Log ONLY the first rejection (limit + 1) so we can detect violation
             // Don't log subsequent rejections to avoid inflating the count
-            if ($request_count == $rate_limit && $DB->get_manager()->table_exists('local_alx_api_logs')) {
-                // Get company shortname for logging
+            if ($request_count == $rate_limit) {
+                // Get company shortname and name for logging
                 $company_shortname = '';
+                $company_name = '';
                 if ($companyid) {
-                    $company = $DB->get_record('company', ['id' => $companyid], 'shortname');
+                    $company = $DB->get_record('company', ['id' => $companyid], 'shortname, name');
                     if ($company) {
                         $company_shortname = $company->shortname;
+                        $company_name = $company->name;
                     }
                 }
                 
-                $log = new stdClass();
-                $log->userid = $userid;
-                $log->company_shortname = $company_shortname;
-                $log->endpoint = 'get_course_progress';
-                $log->record_count = 0;
-                $log->error_message = "Rate limit exceeded: {$request_count}/{$rate_limit} requests";
-                $log->response_time_ms = 0;
-                $log->timeaccessed = time();
-                $log->ip_address = $_SERVER['REMOTE_ADDR'] ?? '';
-                $log->user_agent = $_SERVER['HTTP_USER_AGENT'] ?? '';
+                // Log to API logs table
+                if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
+                    $log = new stdClass();
+                    $log->userid = $userid;
+                    $log->company_shortname = $company_shortname;
+                    $log->endpoint = 'get_course_progress';
+                    $log->record_count = 0;
+                    $log->error_message = "Rate limit exceeded: {$request_count}/{$rate_limit} requests";
+                    $log->response_time_ms = 0;
+                    $log->timeaccessed = time();
+                    $log->ip_address = $_SERVER['REMOTE_ADDR'] ?? '';
+                    $log->user_agent = $_SERVER['HTTP_USER_AGENT'] ?? '';
+                    
+                    $DB->insert_record('local_alx_api_logs', $log);
+                }
                 
-                $DB->insert_record('local_alx_api_logs', $log);
+                // Also create an alert for the Security tab
+                if ($DB->get_manager()->table_exists('local_alx_api_alerts')) {
+                    $user = $DB->get_record('user', ['id' => $userid], 'username, firstname, lastname');
+                    $username = $user ? fullname($user) : 'Unknown';
+                    
+                    $alert = new stdClass();
+                    $alert->alert_type = 'rate_limit_exceeded';
+                    $alert->severity = 'high';
+                    $alert->message = "User {$username} from {$company_name} exceeded rate limit ({$request_count}/{$rate_limit} requests)";
+                    $alert->hostname = $_SERVER['REMOTE_ADDR'] ?? '';
+                    $alert->resolved = 0;
+                    $alert->timecreated = time();
+                    
+                    $DB->insert_record('local_alx_api_alerts', $alert);
+                }
             }
             
             throw new moodle_exception('ratelimitexceeded', 'local_alx_report_api', '', null, 
