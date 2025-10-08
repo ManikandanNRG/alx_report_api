@@ -457,13 +457,13 @@ try {
     <!-- Tab Navigation -->
     <div class="tab-navigation">
         <button class="tab-button <?php echo $active_tab === 'autosync' ? 'active' : ''; ?>" onclick="switchTab('autosync')">
-            <i class="fas fa-sync"></i> Auto-Sync Intelligence
+            <i class="fas fa-sync"></i> Data Sync Monitor
         </button>
         <button class="tab-button <?php echo $active_tab === 'performance' ? 'active' : ''; ?>" onclick="switchTab('performance')">
             <i class="fas fa-tachometer-alt"></i> API Monitor
         </button>
         <button class="tab-button <?php echo $active_tab === 'security' ? 'active' : ''; ?>" onclick="switchTab('security')">
-            <i class="fas fa-shield-alt"></i> Security & Alerts
+            <i class="fas fa-shield-alt"></i> Security Monitor
         </button>
     </div>
 
@@ -1012,14 +1012,15 @@ try {
         </div>
         <?php endif; ?>
 
-        <!-- Recent Security Events -->
+        <!-- Security Events & Alerts (Combined) -->
         <div class="monitoring-table">
-            <h3 style="padding: 20px 20px 0 20px; margin: 0; font-size: 18px; font-weight: 600;">🔒 Recent Security Events</h3>
+            <h3 style="padding: 20px 20px 0 20px; margin: 0; font-size: 18px; font-weight: 600;">🔒 Security Events & Alerts</h3>
             <table>
                 <thead>
                     <tr>
                         <th>Time</th>
                         <th>Event Type</th>
+                        <th>Severity</th>
                         <th>User/IP</th>
                         <th>Details</th>
                         <th>Status</th>
@@ -1027,67 +1028,41 @@ try {
                 </thead>
                 <tbody>
                     <?php 
-                    // Get recent security events
+                    // Get all security events (recent 20)
                     if ($DB->get_manager()->table_exists('local_alx_api_alerts')) {
-                        $alerts = $DB->get_records('local_alx_api_alerts', null, 'timecreated DESC', '*', 0, 10);
-                        foreach ($alerts as $alert):
-                    ?>
-                    <tr>
-                        <td><?php echo date('H:i', $alert->timecreated); ?></td>
-                        <td><?php echo ucfirst(str_replace('_', ' ', $alert->alert_type)); ?></td>
-                        <td><?php echo $alert->hostname ?: 'N/A'; ?></td>
-                        <td><?php echo $alert->message; ?></td>
-                        <td><span class="badge badge-<?php echo $alert->resolved ? 'success' : 'warning'; ?>">
-                            <?php echo $alert->resolved ? 'Resolved' : 'Active'; ?>
-                        </span></td>
-                    </tr>
-                    <?php 
-                        endforeach;
-                    } else {
-                        echo '<tr><td colspan="5" style="text-align: center; color: #718096;">No security events recorded</td></tr>';
-                    }
-                    ?>
-                </tbody>
-            </table>
-        </div>
-
-        <!-- Active System Alerts -->
-        <div class="monitoring-table">
-            <h3 style="padding: 20px 20px 0 20px; margin: 0; font-size: 18px; font-weight: 600;">Active System Alerts</h3>
-            <table>
-                <thead>
-                    <tr>
-                        <th>Alert Type</th>
-                        <th>Severity</th>
-                        <th>Message</th>
-                        <th>Time</th>
-                        <th>Status</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php
-                    // Get active alerts
-                    if ($DB->get_manager()->table_exists('local_alx_api_alerts')) {
-                        $active_alerts = $DB->get_records('local_alx_api_alerts', ['resolved' => 0], 'timecreated DESC', '*', 0, 10);
-                        if (empty($active_alerts)) {
-                            echo '<tr><td colspan="5" style="text-align: center; color: #10b981;">✅ No active alerts - All systems operating normally</td></tr>';
+                        $alerts = $DB->get_records('local_alx_api_alerts', null, 'timecreated DESC', '*', 0, 20);
+                        if (empty($alerts)) {
+                            echo '<tr><td colspan="6" style="text-align: center; color: #10b981;">✅ No security events - All systems operating normally</td></tr>';
                         } else {
-                            foreach ($active_alerts as $alert):
+                            foreach ($alerts as $alert):
+                                $severity_badge = $alert->severity === 'high' ? 'danger' : ($alert->severity === 'medium' ? 'warning' : 'info');
+                                $status_badge = $alert->resolved ? 'success' : 'warning';
+                                $status_text = $alert->resolved ? 'Resolved' : 'Active';
                     ?>
                     <tr>
+                        <td><?php echo date('M d, H:i', $alert->timecreated); ?></td>
                         <td><?php echo ucfirst(str_replace('_', ' ', $alert->alert_type)); ?></td>
-                        <td><span class="badge badge-<?php echo $alert->severity === 'high' ? 'danger' : ($alert->severity === 'medium' ? 'warning' : 'info'); ?>">
+                        <td><span class="badge badge-<?php echo $severity_badge; ?>">
                             <?php echo ucfirst($alert->severity); ?>
                         </span></td>
-                        <td><?php echo $alert->message; ?></td>
-                        <td><?php echo date('H:i', $alert->timecreated); ?></td>
-                        <td><span class="badge badge-warning">Active</span></td>
+                        <td><?php echo htmlspecialchars($alert->hostname ?: 'N/A'); ?></td>
+                        <td><?php 
+                            // Simple color highlighting: username in blue, company in orange
+                            $message = htmlspecialchars($alert->message);
+                            $message = preg_replace('/User\s+(.+?)\s+from\s+(.+?)\s+exceeded/', 
+                                'User <span style="color: #3b82f6; font-weight: 600;">$1</span> from <span style="color: #f59e0b; font-weight: 600;">$2</span> exceeded', 
+                                $message);
+                            echo $message;
+                        ?></td>
+                        <td><span class="badge badge-<?php echo $status_badge; ?>">
+                            <?php echo $status_text; ?>
+                        </span></td>
                     </tr>
                     <?php 
                             endforeach;
                         }
                     } else {
-                        echo '<tr><td colspan="5" style="text-align: center; color: #10b981;">✅ No active alerts - All systems operating normally</td></tr>';
+                        echo '<tr><td colspan="6" style="text-align: center; color: #718096;">Security alerts table not available</td></tr>';
                     }
                     ?>
                 </tbody>

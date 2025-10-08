@@ -249,6 +249,7 @@ class local_alx_report_api_external extends external_api {
                     $alert = new stdClass();
                     $alert->alert_type = 'rate_limit_exceeded';
                     $alert->severity = 'high';
+                    // Store plain text - will be formatted with colors in the UI
                     $alert->message = "User {$username} from {$company_name} exceeded rate limit ({$request_count}/{$rate_limit} requests)";
                     $alert->hostname = $_SERVER['REMOTE_ADDR'] ?? '';
                     $alert->resolved = 0;

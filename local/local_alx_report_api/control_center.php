@@ -1093,9 +1093,9 @@ input[type="checkbox"]:disabled {
             Monitoring & Analytics
             <!-- Hover Dropdown Menu -->
             <div class="tab-dropdown" onclick="event.stopPropagation();">
-                <a href="monitoring_dashboard_new.php?tab=autosync">🔄 Auto-Sync Intelligence</a>
+                <a href="monitoring_dashboard_new.php?tab=autosync">🔄 Data Sync Monitor</a>
                 <a href="monitoring_dashboard_new.php?tab=performance">⚡ API Monitor</a>
-                <a href="monitoring_dashboard_new.php?tab=security">🔒 Security & Alerts</a>
+                <a href="monitoring_dashboard_new.php?tab=security">🔒 Security Monitor</a>
             </div>
         </button>
         <button class="tab-button" onclick="switchTab(event, 'settings')">
