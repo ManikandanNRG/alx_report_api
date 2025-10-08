@@ -2693,21 +2693,25 @@ input[type="checkbox"]:disabled {
                                 </small>
                             </div>
                             
-                            <!-- Allow GET Method -->
+                            <!-- Allow GET Method (Toggle Switch) -->
                             <div style="background: white; padding: 16px; border-radius: 8px; border: 2px solid #e9ecef;">
-                                <label style="display: flex; align-items: center; cursor: pointer; margin: 0;">
-                                    <input type="checkbox" 
-                                           name="allow_get_method" 
-                                           value="1" 
-                                           <?php echo $allow_get ? 'checked' : ''; ?>
-                                           style="width: 20px; height: 20px; margin-right: 12px; cursor: pointer; accent-color: #667eea;">
+                                <div style="display: flex; justify-content: space-between; align-items: center;">
                                     <div>
                                         <div style="font-weight: 600; font-size: 15px; color: #495057;">Allow GET Method</div>
                                         <div style="font-size: 13px; color: #6c757d; margin-top: 4px;">
                                             <i class="fas fa-exclamation-triangle" style="color: #ffc107;"></i> Development/Testing Only
                                         </div>
                                     </div>
-                                </label>
+                                    <label class="toggle-switch" style="position: relative; display: inline-block; width: 50px; height: 26px;">
+                                        <input type="checkbox" 
+                                               name="allow_get_method" 
+                                               value="1" 
+                                               <?php echo $allow_get ? 'checked' : ''; ?>
+                                               style="opacity: 0; width: 0; height: 0;">
+                                        <span style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: .4s; border-radius: 26px;"></span>
+                                        <span style="position: absolute; content: ''; height: 20px; width: 20px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%;"></span>
+                                    </label>
+                                </div>
                             </div>
                         </div>
                         
@@ -2717,39 +2721,29 @@ input[type="checkbox"]:disabled {
                                 <i class="fas fa-bell"></i> Email Alerts
                             </h4>
                             
-                            <!-- Enable Alerting -->
+                            <!-- Enable Alert System (Toggle Switch) -->
                             <div style="background: white; padding: 16px; border-radius: 8px; border: 2px solid #e9ecef; margin-bottom: 16px;">
-                                <label style="display: flex; align-items: center; cursor: pointer; margin: 0;">
-                                    <input type="checkbox" 
-                                           name="enable_alerting" 
-                                           value="1" 
-                                           <?php echo $enable_alerting ? 'checked' : ''; ?>
-                                           style="width: 20px; height: 20px; margin-right: 12px; cursor: pointer; accent-color: #f093fb;">
+                                <div style="display: flex; justify-content: space-between; align-items: center;">
                                     <div>
                                         <div style="font-weight: 600; font-size: 15px; color: #495057;">Enable Alert System</div>
                                         <div style="font-size: 13px; color: #6c757d; margin-top: 4px;">
-                                            Master switch for all alerts
+                                            Master switch for all email alerts
                                         </div>
                                     </div>
-                                </label>
+                                    <label class="toggle-switch" style="position: relative; display: inline-block; width: 50px; height: 26px;">
+                                        <input type="checkbox" 
+                                               name="enable_alerting" 
+                                               value="1" 
+                                               <?php echo $enable_alerting ? 'checked' : ''; ?>
+                                               style="opacity: 0; width: 0; height: 0;">
+                                        <span style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: .4s; border-radius: 26px;"></span>
+                                        <span style="position: absolute; content: ''; height: 20px; width: 20px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%;"></span>
+                                    </label>
+                                </div>
                             </div>
                             
-                            <!-- Enable Email Alerts -->
-                            <div style="background: white; padding: 16px; border-radius: 8px; border: 2px solid #e9ecef; margin-bottom: 16px;">
-                                <label style="display: flex; align-items: center; cursor: pointer; margin: 0;">
-                                    <input type="checkbox" 
-                                           name="enable_email_alerts" 
-                                           value="1" 
-                                           <?php echo $enable_email_alerts ? 'checked' : ''; ?>
-                                           style="width: 20px; height: 20px; margin-right: 12px; cursor: pointer; accent-color: #f093fb;">
-                                    <div>
-                                        <div style="font-weight: 600; font-size: 15px; color: #495057;">Enable Email Alerts</div>
-                                        <div style="font-size: 13px; color: #6c757d; margin-top: 4px;">
-                                            Send alerts via email
-                                        </div>
-                                    </div>
-                                </label>
-                            </div>
+                            <!-- Hidden field to maintain enable_email_alerts (always enabled when alerting is enabled) -->
+                            <input type="hidden" name="enable_email_alerts" value="<?php echo $enable_alerting ? '1' : '0'; ?>">
                             
                             <!-- Alert Threshold -->
                             <div style="margin-bottom: 20px;">
@@ -2759,13 +2753,13 @@ input[type="checkbox"]:disabled {
                                 <select id="alert_threshold" 
                                         name="alert_threshold"
                                         style="width: 100%; padding: 12px 15px; border: 2px solid #e9ecef; border-radius: 8px; font-size: 15px; background: white; transition: all 0.3s;">
-                                    <option value="low" <?php echo $alert_threshold === 'low' ? 'selected' : ''; ?>>Low - Send all alerts</option>
-                                    <option value="medium" <?php echo $alert_threshold === 'medium' ? 'selected' : ''; ?>>Medium - Send medium, high, critical</option>
-                                    <option value="high" <?php echo $alert_threshold === 'high' ? 'selected' : ''; ?>>High - Send high and critical</option>
-                                    <option value="critical" <?php echo $alert_threshold === 'critical' ? 'selected' : ''; ?>>Critical - Send only critical</option>
+                                    <option value="low" <?php echo $alert_threshold === 'low' ? 'selected' : ''; ?>>🟢 Low - All alerts (informational + warnings + critical)</option>
+                                    <option value="medium" <?php echo $alert_threshold === 'medium' ? 'selected' : ''; ?>>🟡 Medium - Important alerts only (warnings + critical)</option>
+                                    <option value="high" <?php echo $alert_threshold === 'high' ? 'selected' : ''; ?>>🟠 High - Urgent alerts only (high + critical)</option>
+                                    <option value="critical" <?php echo $alert_threshold === 'critical' ? 'selected' : ''; ?>>🔴 Critical - Emergency alerts only</option>
                                 </select>
                                 <small style="display: block; margin-top: 6px; color: #6c757d; font-size: 13px;">
-                                    <i class="fas fa-info-circle"></i> Minimum severity level
+                                    <i class="fas fa-info-circle"></i> Controls which alerts you receive. Higher threshold = fewer emails. Recommended: Medium
                                 </small>
                             </div>
                             
@@ -2819,6 +2813,34 @@ input[type="checkbox"]:disabled {
                         </button>
                     </div>
                 </form>
+                
+                <!-- Toggle Switch CSS -->
+                <style>
+                /* Toggle Switch Styling */
+                .toggle-switch input:checked + span {
+                    background-color: #667eea;
+                }
+                
+                .toggle-switch input:checked + span + span {
+                    transform: translateX(24px);
+                }
+                
+                .toggle-switch span:first-of-type {
+                    box-shadow: inset 0 1px 3px rgba(0,0,0,0.2);
+                }
+                
+                .toggle-switch span:last-of-type {
+                    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+                }
+                
+                .toggle-switch:hover span:first-of-type {
+                    background-color: #bbb;
+                }
+                
+                .toggle-switch input:checked:hover + span {
+                    background-color: #5568d3;
+                }
+                </style>
             </div>
         </div>
     </div>
