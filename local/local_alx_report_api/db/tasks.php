@@ -35,4 +35,14 @@ $tasks = [
         'month' => '*',
         'disabled' => 0,
     ],
+    [
+        'classname' => 'local_alx_report_api\task\check_alerts_task',
+        'blocking' => 0,
+        'minute' => '*/15', // Run every 15 minutes
+        'hour' => '*',
+        'day' => '*',
+        'dayofweek' => '*',
+        'month' => '*',
+        'disabled' => 0,
+    ],
 ]; 

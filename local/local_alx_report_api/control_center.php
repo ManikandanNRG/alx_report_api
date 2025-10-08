@@ -2591,8 +2591,8 @@ input[type="checkbox"]:disabled {
                         set_config('enable_alerting', $enable_alerting_input, 'local_alx_report_api');
                         $success_count++;
                         
-                        $enable_email_alerts_input = optional_param('enable_email_alerts', 0, PARAM_INT);
-                        set_config('enable_email_alerts', $enable_email_alerts_input, 'local_alx_report_api');
+                        // Automatically enable email alerts when alerting is enabled
+                        set_config('enable_email_alerts', $enable_alerting_input, 'local_alx_report_api');
                         $success_count++;
                         
                         $alert_threshold_input = optional_param('alert_threshold', 'medium', PARAM_ALPHA);
@@ -2708,8 +2708,8 @@ input[type="checkbox"]:disabled {
                                                value="1" 
                                                <?php echo $allow_get ? 'checked' : ''; ?>
                                                style="opacity: 0; width: 0; height: 0;">
-                                        <span style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: .4s; border-radius: 26px;"></span>
-                                        <span style="position: absolute; content: ''; height: 20px; width: 20px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%;"></span>
+                                        <span class="toggle-track" style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: .4s; border-radius: 26px;"></span>
+                                        <span class="toggle-thumb" style="position: absolute; content: ''; height: 20px; width: 20px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%;"></span>
                                     </label>
                                 </div>
                             </div>
@@ -2736,8 +2736,8 @@ input[type="checkbox"]:disabled {
                                                value="1" 
                                                <?php echo $enable_alerting ? 'checked' : ''; ?>
                                                style="opacity: 0; width: 0; height: 0;">
-                                        <span style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: .4s; border-radius: 26px;"></span>
-                                        <span style="position: absolute; content: ''; height: 20px; width: 20px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%;"></span>
+                                        <span class="toggle-track" style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: .4s; border-radius: 26px;"></span>
+                                        <span class="toggle-thumb" style="position: absolute; content: ''; height: 20px; width: 20px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%;"></span>
                                     </label>
                                 </div>
                             </div>
@@ -2817,28 +2817,28 @@ input[type="checkbox"]:disabled {
                 <!-- Toggle Switch CSS -->
                 <style>
                 /* Toggle Switch Styling */
-                .toggle-switch input:checked + span {
-                    background-color: #667eea;
+                .toggle-switch input:checked + .toggle-track {
+                    background-color: #667eea !important;
                 }
                 
-                .toggle-switch input:checked + span + span {
+                .toggle-switch input:checked + .toggle-track + .toggle-thumb {
                     transform: translateX(24px);
                 }
                 
-                .toggle-switch span:first-of-type {
+                .toggle-track {
                     box-shadow: inset 0 1px 3px rgba(0,0,0,0.2);
                 }
                 
-                .toggle-switch span:last-of-type {
+                .toggle-thumb {
                     box-shadow: 0 2px 4px rgba(0,0,0,0.2);
                 }
                 
-                .toggle-switch:hover span:first-of-type {
-                    background-color: #bbb;
+                .toggle-switch:hover .toggle-track {
+                    background-color: #bbb !important;
                 }
                 
-                .toggle-switch input:checked:hover + span {
-                    background-color: #5568d3;
+                .toggle-switch input:checked:hover + .toggle-track {
+                    background-color: #5568d3 !important;
                 }
                 </style>
             </div>

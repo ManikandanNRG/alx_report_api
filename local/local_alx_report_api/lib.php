@@ -2092,6 +2092,12 @@ function local_alx_report_api_send_alert($alert_type, $severity, $message, $data
         return false; // Below threshold, don't send
     }
     
+    // Check alert cooldown to prevent spam
+    $cooldown_minutes = get_config('local_alx_report_api', 'alert_cooldown') ?: 60;
+    if (local_alx_report_api_is_alert_in_cooldown($alert_type, $severity, $cooldown_minutes)) {
+        return false; // Alert sent recently, skip to prevent spam
+    }
+    
     // Prepare alert data
     $alert = [
         'type' => $alert_type,
@@ -2227,17 +2233,32 @@ function local_alx_report_api_send_email_alert($recipient, $alert) {
     
     // Send email using Moodle's email system
     try {
+        // Create a proper user object for email_to_user
         $user = new stdClass();
+        $user->id = -99; // Fake ID for external recipient
         $user->email = $recipient['email'];
         $user->firstname = $recipient['name'] ?? 'Administrator';
         $user->lastname = '';
+        $user->maildisplay = true;
         $user->mailformat = 1; // HTML format
+        $user->maildigest = 0;
+        $user->emailstop = 0;
+        $user->deleted = 0;
+        $user->suspended = 0;
+        $user->auth = 'manual';
         
         $from = core_user::get_noreply_user();
         
-        return email_to_user($user, $from, $subject, '', $body);
+        $result = email_to_user($user, $from, $subject, '', $body);
+        
+        // Log for debugging
+        if (!$result) {
+            error_log("ALX Report API: Failed to send email to {$recipient['email']}");
+        }
+        
+        return $result;
     } catch (Exception $e) {
-        error_log("ALX Report API: Failed to send email alert: " . $e->getMessage());
+        error_log("ALX Report API: Exception sending email alert: " . $e->getMessage());
         return false;
     }
 }
@@ -2314,6 +2335,36 @@ function local_alx_report_api_get_alert_recommendations($alert_type, $severity) 
     ];
     
     return $recommendations[$alert_type][$severity] ?? 'Review system status and logs for details.';
+}
+
+/**
+ * Check if an alert is in cooldown period to prevent spam.
+ *
+ * @param string $alert_type Type of alert
+ * @param string $severity Severity level
+ * @param int $cooldown_minutes Cooldown period in minutes
+ * @return bool True if in cooldown, false otherwise
+ */
+function local_alx_report_api_is_alert_in_cooldown($alert_type, $severity, $cooldown_minutes) {
+    global $DB;
+    
+    if (!$DB->get_manager()->table_exists('local_alx_api_alerts')) {
+        return false;
+    }
+    
+    $cooldown_seconds = $cooldown_minutes * 60;
+    $cutoff_time = time() - $cooldown_seconds;
+    
+    // Check if same alert type and severity was sent recently
+    $recent_alert = $DB->get_record_select(
+        'local_alx_api_alerts',
+        'alert_type = ? AND severity = ? AND timecreated > ?',
+        [$alert_type, $severity, $cutoff_time],
+        'id, timecreated',
+        IGNORE_MULTIPLE
+    );
+    
+    return !empty($recent_alert);
 }
 
 /**

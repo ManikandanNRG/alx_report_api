@@ -1,0 +1,281 @@
+[33mcommit b97a7f0796baa5ebe69c47826af447e76acdb819[m[33m ([m[1;36mHEAD -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m)[m
+Author: Manikandan <nrgmanikandan91@gmail.com>
+Date:   Wed Oct 8 17:34:01 2025 +0530
+
+     toggle button added in setting page
+
+[33mcommit e4bfd52e06979a10013ef1616bdeedaa7f45196f[m
+Author: Manikandan <nrgmanikandan91@gmail.com>
+Date:   Wed Oct 8 16:49:17 2025 +0530
+
+     setting page layout fixed
+
+[33mcommit a83c5329046571ae7c5fbb2d3128424b2d75a4e0[m
+Author: Manikandan <nrgmanikandan91@gmail.com>
+Date:   Wed Oct 8 16:40:45 2025 +0530
+
+     control center setting page changed to form
+
+[33mcommit 4949d3fa4e27e05ee32903029a55db36da8751b3[m
+Author: Manikandan <nrgmanikandan91@gmail.com>
+Date:   Wed Oct 8 16:15:02 2025 +0530
+
+     setting tab issue is fixed but need so additional fix
+
+[33mcommit 9b75aa0dd5473675b4007b13d874a90ac6b6d121[m
+Author: Manikandan <nrgmanikandan91@gmail.com>
+Date:   Wed Oct 8 15:18:10 2025 +0530
+
+     control center reverted and it has empty page in config tab so we need to implement again
+
+[33mcommit 2876cea9703e1f7abc7ffbe3715a127b9c629475[m
+Author: Manikandan <nrgmanikandan91@gmail.com>
+Date:   Wed Oct 8 13:29:24 2025 +0530
+
+     monitor page UI fully completed except alert
+
+[33mcommit 613c0db61f92a6ba0c30ae0b2c5b2fd3c9451ab0[m
+Author: Manikandan <nrgmanikandan91@gmail.com>
+Date:   Wed Oct 8 12:48:02 2025 +0530
+
+     unified moniter page renamed sucessfully
+
+[33mcommit 976a931775cd42f341b7fe52a37500ef89596638[m
+Author: Manikandan <nrgmanikandan91@gmail.com>
+Date:   Wed Oct 8 10:49:52 2025 +0530
+
+     externallib php edited for alert table
+
+[33mcommit 272dc5996ae4ced916d81f543fd00197d581689a[m
+Author: Manikandan <nrgmanikandan91@gmail.com>
+Date:   Wed Oct 8 10:38:41 2025 +0530
+
+     new logic added for rate limit violation
+
+[33mcommit 49cd63ae02e7974522badad8e022f016f7dd1319[m
+Author: Manikandan <nrgmanikandan91@gmail.com>
+Date:   Tue Oct 7 21:18:37 2025 +0530
+
+     second tab is fixed and need to move the next tab
+
+[33mcommit b9356cfc67e955212a8faae6676df8759d202609[m
+Author: Manikandan <nrgmanikandan91@gmail.com>
+Date:   Tue Oct 7 20:03:41 2025 +0530
+
+     monitor page two tab is fixed and working fine except the map
+
+[33mcommit 868a8c0dfdc4864defd0bc67087b828f2d75c8ea[m
+Author: Manikandan <nrgmanikandan91@gmail.com>
+Date:   Tue Oct 7 15:10:05 2025 +0530
+
+     many UI issues fixed except monitor page so commit for working methos
+
+[33mcommit c37303aceb67246836bacb9e32f1b87717fb12ef[m
+Author: Manikandan <nrgmanikandan91@gmail.com>
+Date:   Mon Oct 6 22:41:02 2025 +0530
+
+     UI issue fixed and it is working fine
+
+[33mcommit 1e4fd6819e56b504baf401ccf57794a68d910a99[m
+Author: Manikandan <nrgmanikandan91@gmail.com>
+Date:   Mon Oct 6 18:00:18 2025 +0530
+
+     cache and rate limit issue is fixed after kiro pro
+
+[33mcommit ddedc9fc84111eb844efc184df67d268bf332bfe[m
+Author: Manikandan <nrgmanikandan91@gmail.com>
+Date:   Wed Oct 1 18:06:04 2025 +0530
+
+     kiro pro purchased and the 6 issues yet to fixed
+
+[33mcommit 8044cbd7be6fc8b30e6621e6c019b7a3cbdd3487[m
+Author: Manikandan <nrgmanikandan91@gmail.com>
+Date:   Fri Sep 26 12:39:42 2025 +0530
+
+     i have updated the .md for for my reference
+
+[33mcommit f0f38e05115397c5c056acc42e0bc22ef534c176[m
+Author: Manikandan <nrgmanikandan91@gmail.com>
+Date:   Thu Sep 25 18:25:11 2025 +0530
+
+     this plugin again installed in dev.aktrea.net on september after ganesh request- new table schema added in install.xml on 25.09.2025
+
+[33mcommit ab7aaf82a3d65b6abbb6ba8c33f52fb6cc0d6287[m
+Author: Manikandan <nrgmanikandan91@gmail.com>
+Date:   Wed Jul 16 17:23:09 2025 +0530
+
+     working correctly with kiro
+
+[33mcommit 019ed3795ee8b5cb6eced78e61accb6627bc92ed[m
+Author: Manikandan <nrgmanikandan91@gmail.com>
+Date:   Wed Jul 16 15:10:19 2025 +0530
+
+     fixed install.php ragarding the table related issue
+
+[33mcommit 283219d3560d145113bd63968dc0f2c2ae31c1a5[m
+Author: Manikandan <nrgmanikandan91@gmail.com>
+Date:   Sun Jul 13 21:36:13 2025 +0530
+
+     monitor page fully completed, only testing is pending
+
+[33mcommit 335dfa8ef9f037aa06f21d82bce2ab33a3306092[m
+Author: Manikandan <nrgmanikandan91@gmail.com>
+Date:   Sun Jul 13 09:48:08 2025 +0530
+
+     monitor page implemented fully
+
+[33mcommit 60b10225f1b804f1ebea12ec7ab2af20e4afead8[m
+Author: Manikandan <nrgmanikandan91@gmail.com>
+Date:   Sat Jul 12 13:43:46 2025 +0530
+
+     unified monitor going to remove and keep three different page for size reduce
+
+[33mcommit 1367bdd6fbc7231bb7c48a54e18e8b1491c8cd72[m
+Author: Manikandan <nrgmanikandan91@gmail.com>
+Date:   Fri Jul 11 09:55:42 2025 +0530
+
+     Monitor page UI going to redesign- just commit for backup
+
+[33mcommit 2228ca9c283327fe71814ce59633e51b1b9065e1[m
+Author: Manikandan <nrgmanikandan91@gmail.com>
+Date:   Thu Jul 10 22:15:54 2025 +0530
+
+     monitor page button consistency fixed and service function automated but need to test
+
+[33mcommit 27f6e90816fdbd083651af95380dbd2d27e18b0a[m
+Author: Manikandan <nrgmanikandan91@gmail.com>
+Date:   Thu Jul 10 11:42:22 2025 +0530
+
+     3 monitoring page is completed and it is working fine
+
+[33mcommit 9bd8e6ebeb408378d64c524fec56519ce16852b7[m
+Author: Manikandan <nrgmanikandan91@gmail.com>
+Date:   Wed Jul 9 22:01:47 2025 +0530
+
+     overview page issue fixed
+
+[33mcommit 2613348e62bddb83180fe5b66f2596d7bf54b508[m
+Author: Manikandan <nrgmanikandan91@gmail.com>
+Date:   Wed Jul 9 18:19:29 2025 +0530
+
+     token issue and UI button position is fixed
+
+[33mcommit 97fdf0f6bc271033a3d2111a31f4c04aecb5c7b4[m
+Author: Manikandan <nrgmanikandan91@gmail.com>
+Date:   Wed Jul 9 08:49:53 2025 +0530
+
+     database issue fixed in monitor page and ajax issue fixed, it is a wroking condition code
+
+[33mcommit 73e104a094b1f4786b51cc6e0c8a325f9696a41f[m
+Author: Manikandan <nrgmanikandan91@gmail.com>
+Date:   Tue Jul 8 23:00:49 2025 +0530
+
+     active token issue fixed - after purchase pro plan at 08-07-2025
+
+[33mcommit cbcbc128a4f0d39b41c51d4073fe26bc55014a8a[m
+Author: Manikandan <nrgmanikandan91@gmail.com>
+Date:   Sat Jul 5 00:22:19 2025 +0530
+
+     last sync issue fixed
+
+[33mcommit d4c634ba50cbb7f4c0cc6ffa618ec969ac07fad5[m
+Author: Manikandan <nrgmanikandan91@gmail.com>
+Date:   Sat Jul 5 00:02:49 2025 +0530
+
+     cron issue fixed
+
+[33mcommit 2a643176ed4aa239bdf30a2f062cecdb65d93858[m
+Author: Manikandan <nrgmanikandan91@gmail.com>
+Date:   Fri Jul 4 15:24:39 2025 +0530
+
+     last sync and next sync value issue is fixed
+
+[33mcommit 015aa9cd6b157f53a179b5fd357ec601f8605cb9[m
+Author: Manikandan <nrgmanikandan91@gmail.com>
+Date:   Thu Jul 3 22:27:15 2025 +0530
+
+     api response time issue fixed and it is working fine now
+
+[33mcommit 3bb8d11c712e373267538d6c72e81423171104aa[m
+Author: Manikandan <nrgmanikandan91@gmail.com>
+Date:   Thu Jul 3 21:56:40 2025 +0530
+
+     after revert first commit at 03-07-25
+
+[33mcommit 40590fa76823b959954c3e07b7b5b57a42e0defe[m
+Author: Manikandan <nrgmanikandan91@gmail.com>
+Date:   Thu Jul 3 12:03:16 2025 +0530
+
+     till the api response code issue fixed, and moving this to new repo
+
+[33mcommit fe17edb2f760e7aef8f09d24098b474a6facc4d9[m
+Author: Manikandan <nrgmanikandan91@gmail.com>
+Date:   Wed Jul 2 22:17:30 2025 +0530
+
+     Fixed the code issues in API response
+
+[33mcommit c0206c52e943946c52928dbbb86b3d741478423e[m
+Author: Manikandan <nrgmanikandan91@gmail.com>
+Date:   Tue Jul 1 16:54:24 2025 +0530
+
+     papulate page is developed with New UI
+
+[33mcommit d10084438fad8f5876b20625f233b2f7432333a5[m
+Author: Manikandan <nrgmanikandan91@gmail.com>
+Date:   Tue Jul 1 15:42:33 2025 +0530
+
+     detailed monitoring added
+
+[33mcommit 3840cb2285ec5b9cd483a6ee124d5469fa0a81e6[m
+Author: Manikandan <nrgmanikandan91@gmail.com>
+Date:   Tue Jul 1 12:01:16 2025 +0530
+
+    Control cented navigation need to fix
+
+[33mcommit 04846ca91c68ffc4a65f39563fde7df25d032b0c[m
+Author: Manikandan <nrgmanikandan91@gmail.com>
+Date:   Tue Jul 1 12:00:43 2025 +0530
+
+     refresh issue is there when tab switching
+
+[33mcommit e89636e1d09d0ad086dbe191653c1ac76676db0e[m
+Author: Manikandan <nrgmanikandan91@gmail.com>
+Date:   Mon Jun 30 23:48:24 2025 +0530
+
+     Ajax issue fixed
+
+[33mcommit 289e04d8631edc626559934d434a1628c53467ea[m
+Author: Manikandan <nrgmanikandan91@gmail.com>
+Date:   Mon Jun 30 23:20:18 2025 +0530
+
+    Control center added
+
+[33mcommit 40f53ee718bf2cc4e776072c94d22214530a651c[m
+Author: Manikandan <nrgmanikandan91@gmail.com>
+Date:   Mon Jun 30 22:00:32 2025 +0530
+
+     papulate table fixed UI
+
+[33mcommit 82321a8c927c05bb2f20e1c8612fbee656a4d0cb[m
+Author: Manikandan <nrgmanikandan91@gmail.com>
+Date:   Mon Jun 30 10:55:11 2025 +0530
+
+    documentation added
+
+[33mcommit dd3bc52727443697302824a003e9d1ba4d598876[m
+Author: Manikandan <nrgmanikandan91@gmail.com>
+Date:   Tue Jun 24 23:23:10 2025 +0530
+
+     incremental issue fixed Now only testing is pending all moset all development is finished
+
+[33mcommit 0aa4f92d227a18c8eb2faf10f7bee63a6dbe84a5[m
+Author: Manikandan <nrgmanikandan91@gmail.com>
+Date:   Tue Jun 24 18:32:48 2025 +0530
+
+     after restore I commit this
+
+[33mcommit 359d90d1efb5a5d9b54b9289f402c75d7934ab8a[m
+Author: Manikandan <nrgmanikandan91@gmail.com>
+Date:   Tue Jun 24 18:13:46 2025 +0530
+
+    Reorganized project structure like SES_dashboard - moved plugins to local/ directory

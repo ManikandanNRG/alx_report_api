@@ -172,3 +172,32 @@ $string['health_score_threshold'] = 'Health Score Alert Threshold';
 $string['health_score_threshold_desc'] = 'Send alert when system health score drops below this value';
 $string['db_response_time_threshold'] = 'Database Response Time Alert Threshold';
 $string['db_response_time_threshold_desc'] = 'Send alert when database response time exceeds this value (in milliseconds)'; 
+
+// Scheduled task for alert monitoring
+$string['checkalertstask'] = 'Check system alerts and send notifications';
+
+// Email alert notification strings
+$string['alert_email_subject'] = 'ALX Report API Alert: {$a->severity} - {$a->type}';
+$string['alert_email_body'] = 'An alert has been triggered in the ALX Report API system.
+
+Alert Details:
+- Severity: {$a->severity}
+- Type: {$a->type}
+- Message: {$a->message}
+- Time: {$a->time}
+- Threshold: {$a->threshold}
+- Current Value: {$a->current_value}
+
+Please review the Control Center monitoring dashboard for more details.
+
+Dashboard URL: {$a->dashboard_url}
+
+This is an automated message from the ALX Report API monitoring system.';
+
+// Alert type descriptions
+$string['alert_type_api_usage'] = 'High API Usage';
+$string['alert_type_health_score'] = 'Low System Health Score';
+$string['alert_type_db_response'] = 'Slow Database Response';
+$string['alert_type_rate_limit'] = 'Rate Limit Exceeded';
+$string['alert_type_sync_failure'] = 'Data Sync Failure';
+$string['alert_type_system_error'] = 'System Error';
