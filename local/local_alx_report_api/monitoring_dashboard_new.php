@@ -394,26 +394,41 @@ try {
 /* Error Details Eye Icon */
 .error-eye {
     cursor: pointer;
-    font-size: 16px;
-    color: #4a5568;
+    font-size: 18px;
+    color: #ef4444;
     position: relative;
+    display: inline-block;
 }
 
 .error-eye:hover {
-    color: #2d3748;
+    color: #dc2626;
 }
 
 .error-tooltip {
     display: none;
     position: absolute;
-    background: #2d3748;
+    bottom: 100%;
+    right: 0;
+    margin-bottom: 8px;
+    background: #1f2937;
     color: white;
-    padding: 12px;
-    border-radius: 8px;
+    padding: 10px 14px;
+    border-radius: 6px;
     font-size: 12px;
-    z-index: 1000;
-    min-width: 200px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    z-index: 9999;
+    min-width: 160px;
+    white-space: nowrap;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    pointer-events: none;
+}
+
+.error-tooltip::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    right: 10px;
+    border: 5px solid transparent;
+    border-top-color: #1f2937;
 }
 
 .error-eye:hover .error-tooltip {
@@ -845,16 +860,44 @@ try {
                         <td><?php echo number_format($total_requests); ?></td>
                         <td><?php echo number_format($avg_requests); ?>/day</td>
                         <td>
-                            <?php if ($error_count > 0): ?>
-                            <span class="error-eye">
+                            <?php if ($error_count > 0): 
+                                // Get actual error types for this company
+                                $error_types = [];
+                                if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
+                                    $table_info = $DB->get_columns('local_alx_api_logs');
+                                    $time_field = isset($table_info['timeaccessed']) ? 'timeaccessed' : 'timecreated';
+                                    $errors = $DB->get_records_select('local_alx_api_logs',
+                                        "{$time_field} >= ? AND company_shortname = ? AND error_message IS NOT NULL",
+                                        [$today_start, $company->shortname],
+                                        'timeaccessed DESC',
+                                        'error_message',
+                                        0,
+                                        3 // Get last 3 errors
+                                    );
+                                    foreach ($errors as $error) {
+                                        if (!empty($error->error_message)) {
+                                            // Shorten error message if too long
+                                            $msg = strlen($error->error_message) > 40 ? 
+                                                substr($error->error_message, 0, 40) . '...' : 
+                                                $error->error_message;
+                                            $error_types[] = $msg;
+                                        }
+                                    }
+                                }
+                            ?>
+                            <span class="error-eye" title="View error details">
                                 👁️
                                 <div class="error-tooltip">
-                                    <strong>Errors Today:</strong> <?php echo $error_count; ?><br>
-                                    <small>Click to view details</small>
+                                    <strong><?php echo $error_count; ?> Error<?php echo $error_count > 1 ? 's' : ''; ?> Today</strong><br>
+                                    <?php if (!empty($error_types)): ?>
+                                        <small style="opacity: 0.9; display: block; margin-top: 4px;">
+                                            <?php echo implode('<br>', array_slice($error_types, 0, 2)); ?>
+                                        </small>
+                                    <?php endif; ?>
                                 </div>
                             </span>
                             <?php else: ?>
-                            <span style="color: #10b981;">✓</span>
+                            <span style="color: #10b981; font-size: 18px;" title="No errors">✓</span>
                             <?php endif; ?>
                         </td>
                     </tr>
