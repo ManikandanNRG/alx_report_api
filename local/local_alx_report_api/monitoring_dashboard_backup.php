@@ -80,7 +80,6 @@ $companies = local_alx_report_api_get_companies();
 // Get alert configuration
 $alerting_enabled = get_config('local_alx_report_api', 'enable_alerting');
 $email_enabled = get_config('local_alx_report_api', 'enable_email_alerts');
-$sms_enabled = get_config('local_alx_report_api', 'enable_sms_alerts');
 $alert_threshold = get_config('local_alx_report_api', 'alert_threshold') ?: 'medium';
 $alert_emails = get_config('local_alx_report_api', 'alert_emails');
 
@@ -1396,12 +1395,6 @@ body {
                         <span><strong>Email Alerts:</strong></span>
                         <span class="status-badge <?php echo $email_enabled ? 'status-enabled' : 'status-disabled'; ?>">
                             <?php echo $email_enabled ? 'Enabled' : 'Disabled'; ?>
-                        </span>
-                    </div>
-                    <div class="config-item">
-                        <span><strong>SMS Alerts:</strong></span>
-                        <span class="status-badge <?php echo $sms_enabled ? 'status-enabled' : 'status-disabled'; ?>">
-                            <?php echo $sms_enabled ? 'Enabled' : 'Disabled'; ?>
                         </span>
                     </div>
                     <div class="config-item">

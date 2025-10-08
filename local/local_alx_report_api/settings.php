@@ -335,7 +335,7 @@ if ($hassiteconfig) {
     $settings->add(new admin_setting_configcheckbox(
         'local_alx_report_api/enable_alerting',
         'Enable Alert System',
-        'Enable email and SMS alerts for system monitoring events (rate limits, security issues, performance problems)',
+        'Enable email alerts for system monitoring events (rate limits, security issues, performance problems)',
         1
     ));
 
@@ -358,7 +358,7 @@ if ($hassiteconfig) {
     $settings->add(new admin_setting_configtextarea(
         'local_alx_report_api/alert_emails',
         'Alert Email Recipients',
-        'Comma-separated list of email addresses to receive alerts. Site administrators will automatically receive critical alerts.',
+        'Comma-separated list of email addresses to receive alerts. Only these manually configured emails will receive alerts.',
         '',
         PARAM_TEXT
     ));
@@ -369,29 +369,6 @@ if ($hassiteconfig) {
         'Enable Email Alerts',
         'Send alerts via email using Moodle\'s email system',
         1
-    ));
-
-    // SMS alert configuration  
-    $settings->add(new admin_setting_configcheckbox(
-        'local_alx_report_api/enable_sms_alerts',
-        'Enable SMS Alerts',
-        'Send high and critical alerts via SMS (requires SMS service configuration)',
-        0
-    ));
-
-    // SMS service selection
-    $sms_service_options = [
-        'disabled' => 'Disabled',
-        'twilio' => 'Twilio',
-        'aws_sns' => 'AWS SNS',
-        'custom' => 'Custom SMS Gateway'
-    ];
-    $settings->add(new admin_setting_configselect(
-        'local_alx_report_api/sms_service',
-        'SMS Service Provider',
-        'Select SMS service for sending alerts',
-        'disabled',
-        $sms_service_options
     ));
 
     // Alert frequency control

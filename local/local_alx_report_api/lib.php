@@ -2126,16 +2126,6 @@ function local_alx_report_api_send_alert($alert_type, $severity, $message, $data
         }
     }
     
-    // Send SMS if configured and high severity
-    foreach ($recipients as $recipient) {
-        if (!empty($recipient['phone']) && in_array($severity, ['high', 'critical'])) {
-            $sms_enabled = get_config('local_alx_report_api', 'enable_sms_alerts');
-            if ($sms_enabled) {
-                local_alx_report_api_send_sms_alert($recipient, $alert);
-            }
-        }
-    }
-    
     return $success;
 }
 
@@ -2253,45 +2243,6 @@ function local_alx_report_api_send_email_alert($recipient, $alert) {
 }
 
 /**
- * Send SMS alert (placeholder for SMS service integration).
- *
- * @param array $recipient Recipient data with phone number
- * @param array $alert Alert data
- * @return bool Success status
- */
-function local_alx_report_api_send_sms_alert($recipient, $alert) {
-    // SMS Integration placeholder - can be extended with services like:
-    // - Twilio
-    // - AWS SNS
-    // - Local SMS gateway
-    
-    $sms_service = get_config('local_alx_report_api', 'sms_service') ?: 'disabled';
-    
-    if ($sms_service === 'disabled') {
-        return false;
-    }
-    
-    $severity_icons = ['low' => 'i', 'medium' => '!', 'high' => '!!', 'critical' => '!!!'];
-    $icon = $severity_icons[$alert['severity']] ?? '!';
-    
-    $message = "ALX API {$icon} " . strtoupper($alert['severity']) . ": " . $alert['message'] . 
-               " Time: " . date('H:i', $alert['timestamp']) . 
-               " Check: " . parse_url($alert['hostname'], PHP_URL_HOST);
-    
-    // Limit SMS to 160 characters
-    if (strlen($message) > 160) {
-        $message = substr($message, 0, 157) . '...';
-    }
-    
-    // Log SMS attempt
-    error_log("ALX Report API: SMS Alert to {$recipient['phone']}: {$message}");
-    
-    // Here you would integrate with your SMS service
-    // For now, we'll return true as a placeholder
-    return true;
-}
-
-/**
  * Get alert recipients based on alert type and severity.
  *
  * @param string $alert_type Type of alert
@@ -2303,7 +2254,7 @@ function local_alx_report_api_get_alert_recipients($alert_type, $severity) {
     
     $recipients = [];
     
-    // Get configured alert recipients
+    // Get configured alert recipients (manual emails only)
     $alert_emails = get_config('local_alx_report_api', 'alert_emails');
     if ($alert_emails) {
         $emails = array_filter(array_map('trim', explode(',', $alert_emails)));
@@ -2311,18 +2262,6 @@ function local_alx_report_api_get_alert_recipients($alert_type, $severity) {
             if (filter_var($email, FILTER_VALIDATE_EMAIL)) {
                 $recipients[] = ['email' => $email, 'name' => 'Administrator'];
             }
-        }
-    }
-    
-    // For critical alerts, also include site admins
-    if ($severity === 'critical') {
-        $admins = get_admins();
-        foreach ($admins as $admin) {
-            $recipients[] = [
-                'email' => $admin->email,
-                'name' => fullname($admin),
-                'phone' => isset($admin->phone1) ? $admin->phone1 : null
-            ];
         }
     }
     

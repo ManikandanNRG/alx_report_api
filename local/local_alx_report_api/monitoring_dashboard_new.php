@@ -956,10 +956,8 @@ try {
                     <?php
                     $alerting_enabled = get_config('local_alx_report_api', 'enable_alerting');
                     $email_enabled = get_config('local_alx_report_api', 'enable_email_alerts');
-                    $sms_enabled = get_config('local_alx_report_api', 'enable_sms_alerts');
                     $alert_threshold = get_config('local_alx_report_api', 'alert_threshold') ?: 'medium';
                     $alert_emails = get_config('local_alx_report_api', 'alert_emails');
-                    $sms_service = get_config('local_alx_report_api', 'sms_service') ?: 'disabled';
                     ?>
                     <tr>
                         <td><strong>Alert System</strong></td>
@@ -978,15 +976,6 @@ try {
                             </span>
                         </td>
                         <td><?php echo $alert_emails ? count(array_filter(array_map('trim', explode(',', $alert_emails)))) . ' recipients configured' : 'No recipients configured'; ?></td>
-                    </tr>
-                    <tr>
-                        <td><strong>SMS Alerts</strong></td>
-                        <td>
-                            <span class="badge badge-<?php echo ($sms_enabled && $sms_service !== 'disabled') ? 'success' : 'default'; ?>">
-                                <?php echo ($sms_enabled && $sms_service !== 'disabled') ? 'Enabled' : 'Disabled'; ?>
-                            </span>
-                        </td>
-                        <td>Service: <?php echo ucfirst(str_replace('_', ' ', $sms_service)); ?></td>
                     </tr>
                     <tr>
                         <td><strong>Alert Threshold</strong></td>

@@ -256,10 +256,8 @@ echo $OUTPUT->header();
         <?php
         $alerting_enabled = get_config('local_alx_report_api', 'enable_alerting');
         $email_enabled = get_config('local_alx_report_api', 'enable_email_alerts');
-        $sms_enabled = get_config('local_alx_report_api', 'enable_sms_alerts');
         $alert_threshold = get_config('local_alx_report_api', 'alert_threshold') ?: 'medium';
         $alert_emails = get_config('local_alx_report_api', 'alert_emails');
-        $sms_service = get_config('local_alx_report_api', 'sms_service') ?: 'disabled';
         ?>
         
         <div class="config-item">
@@ -277,13 +275,6 @@ echo $OUTPUT->header();
         </div>
         
         <div class="config-item">
-            <span><strong>SMS Alerts:</strong></span>
-            <span class="status-badge <?php echo $sms_enabled && $sms_service !== 'disabled' ? 'status-enabled' : 'status-disabled'; ?>">
-                <?php echo $sms_enabled && $sms_service !== 'disabled' ? 'Enabled' : 'Disabled'; ?>
-            </span>
-        </div>
-        
-        <div class="config-item">
             <span><strong>Alert Threshold:</strong></span>
             <span><?php echo ucfirst($alert_threshold); ?></span>
         </div>
@@ -291,11 +282,6 @@ echo $OUTPUT->header();
         <div class="config-item">
             <span><strong>Email Recipients:</strong></span>
             <span><?php echo $alert_emails ? count(explode(',', $alert_emails)) . ' configured' : 'None configured'; ?></span>
-        </div>
-        
-        <div class="config-item">
-            <span><strong>SMS Service:</strong></span>
-            <span><?php echo ucfirst(str_replace('_', ' ', $sms_service)); ?></span>
         </div>
     </div>
 
@@ -384,17 +370,12 @@ echo $OUTPUT->header();
             }
             ?>
         </div>
-        <?php endif; ?>
-        
-        <div>
-            <strong>Site Administrators (for critical alerts):</strong><br>
-            <?php 
-            $admins = get_admins();
-            foreach ($admins as $admin) {
-                echo "<span style='background: #d4edda; padding: 2px 8px; border-radius: 12px; margin: 2px; display: inline-block;'>" . fullname($admin) . " ({$admin->email})</span> ";
-            }
-            ?>
+        <?php else: ?>
+        <div class="alert alert-warning">
+            <i class="fas fa-exclamation-triangle"></i>
+            No email recipients configured. Please add email addresses in the plugin settings to receive alerts.
         </div>
+        <?php endif; ?>
     </div>
     <?php endif; ?>
 </div>
