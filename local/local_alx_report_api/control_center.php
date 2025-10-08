@@ -2644,152 +2644,156 @@ input[type="checkbox"]:disabled {
                 $cache_ttl = get_config('local_alx_report_api', 'cache_ttl') ?: 3600;
                 ?>
                 
-                <!-- Configuration Form (same pattern as Company Management) -->
-                <form method="post" action="" style="max-width: 1000px; margin: 0 auto;">
+                <!-- Configuration Form (full width like Company Management) -->
+                <form method="post" action="">
                     <input type="hidden" name="sesskey" value="<?php echo sesskey(); ?>">
                     <input type="hidden" name="config_action" value="save">
                     <input type="hidden" name="tab" value="settings">
                     
-                    <!-- API Configuration Section -->
-                    <div style="background: #f8f9fa; padding: 24px; border-radius: 12px; margin-bottom: 24px; border-left: 4px solid #667eea;">
-                        <h4 style="margin: 0 0 20px 0; color: #495057; font-size: 18px; font-weight: 600;">
-                            <i class="fas fa-plug"></i> API Configuration
-                        </h4>
+                    <!-- Two Column Grid Layout -->
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(450px, 1fr)); gap: 24px; margin-bottom: 24px;">
                         
-                        <!-- Rate Limit -->
-                        <div style="margin-bottom: 20px;">
-                            <label for="rate_limit" style="display: block; margin-bottom: 8px; font-weight: 600; color: #495057;">
-                                Global Rate Limit (requests/day per company)
-                            </label>
-                            <input type="number" 
-                                   id="rate_limit" 
-                                   name="rate_limit" 
-                                   value="<?php echo $rate_limit; ?>" 
-                                   min="1" 
-                                   max="10000"
-                                   style="width: 100%; padding: 12px 15px; border: 2px solid #e9ecef; border-radius: 8px; font-size: 15px; background: white; transition: all 0.3s;">
-                            <small style="display: block; margin-top: 6px; color: #6c757d; font-size: 13px;">
-                                <i class="fas fa-info-circle"></i> Recommended: 100-1000. Higher values allow more API calls per day.
-                            </small>
-                        </div>
-                        
-                        <!-- Max Records -->
-                        <div style="margin-bottom: 20px;">
-                            <label for="max_records" style="display: block; margin-bottom: 8px; font-weight: 600; color: #495057;">
-                                Max Records per Request
-                            </label>
-                            <input type="number" 
-                                   id="max_records" 
-                                   name="max_records" 
-                                   value="<?php echo $max_records; ?>" 
-                                   min="100" 
-                                   max="10000"
-                                   style="width: 100%; padding: 12px 15px; border: 2px solid #e9ecef; border-radius: 8px; font-size: 15px; background: white; transition: all 0.3s;">
-                            <small style="display: block; margin-top: 6px; color: #6c757d; font-size: 13px;">
-                                <i class="fas fa-info-circle"></i> Recommended: 1000. Lower values improve response time but require more API calls.
-                            </small>
-                        </div>
-                        
-                        <!-- Allow GET Method -->
-                        <div style="background: white; padding: 16px; border-radius: 8px; border: 2px solid #e9ecef;">
-                            <label style="display: flex; align-items: center; cursor: pointer; margin: 0;">
-                                <input type="checkbox" 
-                                       name="allow_get_method" 
-                                       value="1" 
-                                       <?php echo $allow_get ? 'checked' : ''; ?>
-                                       style="width: 20px; height: 20px; margin-right: 12px; cursor: pointer; accent-color: #667eea;">
-                                <div>
-                                    <div style="font-weight: 600; font-size: 15px; color: #495057;">Allow GET Method</div>
-                                    <div style="font-size: 13px; color: #6c757d; margin-top: 4px;">
-                                        <i class="fas fa-exclamation-triangle" style="color: #ffc107;"></i> Development/Testing Only - Use POST in production for security
+                        <!-- LEFT COLUMN: API Configuration -->
+                        <div style="background: #f8f9fa; padding: 24px; border-radius: 12px; border-left: 4px solid #667eea;">
+                            <h4 style="margin: 0 0 20px 0; color: #495057; font-size: 18px; font-weight: 600;">
+                                <i class="fas fa-plug"></i> API Configuration
+                            </h4>
+                            
+                            <!-- Rate Limit -->
+                            <div style="margin-bottom: 20px;">
+                                <label for="rate_limit" style="display: block; margin-bottom: 8px; font-weight: 600; color: #495057;">
+                                    Global Rate Limit (requests/day per company)
+                                </label>
+                                <input type="number" 
+                                       id="rate_limit" 
+                                       name="rate_limit" 
+                                       value="<?php echo $rate_limit; ?>" 
+                                       min="1" 
+                                       max="10000"
+                                       style="width: 100%; padding: 12px 15px; border: 2px solid #e9ecef; border-radius: 8px; font-size: 15px; background: white; transition: all 0.3s;">
+                                <small style="display: block; margin-top: 6px; color: #6c757d; font-size: 13px;">
+                                    <i class="fas fa-info-circle"></i> Recommended: 100-1000
+                                </small>
+                            </div>
+                            
+                            <!-- Max Records -->
+                            <div style="margin-bottom: 20px;">
+                                <label for="max_records" style="display: block; margin-bottom: 8px; font-weight: 600; color: #495057;">
+                                    Max Records per Request
+                                </label>
+                                <input type="number" 
+                                       id="max_records" 
+                                       name="max_records" 
+                                       value="<?php echo $max_records; ?>" 
+                                       min="100" 
+                                       max="10000"
+                                       style="width: 100%; padding: 12px 15px; border: 2px solid #e9ecef; border-radius: 8px; font-size: 15px; background: white; transition: all 0.3s;">
+                                <small style="display: block; margin-top: 6px; color: #6c757d; font-size: 13px;">
+                                    <i class="fas fa-info-circle"></i> Recommended: 1000
+                                </small>
+                            </div>
+                            
+                            <!-- Allow GET Method -->
+                            <div style="background: white; padding: 16px; border-radius: 8px; border: 2px solid #e9ecef;">
+                                <label style="display: flex; align-items: center; cursor: pointer; margin: 0;">
+                                    <input type="checkbox" 
+                                           name="allow_get_method" 
+                                           value="1" 
+                                           <?php echo $allow_get ? 'checked' : ''; ?>
+                                           style="width: 20px; height: 20px; margin-right: 12px; cursor: pointer; accent-color: #667eea;">
+                                    <div>
+                                        <div style="font-weight: 600; font-size: 15px; color: #495057;">Allow GET Method</div>
+                                        <div style="font-size: 13px; color: #6c757d; margin-top: 4px;">
+                                            <i class="fas fa-exclamation-triangle" style="color: #ffc107;"></i> Development/Testing Only
+                                        </div>
                                     </div>
-                                </div>
-                            </label>
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <!-- RIGHT COLUMN: Email Alerts -->
+                        <div style="background: #f8f9fa; padding: 24px; border-radius: 12px; border-left: 4px solid #f093fb;">
+                            <h4 style="margin: 0 0 20px 0; color: #495057; font-size: 18px; font-weight: 600;">
+                                <i class="fas fa-bell"></i> Email Alerts
+                            </h4>
+                            
+                            <!-- Enable Alerting -->
+                            <div style="background: white; padding: 16px; border-radius: 8px; border: 2px solid #e9ecef; margin-bottom: 16px;">
+                                <label style="display: flex; align-items: center; cursor: pointer; margin: 0;">
+                                    <input type="checkbox" 
+                                           name="enable_alerting" 
+                                           value="1" 
+                                           <?php echo $enable_alerting ? 'checked' : ''; ?>
+                                           style="width: 20px; height: 20px; margin-right: 12px; cursor: pointer; accent-color: #f093fb;">
+                                    <div>
+                                        <div style="font-weight: 600; font-size: 15px; color: #495057;">Enable Alert System</div>
+                                        <div style="font-size: 13px; color: #6c757d; margin-top: 4px;">
+                                            Master switch for all alerts
+                                        </div>
+                                    </div>
+                                </label>
+                            </div>
+                            
+                            <!-- Enable Email Alerts -->
+                            <div style="background: white; padding: 16px; border-radius: 8px; border: 2px solid #e9ecef; margin-bottom: 16px;">
+                                <label style="display: flex; align-items: center; cursor: pointer; margin: 0;">
+                                    <input type="checkbox" 
+                                           name="enable_email_alerts" 
+                                           value="1" 
+                                           <?php echo $enable_email_alerts ? 'checked' : ''; ?>
+                                           style="width: 20px; height: 20px; margin-right: 12px; cursor: pointer; accent-color: #f093fb;">
+                                    <div>
+                                        <div style="font-weight: 600; font-size: 15px; color: #495057;">Enable Email Alerts</div>
+                                        <div style="font-size: 13px; color: #6c757d; margin-top: 4px;">
+                                            Send alerts via email
+                                        </div>
+                                    </div>
+                                </label>
+                            </div>
+                            
+                            <!-- Alert Threshold -->
+                            <div style="margin-bottom: 20px;">
+                                <label for="alert_threshold" style="display: block; margin-bottom: 8px; font-weight: 600; color: #495057;">
+                                    Alert Severity Threshold
+                                </label>
+                                <select id="alert_threshold" 
+                                        name="alert_threshold"
+                                        style="width: 100%; padding: 12px 15px; border: 2px solid #e9ecef; border-radius: 8px; font-size: 15px; background: white; transition: all 0.3s;">
+                                    <option value="low" <?php echo $alert_threshold === 'low' ? 'selected' : ''; ?>>Low - Send all alerts</option>
+                                    <option value="medium" <?php echo $alert_threshold === 'medium' ? 'selected' : ''; ?>>Medium - Send medium, high, critical</option>
+                                    <option value="high" <?php echo $alert_threshold === 'high' ? 'selected' : ''; ?>>High - Send high and critical</option>
+                                    <option value="critical" <?php echo $alert_threshold === 'critical' ? 'selected' : ''; ?>>Critical - Send only critical</option>
+                                </select>
+                                <small style="display: block; margin-top: 6px; color: #6c757d; font-size: 13px;">
+                                    <i class="fas fa-info-circle"></i> Minimum severity level
+                                </small>
+                            </div>
+                            
+                            <!-- Alert Recipients -->
+                            <div>
+                                <label for="alert_emails" style="display: block; margin-bottom: 8px; font-weight: 600; color: #495057;">
+                                    Alert Email Recipients
+                                </label>
+                                <textarea id="alert_emails" 
+                                          name="alert_emails" 
+                                          rows="3"
+                                          placeholder="email1@example.com, email2@example.com"
+                                          style="width: 100%; padding: 12px 15px; border: 2px solid #e9ecef; border-radius: 8px; font-size: 14px; background: white; font-family: monospace; transition: all 0.3s;"><?php echo htmlspecialchars($alert_emails); ?></textarea>
+                                <small style="display: block; margin-top: 6px; color: #6c757d; font-size: 13px;">
+                                    <i class="fas fa-info-circle"></i> Comma-separated emails
+                                </small>
+                            </div>
                         </div>
                     </div>
                     
-                    <!-- Email Alerts Section -->
-                    <div style="background: #f8f9fa; padding: 24px; border-radius: 12px; margin-bottom: 24px; border-left: 4px solid #f093fb;">
-                        <h4 style="margin: 0 0 20px 0; color: #495057; font-size: 18px; font-weight: 600;">
-                            <i class="fas fa-bell"></i> Email Alerts Configuration
-                        </h4>
-                        
-                        <!-- Enable Alerting -->
-                        <div style="background: white; padding: 16px; border-radius: 8px; border: 2px solid #e9ecef; margin-bottom: 16px;">
-                            <label style="display: flex; align-items: center; cursor: pointer; margin: 0;">
-                                <input type="checkbox" 
-                                       name="enable_alerting" 
-                                       value="1" 
-                                       <?php echo $enable_alerting ? 'checked' : ''; ?>
-                                       style="width: 20px; height: 20px; margin-right: 12px; cursor: pointer; accent-color: #f093fb;">
-                                <div>
-                                    <div style="font-weight: 600; font-size: 15px; color: #495057;">Enable Alert System</div>
-                                    <div style="font-size: 13px; color: #6c757d; margin-top: 4px;">
-                                        Master switch for all alerts (rate limits, security, performance)
-                                    </div>
-                                </div>
-                            </label>
-                        </div>
-                        
-                        <!-- Enable Email Alerts -->
-                        <div style="background: white; padding: 16px; border-radius: 8px; border: 2px solid #e9ecef; margin-bottom: 16px;">
-                            <label style="display: flex; align-items: center; cursor: pointer; margin: 0;">
-                                <input type="checkbox" 
-                                       name="enable_email_alerts" 
-                                       value="1" 
-                                       <?php echo $enable_email_alerts ? 'checked' : ''; ?>
-                                       style="width: 20px; height: 20px; margin-right: 12px; cursor: pointer; accent-color: #f093fb;">
-                                <div>
-                                    <div style="font-weight: 600; font-size: 15px; color: #495057;">Enable Email Alerts</div>
-                                    <div style="font-size: 13px; color: #6c757d; margin-top: 4px;">
-                                        Send alerts via email using Moodle's email system
-                                    </div>
-                                </div>
-                            </label>
-                        </div>
-                        
-                        <!-- Alert Threshold -->
-                        <div style="margin-bottom: 20px;">
-                            <label for="alert_threshold" style="display: block; margin-bottom: 8px; font-weight: 600; color: #495057;">
-                                Alert Severity Threshold
-                            </label>
-                            <select id="alert_threshold" 
-                                    name="alert_threshold"
-                                    style="width: 100%; padding: 12px 15px; border: 2px solid #e9ecef; border-radius: 8px; font-size: 15px; background: white; transition: all 0.3s;">
-                                <option value="low" <?php echo $alert_threshold === 'low' ? 'selected' : ''; ?>>Low - Send all alerts</option>
-                                <option value="medium" <?php echo $alert_threshold === 'medium' ? 'selected' : ''; ?>>Medium - Send medium, high, and critical</option>
-                                <option value="high" <?php echo $alert_threshold === 'high' ? 'selected' : ''; ?>>High - Send only high and critical</option>
-                                <option value="critical" <?php echo $alert_threshold === 'critical' ? 'selected' : ''; ?>>Critical - Send only critical alerts</option>
-                            </select>
-                            <small style="display: block; margin-top: 6px; color: #6c757d; font-size: 13px;">
-                                <i class="fas fa-info-circle"></i> Minimum severity level for sending alerts
-                            </small>
-                        </div>
-                        
-                        <!-- Alert Recipients -->
-                        <div>
-                            <label for="alert_emails" style="display: block; margin-bottom: 8px; font-weight: 600; color: #495057;">
-                                Alert Email Recipients
-                            </label>
-                            <textarea id="alert_emails" 
-                                      name="alert_emails" 
-                                      rows="3"
-                                      placeholder="email1@example.com, email2@example.com"
-                                      style="width: 100%; padding: 12px 15px; border: 2px solid #e9ecef; border-radius: 8px; font-size: 14px; background: white; font-family: monospace; transition: all 0.3s;"><?php echo htmlspecialchars($alert_emails); ?></textarea>
-                            <small style="display: block; margin-top: 6px; color: #6c757d; font-size: 13px;">
-                                <i class="fas fa-info-circle"></i> Comma-separated list of email addresses. Only these emails will receive alerts.
-                            </small>
-                        </div>
-                    </div>
-                    
-                    <!-- Cache Configuration Section -->
+                    <!-- Full Width: Cache Configuration Section -->
                     <div style="background: #f8f9fa; padding: 24px; border-radius: 12px; margin-bottom: 24px; border-left: 4px solid #43e97b;">
                         <h4 style="margin: 0 0 20px 0; color: #495057; font-size: 18px; font-weight: 600;">
                             <i class="fas fa-bolt"></i> Cache Configuration
                         </h4>
                         
                         <!-- Cache TTL -->
-                        <div>
+                        <div style="max-width: 500px;">
                             <label for="cache_ttl" style="display: block; margin-bottom: 8px; font-weight: 600; color: #495057;">
                                 Cache Time-To-Live (seconds)
                             </label>
@@ -2801,7 +2805,7 @@ input[type="checkbox"]:disabled {
                                    max="86400"
                                    style="width: 100%; padding: 12px 15px; border: 2px solid #e9ecef; border-radius: 8px; font-size: 15px; background: white; transition: all 0.3s;">
                             <small style="display: block; margin-top: 6px; color: #6c757d; font-size: 13px;">
-                                <i class="fas fa-info-circle"></i> Recommended: 3600 (1 hour). Range: 300 (5 min) to 86400 (24 hours)
+                                <i class="fas fa-info-circle"></i> Recommended: 3600 (1 hour)
                             </small>
                         </div>
                     </div>
