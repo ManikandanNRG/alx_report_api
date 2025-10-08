@@ -1980,21 +1980,13 @@ input[type="checkbox"]:disabled {
         ?>
     </div>
 
-    <div id="settings-tab" class="tab-content">
-    </div>
-
-    <div id="settings-tab" class="tab-content">
-        <div class="dashboard-card">
-            <div class="card-header">
-                <h3 class="card-title">
-                    <i class="fas fa-cog"></i>
-                    System Configuration
-                </h3>
-            </div>
-            <div class="card-body">
-                <p>System configuration will be integrated here...</p>
-                <a href="<?php echo $CFG->wwwroot; ?>/admin/settings.php?section=local_alx_report_api" class="btn-modern btn-primary">
-                    <i class="fas fa-external-link-alt"></i>
+    <!-- System Configuration Tab -->
+    <div id="monitoring-tab" class="tab-content">
+        <?php
+        // Get monitoring data - REAL DATA ONLY
+        try {
+            // Get system health data
+            $system_health_data = local_alx_report_api_get_system_health();
             
             // Get API analytics for today - REAL DATA ONLY
             $api_analytics = local_alx_report_api_get_api_analytics(24);
@@ -2550,21 +2542,132 @@ input[type="checkbox"]:disabled {
         </script>
     </div>
 
+    <!-- System Configuration Tab -->
     <div id="settings-tab" class="tab-content">
-        <div class="dashboard-card">
-            <div class="card-header">
-                <h3 class="card-title">
-                    <i class="fas fa-cog"></i>
-                    System Configuration
-                </h3>
+        <?php
+        // Get current plugin settings
+        $rate_limit = get_config('local_alx_report_api', 'rate_limit') ?: 100;
+        $max_records = get_config('local_alx_report_api', 'max_records') ?: 1000;
+        $allow_get = get_config('local_alx_report_api', 'allow_get_method');
+        $enable_alerting = get_config('local_alx_report_api', 'enable_alerting');
+        $enable_email_alerts = get_config('local_alx_report_api', 'enable_email_alerts');
+        $alert_threshold = get_config('local_alx_report_api', 'alert_threshold') ?: 'medium';
+        $alert_emails = get_config('local_alx_report_api', 'alert_emails');
+        $cache_ttl = get_config('local_alx_report_api', 'cache_ttl') ?: 3600;
+        
+        // Count email recipients
+        $email_count = 0;
+        if ($alert_emails) {
+            $emails = array_filter(array_map('trim', explode(',', $alert_emails)));
+            $email_count = count($emails);
+        }
+        ?>
+        
+        <!-- Settings Cards Grid -->
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 24px; margin-bottom: 30px;">
+            
+            <!-- API Configuration Card -->
+            <div class="dashboard-card" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none;">
+                <div class="card-header" style="border-bottom: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.1);">
+                    <h3 class="card-title" style="color: white;">
+                        <i class="fas fa-plug"></i>
+                        API Configuration
+                    </h3>
+                </div>
+                <div class="card-body">
+                    <div style="background: rgba(255,255,255,0.1); padding: 16px; border-radius: 8px; margin-bottom: 16px;">
+                        <div style="font-size: 14px; opacity: 0.9; margin-bottom: 4px;">Global Rate Limit</div>
+                        <div style="font-size: 32px; font-weight: 700;"><?php echo number_format($rate_limit); ?></div>
+                        <div style="font-size: 12px; opacity: 0.8;">requests/day per company</div>
+                    </div>
+                    
+                    <div style="background: rgba(255,255,255,0.1); padding: 16px; border-radius: 8px; margin-bottom: 16px;">
+                        <div style="font-size: 14px; opacity: 0.9; margin-bottom: 4px;">Max Records per Request</div>
+                        <div style="font-size: 32px; font-weight: 700;"><?php echo number_format($max_records); ?></div>
+                        <div style="font-size: 12px; opacity: 0.8;">records limit</div>
+                    </div>
+                    
+                    <div style="background: rgba(255,255,255,0.1); padding: 12px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <div style="font-size: 14px; font-weight: 600;">Allow GET Method</div>
+                            <div style="font-size: 11px; opacity: 0.8;">(Development Only)</div>
+                        </div>
+                        <div style="font-size: 24px;">
+                            <?php echo $allow_get ? '<span style="color: #10b981;">&#10004;</span>' : '<span style="color: #ef4444;">&#10008;</span>'; ?>
+                        </div>
+                    </div>
+                </div>
             </div>
-            <div class="card-body">
-                <p>System configuration will be integrated here...</p>
-                <a href="<?php echo $CFG->wwwroot; ?>/admin/settings.php?section=local_alx_report_api" class="btn-modern btn-primary">
-                    <i class="fas fa-external-link-alt"></i>
-                    Open Plugin Settings
-                </a>
+            
+            <!-- Email Alerts Card -->
+            <div class="dashboard-card" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: white; border: none;">
+                <div class="card-header" style="border-bottom: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.1);">
+                    <h3 class="card-title" style="color: white;">
+                        <i class="fas fa-bell"></i>
+                        Email Alerts
+                    </h3>
+                </div>
+                <div class="card-body">
+                    <div style="background: rgba(255,255,255,0.1); padding: 12px; border-radius: 8px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;">
+                        <div style="font-size: 14px; font-weight: 600;">Alert System</div>
+                        <div style="font-size: 24px;">
+                            <?php echo $enable_alerting ? '<span style="color: #10b981;">&#10004;</span>' : '<span style="color: #ef4444;">&#10008;</span>'; ?>
+                        </div>
+                    </div>
+                    
+                    <div style="background: rgba(255,255,255,0.1); padding: 12px; border-radius: 8px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;">
+                        <div style="font-size: 14px; font-weight: 600;">Email Alerts</div>
+                        <div style="font-size: 24px;">
+                            <?php echo $enable_email_alerts ? '<span style="color: #10b981;">&#10004;</span>' : '<span style="color: #ef4444;">&#10008;</span>'; ?>
+                        </div>
+                    </div>
+                    
+                    <div style="background: rgba(255,255,255,0.1); padding: 16px; border-radius: 8px; margin-bottom: 12px;">
+                        <div style="font-size: 14px; opacity: 0.9; margin-bottom: 4px;">Alert Threshold</div>
+                        <div style="font-size: 24px; font-weight: 700; text-transform: capitalize;"><?php echo htmlspecialchars($alert_threshold); ?></div>
+                    </div>
+                    
+                    <div style="background: rgba(255,255,255,0.1); padding: 16px; border-radius: 8px;">
+                        <div style="font-size: 14px; opacity: 0.9; margin-bottom: 4px;">Recipients</div>
+                        <div style="font-size: 32px; font-weight: 700;"><?php echo $email_count; ?></div>
+                        <div style="font-size: 12px; opacity: 0.8;">
+                            <?php echo $email_count > 0 ? 'configured' : '<span style="color: #fbbf24;">&#9888; No recipients configured</span>'; ?>
+                        </div>
+                    </div>
+                </div>
             </div>
+            
+        </div>
+        
+        <!-- Action Buttons Grid -->
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;">
+            <a href="<?php echo $CFG->wwwroot; ?>/admin/settings.php?section=local_alx_report_api" 
+               class="btn-modern btn-primary" 
+               style="background: #2563eb; color: white; padding: 16px; text-align: center; border-radius: 8px; text-decoration: none; display: block; font-weight: 600; transition: all 0.3s;">
+                <i class="fas fa-cog"></i><br>
+                Configure All Settings
+            </a>
+            
+            <a href="<?php echo $CFG->wwwroot; ?>/local/alx_report_api/test_alerts.php" 
+               class="btn-modern btn-secondary" 
+               style="background: #6c757d; color: white; padding: 16px; text-align: center; border-radius: 8px; text-decoration: none; display: block; font-weight: 600; transition: all 0.3s;">
+                <i class="fas fa-flask"></i><br>
+                Test Email Alerts
+            </a>
+            
+            <a href="<?php echo $CFG->wwwroot; ?>/admin/webservice/tokens.php" 
+               class="btn-modern btn-info" 
+               style="background: #06b6d4; color: white; padding: 16px; text-align: center; border-radius: 8px; text-decoration: none; display: block; font-weight: 600; transition: all 0.3s;">
+                <i class="fas fa-key"></i><br>
+                Manage Tokens
+            </a>
+            
+            <a href="<?php echo $CFG->wwwroot; ?>/admin/settings.php?section=externalservices" 
+               class="btn-modern btn-success" 
+               style="background: #10b981; color: white; padding: 16px; text-align: center; border-radius: 8px; text-decoration: none; display: block; font-weight: 600; transition: all 0.3s;">
+                <i class="fas fa-server"></i><br>
+                Manage Services
+            </a>
         </div>
     </div>
 </div>
