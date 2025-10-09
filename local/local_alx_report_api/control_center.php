@@ -1252,20 +1252,36 @@ input[type="checkbox"]:disabled {
                             $total_sync_entries = $DB->count_records('local_alx_api_sync_status');
                             $recent_syncs = $DB->count_records_select('local_alx_api_sync_status', 
                                 'last_sync_timestamp > ?', [time() - 86400]);
-                            $auto_mode_count = $DB->count_records('local_alx_api_sync_status', ['sync_mode' => 'auto']);
-                            $incremental_mode_count = $DB->count_records('local_alx_api_sync_status', ['sync_mode' => 'always_incremental']);
                             // Fetch the most recent sync timestamp
                             $last_sync_timestamp = $DB->get_field_sql('SELECT MAX(last_sync_timestamp) FROM {local_alx_api_sync_status}');
                         } else {
                             $total_sync_entries = 0;
                             $recent_syncs = 0;
-                            $auto_mode_count = 0;
-                            $incremental_mode_count = 0;
                             $last_sync_timestamp = false;
                         }
-                        // Calculate percentages for visual representation
-                        $auto_percentage = $total_sync_entries > 0 ? ($auto_mode_count / $total_sync_entries) * 100 : 0;
-                        $incremental_percentage = $total_sync_entries > 0 ? ($incremental_mode_count / $total_sync_entries) * 100 : 0;
+                        
+                        // Get company data with record counts for bar chart
+                        $company_chart_data = [];
+                        $company_chart_labels = [];
+                        $company_chart_colors = ['#ef4444', '#3b82f6', '#10b981', '#fbbf24', '#ec4899', '#8b5cf6', '#f97316', '#06b6d4'];
+                        
+                        if ($DB->get_manager()->table_exists('local_alx_api_reporting')) {
+                            $companies_list = local_alx_report_api_get_companies();
+                            $color_index = 0;
+                            
+                            foreach ($companies_list as $comp) {
+                                $record_count = $DB->count_records('local_alx_api_reporting', [
+                                    'companyid' => $comp->id,
+                                    'is_deleted' => 0
+                                ]);
+                                
+                                if ($record_count > 0) {
+                                    $company_chart_labels[] = $comp->name;
+                                    $company_chart_data[] = $record_count;
+                                    $color_index++;
+                                }
+                            }
+                        }
 
                         // Get actual active tokens count (fix for correct display)
                         $actual_active_tokens = 0;
@@ -1317,9 +1333,9 @@ input[type="checkbox"]:disabled {
                             </div>
                         </div>
 
-                        <!-- Sync Mode Distribution Chart -->
+                        <!-- Company Records Bar Chart -->
                         <div style="margin-bottom: 20px;">
-                            <canvas id="sync-mode-chart" width="200" height="200" style="max-width: 100%; margin: 0 auto; display: block;"></canvas>
+                            <canvas id="sync-company-chart" width="400" height="200" style="max-width: 100%; margin: 0 auto; display: block;"></canvas>
                         </div>
 
                         <!-- Sync Statistics -->
@@ -3418,37 +3434,33 @@ function createAPIPerformanceChart() {
     });
 }
 
-// Sync Mode Distribution Doughnut Chart
+// Company Records Bar Chart
 function createSyncModeChart() {
-    const ctx = document.getElementById('sync-mode-chart');
+    const ctx = document.getElementById('sync-company-chart');
     if (!ctx) return;
     
     <?php
-    // Get sync mode data for the chart
-    $auto_count = $auto_mode_count ?? 0;
-    $incremental_count = $incremental_mode_count ?? 0;
-    $full_count = $total_sync_entries - $auto_count - $incremental_count;
-    $full_count = max(0, $full_count);
+    // Inject company data from PHP
+    echo "const companyLabels = " . json_encode($company_chart_labels) . ";\n";
+    echo "const companyData = " . json_encode($company_chart_data) . ";\n";
+    echo "const companyColors = " . json_encode($company_chart_colors) . ";\n";
     ?>
     
-    const autoCount = <?php echo $auto_count; ?>;
-    const incrementalCount = <?php echo $incremental_count; ?>;
-    const fullCount = <?php echo $full_count; ?>;
+    // Generate colors for each company
+    const backgroundColors = companyData.map((_, index) => companyColors[index % companyColors.length]);
     
     new Chart(ctx, {
-        type: 'doughnut',
+        type: 'bar',
         data: {
-            labels: ['Auto Mode', 'Incremental', 'Full Response'],
+            labels: companyLabels,
             datasets: [{
-                data: [autoCount, incrementalCount, fullCount],
-                backgroundColor: [
-                    '#fbbf24',
-                    '#60a5fa', 
-                    '#f87171'
-                ],
-                borderWidth: 0,
-                hoverBorderWidth: 2,
-                hoverBorderColor: '#ffffff'
+                label: 'Total Records',
+                data: companyData,
+                backgroundColor: backgroundColors,
+                borderColor: backgroundColors.map(color => color),
+                borderWidth: 2,
+                borderRadius: 6,
+                barThickness: 40
             }]
         },
         options: {
@@ -3456,18 +3468,67 @@ function createSyncModeChart() {
             maintainAspectRatio: false,
             plugins: {
                 legend: {
-                    position: 'bottom',
-                    labels: {
+                    display: false
+                },
+                tooltip: {
+                    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                    titleColor: '#ffffff',
+                    bodyColor: '#ffffff',
+                    borderColor: 'rgba(255, 255, 255, 0.2)',
+                    borderWidth: 1,
+                    padding: 12,
+                    displayColors: true,
+                    callbacks: {
+                        label: function(context) {
+                            return 'Records: ' + context.parsed.y.toLocaleString();
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    grid: {
+                        display: false
+                    },
+                    ticks: {
+                        color: 'rgba(255, 255, 255, 0.8)',
+                        font: {
+                            size: 11,
+                            weight: '500'
+                        },
+                        maxRotation: 45,
+                        minRotation: 0
+                    },
+                    border: {
+                        color: 'rgba(255, 255, 255, 0.2)',
+                        width: 1
+                    }
+                },
+                y: {
+                    beginAtZero: true,
+                    grid: {
+                        color: 'rgba(255, 255, 255, 0.1)',
+                        lineWidth: 1
+                    },
+                    ticks: {
                         color: 'rgba(255, 255, 255, 0.8)',
                         font: {
                             size: 11
                         },
-                        padding: 15,
-                        usePointStyle: true
+                        callback: function(value) {
+                            return value.toLocaleString();
+                        }
+                    },
+                    border: {
+                        color: 'rgba(255, 255, 255, 0.2)',
+                        width: 1
                     }
                 }
             },
-            cutout: '60%'
+            interaction: {
+                intersect: false,
+                mode: 'index'
+            }
         }
     });
 }
