@@ -1229,9 +1229,9 @@ input[type="checkbox"]:disabled {
                         <?php endif; ?>
                     </div>
                     <div class="card-footer" style="border-top: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.1); padding: 16px; text-align: center;">
-                        <a href="<?php echo $CFG->wwwroot; ?>/local/alx_report_api/monitoring_dashboard.php" class="btn-modern" style="background: rgba(255,255,255,0.9); color: #667eea; border: 2px solid rgba(255,255,255,0.3); padding: 10px 20px; border-radius: 6px; text-decoration: none; display: inline-block; font-weight: 600; transition: all 0.3s ease;">
+                        <a href="<?php echo $CFG->wwwroot; ?>/local/alx_report_api/monitoring_dashboard_new.php?tab=performance" class="btn-modern" style="background: rgba(255,255,255,0.9); color: #667eea; border: 2px solid rgba(255,255,255,0.3); padding: 10px 20px; border-radius: 6px; text-decoration: none; display: inline-block; font-weight: 600; transition: all 0.3s ease;">
                             <i class="fas fa-chart-line"></i>
-                            View Full Analytics
+                            API Monitor
                         </a>
                     </div>
                 </div>
@@ -1343,9 +1343,9 @@ input[type="checkbox"]:disabled {
                         </div>
                     </div>
                     <div class="card-footer" style="border-top: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.1); padding: 16px; text-align: center;">
-                        <a href="<?php echo $CFG->wwwroot; ?>/local/alx_report_api/auto_sync_status.php" class="btn-modern" style="background: rgba(255,255,255,0.9); color: #f093fb; border: 2px solid rgba(255,255,255,0.3); padding: 10px 20px; border-radius: 6px; text-decoration: none; display: inline-block; font-weight: 600; transition: all 0.3s ease;">
-                            <i class="fas fa-cog"></i>
-                            Sync Settings
+                        <a href="<?php echo $CFG->wwwroot; ?>/local/alx_report_api/monitoring_dashboard_new.php?tab=autosync" class="btn-modern" style="background: rgba(255,255,255,0.9); color: #f093fb; border: 2px solid rgba(255,255,255,0.3); padding: 10px 20px; border-radius: 6px; text-decoration: none; display: inline-block; font-weight: 600; transition: all 0.3s ease;">
+                            <i class="fas fa-sync-alt"></i>
+                            Data Sync Monitor
                         </a>
                     </div>
                 </div>
@@ -1475,8 +1475,8 @@ input[type="checkbox"]:disabled {
                         </div>
                     </div>
                     <div class="card-footer" style="border-top: 1px solid rgba(31,41,55,0.1); background: rgba(255,255,255,0.1); padding: 16px; text-align: center;">
-                        <a href="<?php echo $CFG->wwwroot; ?>/local/alx_report_api/check_rate_limit.php" class="btn-modern" style="background: #10b981; color: white; border: 2px solid #10b981; padding: 10px 20px; border-radius: 6px; text-decoration: none; display: inline-block; font-weight: 600; transition: all 0.3s ease; box-shadow: 0 2px 4px rgba(16,185,129,0.3);">
-                            <i class="fas fa-chart-line"></i>
+                        <a href="<?php echo $CFG->wwwroot; ?>/local/alx_report_api/monitoring_dashboard_new.php?tab=security" class="btn-modern" style="background: #10b981; color: white; border: 2px solid #10b981; padding: 10px 20px; border-radius: 6px; text-decoration: none; display: inline-block; font-weight: 600; transition: all 0.3s ease; box-shadow: 0 2px 4px rgba(16,185,129,0.3);">
+                            <i class="fas fa-shield-alt"></i>
                             Security Monitor
                         </a>
                     </div>
