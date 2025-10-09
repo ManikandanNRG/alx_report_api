@@ -2814,6 +2814,42 @@ input[type="checkbox"]:disabled {
                     </div>
                 </form>
                 
+                <!-- Quick Actions Section -->
+                <div style="margin-top: 30px; padding: 24px; background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
+                    <h3 style="margin: 0 0 20px 0; color: #2d3748; font-size: 20px; font-weight: 700;">
+                        <i class="fas fa-bolt" style="color: #667eea;"></i> Quick Actions
+                    </h3>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;">
+                        <a href="<?php echo $CFG->wwwroot; ?>/local/alx_report_api/test_email_alert.php" 
+                           class="btn-modern btn-secondary" 
+                           style="background: #667eea; color: white; padding: 16px; text-align: center; border-radius: 8px; text-decoration: none; display: block; font-weight: 600; transition: all 0.3s; box-shadow: 0 2px 6px rgba(102,126,234,0.3);">
+                            <i class="fas fa-envelope-open-text" style="font-size: 24px; display: block; margin-bottom: 8px;"></i>
+                            Test Email Alerts
+                        </a>
+                        
+                        <a href="<?php echo $CFG->wwwroot; ?>/admin/webservice/tokens.php" 
+                           class="btn-modern btn-info" 
+                           style="background: #06b6d4; color: white; padding: 16px; text-align: center; border-radius: 8px; text-decoration: none; display: block; font-weight: 600; transition: all 0.3s; box-shadow: 0 2px 6px rgba(6,182,212,0.3);">
+                            <i class="fas fa-key" style="font-size: 24px; display: block; margin-bottom: 8px;"></i>
+                            Manage Tokens
+                        </a>
+                        
+                        <a href="<?php echo $CFG->wwwroot; ?>/admin/settings.php?section=externalservices" 
+                           class="btn-modern btn-success" 
+                           style="background: #10b981; color: white; padding: 16px; text-align: center; border-radius: 8px; text-decoration: none; display: block; font-weight: 600; transition: all 0.3s; box-shadow: 0 2px 6px rgba(16,185,129,0.3);">
+                            <i class="fas fa-server" style="font-size: 24px; display: block; margin-bottom: 8px;"></i>
+                            Manage Services
+                        </a>
+                        
+                        <a href="<?php echo $CFG->wwwroot; ?>/admin/settings.php?section=local_alx_report_api" 
+                           class="btn-modern btn-warning" 
+                           style="background: #f59e0b; color: white; padding: 16px; text-align: center; border-radius: 8px; text-decoration: none; display: block; font-weight: 600; transition: all 0.3s; box-shadow: 0 2px 6px rgba(245,158,11,0.3);">
+                            <i class="fas fa-cog" style="font-size: 24px; display: block; margin-bottom: 8px;"></i>
+                            Plugin Settings
+                        </a>
+                    </div>
+                </div>
+                
                 <!-- Toggle Switch CSS -->
                 <style>
                 /* Toggle Switch Styling */
@@ -2845,30 +2881,7 @@ input[type="checkbox"]:disabled {
         </div>
     </div>
 
-    <!-- Keep the rest of the closing divs -->
-    <div style="display: none;">
-        <!-- Placeholder for removed action buttons -->
-        
-            <a href="<?php echo $CFG->wwwroot; ?>/local/alx_report_api/test_alerts.php" 
-               class="btn-modern btn-secondary" 
-               style="background: #6c757d; color: white; padding: 16px; text-align: center; border-radius: 8px; text-decoration: none; display: block; font-weight: 600; transition: all 0.3s;">
-                <i class="fas fa-flask"></i><br>
-                Test Email Alerts
-            </a>
-            
-            <a href="<?php echo $CFG->wwwroot; ?>/admin/webservice/tokens.php" 
-               class="btn-modern btn-info" 
-               style="background: #06b6d4; color: white; padding: 16px; text-align: center; border-radius: 8px; text-decoration: none; display: block; font-weight: 600; transition: all 0.3s;">
-                <i class="fas fa-key"></i><br>
-                Manage Tokens
-            </a>
-            
-            <a href="<?php echo $CFG->wwwroot; ?>/admin/settings.php?section=externalservices" 
-               class="btn-modern btn-success" 
-               style="background: #10b981; color: white; padding: 16px; text-align: center; border-radius: 8px; text-decoration: none; display: block; font-weight: 600; transition: all 0.3s;">
-                <i class="fas fa-server"></i><br>
-                Manage Services
-            </a>
+            </div>
         </div>
     </div>
 </div>
