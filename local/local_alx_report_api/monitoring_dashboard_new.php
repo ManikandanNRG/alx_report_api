@@ -994,22 +994,6 @@ try {
             </table>
         </div>
 
-        <!-- Quick Security Actions -->
-        <div class="monitoring-table">
-            <h3 style="padding: 20px 20px 0 20px; margin: 0; font-size: 18px; font-weight: 600;">⚡ Quick Security Actions</h3>
-            <div style="padding: 20px; display: flex; gap: 15px; flex-wrap: wrap;">
-                <button onclick="sendTestSecurityAlert()" class="btn-modern btn-primary" style="padding: 12px 24px; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; transition: all 0.3s;">
-                    <i class="fas fa-envelope"></i> Send Test Alert
-                </button>
-                <a href="<?php echo $CFG->wwwroot; ?>/admin/settings.php?section=local_alx_report_api_settings" class="btn-modern btn-secondary" style="padding: 12px 24px; border: none; border-radius: 8px; font-weight: 600; text-decoration: none; display: inline-block; background: #6c757d; color: white;">
-                    <i class="fas fa-cog"></i> Configure Alerts
-                </a>
-                <a href="<?php echo $CFG->wwwroot; ?>/local/alx_report_api/test_alerts.php" class="btn-modern btn-info" style="padding: 12px 24px; border: none; border-radius: 8px; font-weight: 600; text-decoration: none; display: inline-block; background: #17a2b8; color: white;">
-                    <i class="fas fa-vial"></i> Advanced Testing
-                </a>
-            </div>
-        </div>
-
         <!-- Alert Recipients -->
         <?php if ($alert_emails || $alerting_enabled): ?>
         <div class="monitoring-table">
