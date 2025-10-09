@@ -498,6 +498,10 @@ function local_alx_report_api_populate_reporting_table($companyid = 0, $batch_si
             $company_processed = 0;
             $company_inserted = 0;
             
+            // DEBUG: Log company and enabled courses
+            error_log("DEBUG populate_reporting_table: Processing company {$company->id} ({$company->name})");
+            error_log("DEBUG populate_reporting_table: Enabled courses: " . implode(', ', $enabled_courses));
+            
             // Build the complex query to get all user-course data
             list($course_sql, $course_params) = $DB->get_in_or_equal($enabled_courses, SQL_PARAMS_NAMED, 'course');
             
@@ -555,15 +559,24 @@ function local_alx_report_api_populate_reporting_table($companyid = 0, $batch_si
             
             $params = array_merge(['companyid' => $company->id], $course_params);
             
+            // DEBUG: Log SQL query
+            error_log("DEBUG populate_reporting_table: SQL query params - " . print_r($params, true));
+            
             // Process in batches
             $offset = 0;
+            $batch_count = 0;
             while (true) {
                 $records = $DB->get_records_sql($sql, $params, $offset, $batch_size);
+                $batch_count++;
+                error_log("DEBUG populate_reporting_table: Batch $batch_count - Fetched " . count($records) . " records at offset $offset");
+                
                 if (empty($records)) {
+                    error_log("DEBUG populate_reporting_table: No more records, breaking loop");
                     break;
                 }
                 
                 $batch_inserted = 0;
+                $batch_updated = 0;
                 $current_time = time();
                 
                 foreach ($records as $record) {
@@ -576,6 +589,7 @@ function local_alx_report_api_populate_reporting_table($companyid = 0, $batch_si
                     
                     if (!$existing) {
                         // Insert new record
+                        error_log("DEBUG populate_reporting_table: INSERTING new record - User {$record->userid}, Course {$record->courseid}");
                         $reporting_record = new stdClass();
                         $reporting_record->userid = $record->userid;
                         $reporting_record->companyid = $company->id;
@@ -596,8 +610,26 @@ function local_alx_report_api_populate_reporting_table($companyid = 0, $batch_si
                         $DB->insert_record('local_alx_api_reporting', $reporting_record);
                         $batch_inserted++;
                         $company_inserted++;
+                    } else {
+                        // Update existing record
+                        error_log("DEBUG populate_reporting_table: UPDATING existing record - User {$record->userid}, Course {$record->courseid}");
+                        $existing->firstname = $record->firstname;
+                        $existing->lastname = $record->lastname;
+                        $existing->email = $record->email;
+                        $existing->coursename = $record->coursename;
+                        $existing->timecompleted = $record->timecompleted;
+                        $existing->timestarted = $record->timestarted;
+                        $existing->percentage = $record->percentage;
+                        $existing->status = $record->status;
+                        $existing->last_updated = $current_time;
+                        $existing->updated_at = $current_time;
+                        
+                        $DB->update_record('local_alx_api_reporting', $existing);
+                        $batch_updated++;
                     }
                 }
+                
+                error_log("DEBUG populate_reporting_table: Batch complete - Inserted: $batch_inserted, Updated: $batch_updated");
                 
                 $company_processed += count($records);
                 $offset += $batch_size;
@@ -610,6 +642,9 @@ function local_alx_report_api_populate_reporting_table($companyid = 0, $batch_si
             
             $total_processed += $company_processed;
             $total_inserted += $company_inserted;
+            
+            error_log("DEBUG populate_reporting_table: Company {$company->id} complete - Processed: $company_processed, Inserted: $company_inserted");
+            error_log("DEBUG populate_reporting_table: Running totals - Total Processed: $total_processed, Total Inserted: $total_inserted");
             
             if ($output_progress && !defined('CLI_SCRIPT')) {
                 $is_cli = (php_sapi_name() === 'cli');
@@ -624,11 +659,15 @@ function local_alx_report_api_populate_reporting_table($companyid = 0, $batch_si
         }
         
     } catch (Exception $e) {
+        error_log("DEBUG populate_reporting_table: EXCEPTION caught - " . $e->getMessage());
+        error_log("DEBUG populate_reporting_table: Exception trace - " . $e->getTraceAsString());
         $errors[] = 'Population error: ' . $e->getMessage();
     }
     
     $end_time = time();
     $duration = $end_time - $start_time;
+    
+    error_log("DEBUG populate_reporting_table: FINAL RETURN - Total Processed: $total_processed, Total Inserted: $total_inserted, Duration: {$duration}s, Errors: " . count($errors));
     
     return [
         'success' => empty($errors),

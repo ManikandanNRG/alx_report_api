@@ -172,7 +172,8 @@ if ($action && $confirm) {
     
     echo '<div class="progress-box" id="progress-log">';
     
-    $start_time = time();
+    // Set start_time to 1 second before to catch records updated during sync
+    $start_time = time() - 1;
     $sync_details = [
         'created_records' => 0,
         'updated_records' => 0,
@@ -182,6 +183,10 @@ if ($action && $confirm) {
     ];
     
     try {
+        // DEBUG: Show what action was received
+        echo "DEBUG: action = '$action', companyid = $companyid, hours_back = $hours_back, confirm = $confirm\n\n";
+        flush();
+        
         // Get company info if specific company
         if ($companyid > 0) {
             $sync_details['company_info'] = $DB->get_record('company', ['id' => $companyid], 'id, name, shortname');
@@ -189,6 +194,7 @@ if ($action && $confirm) {
         
         switch ($action) {
             case 'sync_changes':
+            case 'syncchanges': // Handle both formats (with/without underscore)
                 echo "=== SYNC RECENT CHANGES ===\n";
                 echo "Hours back: $hours_back\n";
                 if ($sync_details['company_info']) {
@@ -204,13 +210,27 @@ if ($action && $confirm) {
                 flush();
                 
                 // Track before state
-                $before_count = $DB->count_records('local_alx_api_reporting', ['companyid' => $companyid ?: null]);
+                if ($companyid > 0) {
+                    $before_count = $DB->count_records('local_alx_api_reporting', ['companyid' => $companyid]);
+                } else {
+                    $before_count = $DB->count_records('local_alx_api_reporting');
+                }
                 
-                // Call sync function
-                $result = local_alx_report_api_populate_reporting_table($companyid, 1000, true);
+                // Call sync function (false = no progress output to avoid JS errors)
+                echo "🔄 Calling sync function...\n";
+                flush();
+                $result = local_alx_report_api_populate_reporting_table($companyid, 1000, false);
+                echo "📊 Sync function returned: " . print_r($result, true) . "\n";
+                flush();
                 
                 // Track after state and get details
-                $after_count = $DB->count_records('local_alx_api_reporting', ['companyid' => $companyid ?: null]);
+                if ($companyid > 0) {
+                    $after_count = $DB->count_records('local_alx_api_reporting', ['companyid' => $companyid]);
+                } else {
+                    $after_count = $DB->count_records('local_alx_api_reporting');
+                }
+                echo "📈 Before count: $before_count, After count: $after_count\n";
+                flush();
                 
                 // Get affected courses
                 $course_sql = "SELECT c.id, c.fullname, COUNT(r.id) as record_count
@@ -250,6 +270,7 @@ if ($action && $confirm) {
                 break;
                 
             case 'sync_full':
+            case 'syncfull': // Handle both formats (with/without underscore)
                 if ($companyid > 0) {
                     echo "=== FULL COMPANY SYNC ===\n";
                     echo "Company: " . $sync_details['company_info']->name . " (ID: $companyid)\n";
@@ -257,7 +278,7 @@ if ($action && $confirm) {
                     flush();
                     
                     $before_count = $DB->count_records('local_alx_api_reporting', ['companyid' => $companyid]);
-                    $result = local_alx_report_api_populate_reporting_table($companyid, 1000, true);
+                    $result = local_alx_report_api_populate_reporting_table($companyid, 1000, false);
                     $after_count = $DB->count_records('local_alx_api_reporting', ['companyid' => $companyid]);
                     
                     // Get details (same as above)
@@ -316,6 +337,12 @@ if ($action && $confirm) {
                 echo "Orphaned records marked deleted: $deleted_count\n";
                 $result = ['deleted' => $deleted_count];
                 break;
+                
+            default:
+                echo "❌ ERROR: Unknown action '$action'\n";
+                echo "Valid actions are: sync_changes, sync_full, cleanup\n";
+                $result = ['total_processed' => 0, 'total_inserted' => 0, 'errors' => ["Unknown action: $action"]];
+                break;
         }
         
         $duration = time() - $start_time;
@@ -350,7 +377,11 @@ if ($action && $confirm) {
         // Sync Statistics Card
         echo '<div class="result-card">';
         echo '<h3><i class="fas fa-chart-bar"></i> Sync Statistics</h3>';
-        echo '<div class="stat-row"><span class="stat-label">Records Processed:</span><span class="stat-value">' . ($result['total_processed'] ?? 0) . '</span></div>';
+        // DEBUG: Show what $result contains
+        echo '<!-- DEBUG result: ' . htmlspecialchars(print_r($result, true)) . ' -->';
+        echo '<!-- DEBUG sync_details: ' . htmlspecialchars(print_r($sync_details, true)) . ' -->';
+        $total_processed_value = isset($result['total_processed']) ? $result['total_processed'] : 0;
+        echo '<div class="stat-row"><span class="stat-label">Records Processed:</span><span class="stat-value">' . $total_processed_value . '</span></div>';
         echo '<div class="stat-row"><span class="stat-label">Records Created:</span><span class="stat-value" style="color: #10b981;">' . $sync_details['created_records'] . '</span></div>';
         echo '<div class="stat-row"><span class="stat-label">Records Updated:</span><span class="stat-value" style="color: #3b82f6;">' . $sync_details['updated_records'] . '</span></div>';
         echo '<div class="stat-row"><span class="stat-label">Duration:</span><span class="stat-value">' . $duration . ' seconds</span></div>';
