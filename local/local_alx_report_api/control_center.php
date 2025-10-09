@@ -2985,6 +2985,13 @@ input[type="checkbox"]:disabled {
                             <i class="fas fa-cog" style="font-size: 24px; display: block; margin-bottom: 8px;"></i>
                             Plugin Settings
                         </a>
+                        
+                        <a href="<?php echo $CFG->wwwroot; ?>/local/alx_report_api/export_data.php" 
+                           class="btn-modern btn-info" 
+                           style="background: #8b5cf6; color: white; padding: 16px; text-align: center; border-radius: 8px; text-decoration: none; display: block; font-weight: 600; transition: all 0.3s; box-shadow: 0 2px 6px rgba(139,92,246,0.3);">
+                            <i class="fas fa-download" style="font-size: 24px; display: block; margin-bottom: 8px;"></i>
+                            Export Data
+                        </a>
                     </div>
                 </div>
                 

@@ -30,9 +30,12 @@ require_once(__DIR__ . '/lib.php');
 admin_externalpage_setup('local_alx_report_api_export');
 require_capability('moodle/site:config', context_system::instance());
 
-// Get export format parameter
+// Get export parameters
 $format = optional_param('format', 'csv', PARAM_TEXT);
 $timerange = optional_param('timerange', '24h', PARAM_TEXT);
+$companyid = optional_param('companyid', 0, PARAM_INT);
+$page = optional_param('page', 1, PARAM_INT);
+$perpage = 1000; // Records per page
 
 global $DB;
 
@@ -98,14 +101,37 @@ if ($format === 'csv' || $format === 'json') {
     
     // Get reporting data if table exists
     $reporting_data = [];
+    $total_records = 0;
     if ($DB->get_manager()->table_exists('local_alx_api_reporting')) {
         try {
+            // Build WHERE clause
+            $where_conditions = ['created_at > ?'];
+            $params = [$time_limit];
+            
+            // Add company filter if specified
+            if ($companyid > 0) {
+                $where_conditions[] = 'companyid = ?';
+                $params[] = $companyid;
+            }
+            
+            $where_sql = implode(' AND ', $where_conditions);
+            
+            // Get total count for pagination
+            $total_records = $DB->count_records_sql(
+                "SELECT COUNT(*) FROM {local_alx_api_reporting} WHERE {$where_sql}",
+                $params
+            );
+            
+            // Calculate offset for pagination
+            $offset = ($page - 1) * $perpage;
+            
+            // Get paginated records
             $reports = $DB->get_records_sql("
                 SELECT * FROM {local_alx_api_reporting} 
-                WHERE created_at > ? 
+                WHERE {$where_sql}
                 ORDER BY created_at DESC 
-                LIMIT 1000
-            ", [$time_limit]);
+                LIMIT {$perpage} OFFSET {$offset}
+            ", $params);
             
             foreach ($reports as $report) {
                 $reporting_data[] = [
@@ -132,12 +158,18 @@ if ($format === 'csv' || $format === 'json') {
     }
     
     // Generate summary statistics
+    $total_pages = $total_records > 0 ? ceil($total_records / $perpage) : 1;
     $summary = [
         'export_time' => date('Y-m-d H:i:s'),
         'time_range' => $time_label,
+        'company_filter' => $companyid > 0 ? "Company ID: {$companyid}" : 'All Companies',
+        'page' => $page,
+        'total_pages' => $total_pages,
+        'records_per_page' => $perpage,
+        'total_matching_records' => $total_records,
+        'records_in_export' => count($reporting_data),
         'total_companies' => count($company_data),
         'total_tokens' => count($token_data),
-        'total_reports' => count($reporting_data),
         'api_service_status' => $service ? 'Active' : 'Inactive',
         'api_service_id' => $service ? $service->id : 'N/A'
     ];
@@ -153,9 +185,13 @@ if ($format === 'csv' || $format === 'json') {
         fputcsv($output, ['ALX API Report Summary']);
         fputcsv($output, ['Export Time', $summary['export_time']]);
         fputcsv($output, ['Time Range', $summary['time_range']]);
+        fputcsv($output, ['Company Filter', $summary['company_filter']]);
+        fputcsv($output, ['Page', $summary['page'] . ' of ' . $summary['total_pages']]);
+        fputcsv($output, ['Records Per Page', $summary['records_per_page']]);
+        fputcsv($output, ['Total Matching Records', $summary['total_matching_records']]);
+        fputcsv($output, ['Records in This Export', $summary['records_in_export']]);
         fputcsv($output, ['Total Companies', $summary['total_companies']]);
         fputcsv($output, ['Total Tokens', $summary['total_tokens']]);
-        fputcsv($output, ['Total Reports', $summary['total_reports']]);
         fputcsv($output, ['API Service Status', $summary['api_service_status']]);
         fputcsv($output, ['API Service ID', $summary['api_service_id']]);
         fputcsv($output, []); // Empty row
