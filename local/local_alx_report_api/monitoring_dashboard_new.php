@@ -504,9 +504,9 @@ try {
                     if ($DB->get_manager()->table_exists('local_alx_api_reporting')) {
                         $today_start = mktime(0, 0, 0);
                         $table_info = $DB->get_columns('local_alx_api_reporting');
-                        if (isset($table_info['timecreated'])) {
+                        if (isset($table_info['created_at'])) {
                             $records_created = $DB->count_records_select('local_alx_api_reporting', 
-                                'timecreated >= ?', [$today_start]);
+                                'created_at >= ?', [$today_start]);
                         }
                     }
                     echo number_format($records_created);
@@ -521,9 +521,9 @@ try {
                     if ($DB->get_manager()->table_exists('local_alx_api_reporting')) {
                         $today_start = mktime(0, 0, 0);
                         $table_info = $DB->get_columns('local_alx_api_reporting');
-                        if (isset($table_info['timemodified'])) {
+                        if (isset($table_info['updated_at'])) {
                             $records_updated = $DB->count_records_select('local_alx_api_reporting', 
-                                'timemodified >= ? AND timecreated < ?', [$today_start, $today_start]);
+                                'updated_at >= ? AND created_at < ?', [$today_start, $today_start]);
                         }
                     }
                     echo number_format($records_updated);
@@ -592,15 +592,15 @@ try {
                                         }
                                         
                                         // Created today
-                                        if (isset($table_info['timecreated'])) {
+                                        if (isset($table_info['created_at'])) {
                                             $created_today = $DB->count_records_select('local_alx_api_reporting', 
-                                                'companyid = ? AND timecreated >= ?', [$company->id, $today_start]);
+                                                'companyid = ? AND created_at >= ?', [$company->id, $today_start]);
                                         }
                                         
                                         // Updated today
-                                        if (isset($table_info['timemodified'])) {
+                                        if (isset($table_info['updated_at'])) {
                                             $updated_today = $DB->count_records_select('local_alx_api_reporting', 
-                                                'companyid = ? AND timemodified >= ? AND timecreated < ?', 
+                                                'companyid = ? AND updated_at >= ? AND created_at < ?', 
                                                 [$company->id, $today_start, $today_start]);
                                         }
                                         
@@ -613,17 +613,17 @@ try {
                                             if ($last_record && $last_record->last_time) {
                                                 $company_last_sync = date('H:i', $last_record->last_time);
                                             }
-                                        } elseif (isset($table_info['timemodified'])) {
+                                        } elseif (isset($table_info['updated_at'])) {
                                             $last_record = $DB->get_record_sql(
-                                                "SELECT MAX(timemodified) as last_time FROM {local_alx_api_reporting} WHERE companyid = ?",
+                                                "SELECT MAX(updated_at) as last_time FROM {local_alx_api_reporting} WHERE companyid = ?",
                                                 [$company->id]
                                             );
                                             if ($last_record && $last_record->last_time) {
                                                 $company_last_sync = date('H:i', $last_record->last_time);
                                             }
-                                        } elseif (isset($table_info['timecreated'])) {
+                                        } elseif (isset($table_info['created_at'])) {
                                             $last_record = $DB->get_record_sql(
-                                                "SELECT MAX(timecreated) as last_time FROM {local_alx_api_reporting} WHERE companyid = ?",
+                                                "SELECT MAX(created_at) as last_time FROM {local_alx_api_reporting} WHERE companyid = ?",
                                                 [$company->id]
                                             );
                                             if ($last_record && $last_record->last_time) {
@@ -1187,65 +1187,133 @@ function switchTab(tabName) {
 
 // Initialize charts
 document.addEventListener('DOMContentLoaded', function() {
-    // Sync Trend Chart
+    // Sync Trend Chart (Two-Line: Created vs Updated)
     const syncCtx = document.getElementById('syncTrendChart');
     if (syncCtx) {
         new Chart(syncCtx, {
             type: 'line',
             data: {
                 labels: <?php 
-                    // Generate round hour labels from 00:00 to 23:00
+                    // Generate hourly labels for last 24 hours (not today's hours, but last 24h)
                     $hours = [];
-                    for ($i = 0; $i < 24; $i++) {
-                        $hours[] = sprintf('%02d:00', $i);
+                    for ($i = 23; $i >= 0; $i--) {
+                        $current_hour = date('H') - $i;
+                        if ($current_hour < 0) {
+                            $current_hour += 24;
+                        }
+                        $hours[] = sprintf('%02d:00', $current_hour);
                     }
                     echo json_encode($hours);
                 ?>,
-                datasets: [{
-                    label: 'Records Synced',
-                    data: <?php 
-                        // Get REAL hourly sync data from database
-                        $sync_data = [];
-                        $today_start = mktime(0, 0, 0); // Start of today
-                        
-                        if ($DB->get_manager()->table_exists('local_alx_api_reporting')) {
-                            $table_info = $DB->get_columns('local_alx_api_reporting');
+                datasets: [
+                    {
+                        label: '➕ Records Created',
+                        data: <?php 
+                            // Get REAL hourly created data from database (LAST 24 HOURS, not just today)
+                            $created_data = [];
                             
-                            // Get data for each hour (00:00 to 23:00)
-                            for ($hour = 0; $hour < 24; $hour++) {
-                                $hour_start = $today_start + ($hour * 3600);
-                                $hour_end = $hour_start + 3600;
+                            if ($DB->get_manager()->table_exists('local_alx_api_reporting')) {
+                                $table_info = $DB->get_columns('local_alx_api_reporting');
                                 
-                                $count = 0;
-                                if (isset($table_info['timecreated'])) {
-                                    $count = $DB->count_records_select('local_alx_api_reporting',
-                                        'timecreated >= ? AND timecreated < ?',
-                                        [$hour_start, $hour_end]
-                                    );
+                                // Get data for last 24 hours (not just today)
+                                for ($i = 23; $i >= 0; $i--) {
+                                    $current_hour = date('H') - $i;
+                                    if ($current_hour < 0) {
+                                        $current_hour += 24;
+                                    }
+                                    
+                                    $hour_start = mktime($current_hour, 0, 0);
+                                    $hour_end = $hour_start + 3600;
+                                    
+                                    $count = 0;
+                                    if (isset($table_info['created_at'])) {
+                                        $count = $DB->count_records_select('local_alx_api_reporting',
+                                            'created_at >= ? AND created_at < ?',
+                                            [$hour_start, $hour_end]
+                                        );
+                                    }
+                                    $created_data[] = $count;
                                 }
-                                $sync_data[] = $count;
+                            } else {
+                                // No table = no data
+                                $created_data = array_fill(0, 24, 0);
                             }
-                        } else {
-                            // No table = no data
-                            $sync_data = array_fill(0, 24, 0);
-                        }
-                        
-                        echo json_encode($sync_data);
-                    ?>,
-                    borderColor: '#667eea',
-                    backgroundColor: 'rgba(102, 126, 234, 0.1)',
-                    tension: 0.4,
-                    fill: true
-                }]
+                            
+                            echo json_encode($created_data);
+                        ?>,
+                        borderColor: '#3b82f6',
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        borderWidth: 3,
+                        tension: 0.4,
+                        fill: false
+                    },
+                    {
+                        label: '🔄 Records Updated',
+                        data: <?php 
+                            // Get REAL hourly updated data from database (LAST 24 HOURS)
+                            $updated_data = [];
+                            
+                            if ($DB->get_manager()->table_exists('local_alx_api_reporting')) {
+                                $table_info = $DB->get_columns('local_alx_api_reporting');
+                                
+                                // Get data for last 24 hours
+                                for ($i = 23; $i >= 0; $i--) {
+                                    $current_hour = date('H') - $i;
+                                    if ($current_hour < 0) {
+                                        $current_hour += 24;
+                                    }
+                                    
+                                    $hour_start = mktime($current_hour, 0, 0);
+                                    $hour_end = $hour_start + 3600;
+                                    
+                                    $count = 0;
+                                    // Count records that were updated (not created) in this hour
+                                    if (isset($table_info['updated_at']) && isset($table_info['created_at'])) {
+                                        $count = $DB->count_records_select('local_alx_api_reporting',
+                                            'updated_at >= ? AND updated_at < ? AND created_at < ?',
+                                            [$hour_start, $hour_end, $hour_start]
+                                        );
+                                    }
+                                    $updated_data[] = $count;
+                                }
+                            } else {
+                                // No table = no data
+                                $updated_data = array_fill(0, 24, 0);
+                            }
+                            
+                            echo json_encode($updated_data);
+                        ?>,
+                        borderColor: '#10b981',
+                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                        borderWidth: 3,
+                        tension: 0.4,
+                        fill: false
+                    }
+                ]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: true,
                 plugins: {
-                    legend: { display: false }
+                    legend: { 
+                        display: true,
+                        position: 'top',
+                        labels: {
+                            boxWidth: 12,
+                            padding: 10,
+                            font: {
+                                size: 11
+                            }
+                        }
+                    }
                 },
                 scales: {
-                    y: { beginAtZero: true }
+                    y: { 
+                        beginAtZero: true,
+                        ticks: {
+                            precision: 0
+                        }
+                    }
                 }
             }
         });
