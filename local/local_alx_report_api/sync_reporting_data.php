@@ -38,7 +38,7 @@ $PAGE->set_heading('ALX Report API - Manual Data Sync');
 // Handle form submission
 $action = optional_param('action', '', PARAM_ALPHA);
 $companyid = optional_param('companyid', 0, PARAM_INT);
-$hours_back = optional_param('hours_back', 24, PARAM_INT);
+$hours_back = optional_param('hours_back', 1, PARAM_INT);
 $confirm = optional_param('confirm', 0, PARAM_INT);
 
 // Process sync action
@@ -245,18 +245,20 @@ if ($action && $confirm) {
                 $course_sql .= " GROUP BY c.id, c.fullname ORDER BY record_count DESC LIMIT 10";
                 $sync_details['affected_courses'] = $DB->get_records_sql($course_sql, $course_params);
                 
-                // Get affected users
-                $user_sql = "SELECT u.id, u.firstname, u.lastname, u.email, COUNT(r.id) as course_count
-                            FROM {local_alx_api_reporting} r
-                            JOIN {user} u ON u.id = r.userid
-                            WHERE r.last_updated >= ?";
-                $user_params = [$start_time];
+                // Get all affected users
+                $all_users_sql = "SELECT u.id, u.firstname, u.lastname, u.email, 
+                                        COUNT(r.id) as course_count,
+                                        MIN(r.created_at) as first_created
+                                FROM {local_alx_api_reporting} r
+                                JOIN {user} u ON u.id = r.userid
+                                WHERE r.last_updated >= ?";
+                $all_users_params = [$start_time];
                 if ($companyid > 0) {
-                    $user_sql .= " AND r.companyid = ?";
-                    $user_params[] = $companyid;
+                    $all_users_sql .= " AND r.companyid = ?";
+                    $all_users_params[] = $companyid;
                 }
-                $user_sql .= " GROUP BY u.id, u.firstname, u.lastname, u.email ORDER BY course_count DESC LIMIT 10";
-                $sync_details['affected_users'] = $DB->get_records_sql($user_sql, $user_params);
+                $all_users_sql .= " GROUP BY u.id, u.firstname, u.lastname, u.email ORDER BY course_count DESC";
+                $sync_details['affected_users'] = $DB->get_records_sql($all_users_sql, $all_users_params);
                 
                 $sync_details['created_records'] = max(0, $after_count - $before_count);
                 $sync_details['updated_records'] = $result['total_processed'] - $sync_details['created_records'];
@@ -289,12 +291,15 @@ if ($action && $confirm) {
                                   GROUP BY c.id, c.fullname ORDER BY record_count DESC LIMIT 10";
                     $sync_details['affected_courses'] = $DB->get_records_sql($course_sql, [$companyid, $start_time]);
                     
-                    $user_sql = "SELECT u.id, u.firstname, u.lastname, u.email, COUNT(r.id) as course_count
-                                FROM {local_alx_api_reporting} r
-                                JOIN {user} u ON u.id = r.userid
-                                WHERE r.companyid = ? AND r.last_updated >= ?
-                                GROUP BY u.id, u.firstname, u.lastname, u.email ORDER BY course_count DESC LIMIT 10";
-                    $sync_details['affected_users'] = $DB->get_records_sql($user_sql, [$companyid, $start_time]);
+                    // Get all affected users
+                    $all_users_sql = "SELECT u.id, u.firstname, u.lastname, u.email, 
+                                            COUNT(r.id) as course_count,
+                                            MIN(r.created_at) as first_created
+                                    FROM {local_alx_api_reporting} r
+                                    JOIN {user} u ON u.id = r.userid
+                                    WHERE r.companyid = ? AND r.last_updated >= ?
+                                    GROUP BY u.id, u.firstname, u.lastname, u.email ORDER BY course_count DESC";
+                    $sync_details['affected_users'] = $DB->get_records_sql($all_users_sql, [$companyid, $start_time]);
                     
                     $sync_details['created_records'] = max(0, $after_count - $before_count);
                     $sync_details['updated_records'] = $result['total_processed'] - $sync_details['created_records'];
@@ -411,22 +416,89 @@ if ($action && $confirm) {
             echo '</div>';
         }
         
-        // Affected Users Table
+        // Affected Users Table with Pagination
         if (!empty($sync_details['affected_users'])) {
-            echo '<h2 style="margin: 30px 0 20px 0; color: #2d3748; font-size: 24px; font-weight: 600;"><i class="fas fa-users"></i> Affected Users</h2>';
+            $affected_users_array = array_values($sync_details['affected_users']);
+            $total_users = count($affected_users_array);
+            $page_size = 20;
+            $total_pages = ceil($total_users / $page_size);
+            
+            echo '<h2 style="margin: 30px 0 20px 0; color: #2d3748; font-size: 24px; font-weight: 600;"><i class="fas fa-users"></i> Affected Users (' . $total_users . ')</h2>';
             echo '<div class="data-table">';
-            echo '<table>';
+            echo '<table id="affected-users-table">';
             echo '<thead><tr><th>User Name</th><th>Email</th><th>Courses Synced</th><th>Status</th></tr></thead>';
             echo '<tbody>';
-            foreach ($sync_details['affected_users'] as $user) {
-                echo '<tr>';
+            
+            // Show first page
+            for ($i = 0; $i < min($page_size, $total_users); $i++) {
+                $user = $affected_users_array[$i];
+                // Determine if user was newly created (first_created >= start_time)
+                $is_new = ($user->first_created >= $start_time);
+                $badge_class = $is_new ? 'badge-success' : 'badge-primary';
+                $badge_text = $is_new ? '✓ New' : '✓ Updated';
+                
+                echo '<tr class="user-row" data-page="1">';
                 echo '<td>' . htmlspecialchars($user->firstname . ' ' . $user->lastname) . '</td>';
                 echo '<td>' . htmlspecialchars($user->email) . '</td>';
                 echo '<td>' . $user->course_count . '</td>';
-                echo '<td><span class="badge badge-primary">✓ Updated</span></td>';
+                echo '<td><span class="badge ' . $badge_class . '">' . $badge_text . '</span></td>';
                 echo '</tr>';
             }
-            echo '</tbody></table></div>';
+            
+            // Hide remaining rows
+            for ($i = $page_size; $i < $total_users; $i++) {
+                $user = $affected_users_array[$i];
+                $page = floor($i / $page_size) + 1;
+                $is_new = ($user->first_created >= $start_time);
+                $badge_class = $is_new ? 'badge-success' : 'badge-primary';
+                $badge_text = $is_new ? '✓ New' : '✓ Updated';
+                
+                echo '<tr class="user-row" data-page="' . $page . '" style="display:none;">';
+                echo '<td>' . htmlspecialchars($user->firstname . ' ' . $user->lastname) . '</td>';
+                echo '<td>' . htmlspecialchars($user->email) . '</td>';
+                echo '<td>' . $user->course_count . '</td>';
+                echo '<td><span class="badge ' . $badge_class . '">' . $badge_text . '</span></td>';
+                echo '</tr>';
+            }
+            
+            echo '</tbody></table>';
+            
+            // Pagination controls
+            if ($total_pages > 1) {
+                echo '<div style="margin-top: 20px; text-align: center;">';
+                echo '<div id="user-pagination" style="display: inline-flex; gap: 5px; align-items: center;">';
+                echo '<button onclick="changeUserPage(1)" style="padding: 8px 12px; border: 1px solid #e2e8f0; background: white; border-radius: 6px; cursor: pointer;">First</button>';
+                echo '<button onclick="changeUserPage(\'prev\')" style="padding: 8px 12px; border: 1px solid #e2e8f0; background: white; border-radius: 6px; cursor: pointer;">Previous</button>';
+                echo '<span id="user-page-info" style="padding: 8px 16px;">Page 1 of ' . $total_pages . '</span>';
+                echo '<button onclick="changeUserPage(\'next\')" style="padding: 8px 12px; border: 1px solid #e2e8f0; background: white; border-radius: 6px; cursor: pointer;">Next</button>';
+                echo '<button onclick="changeUserPage(' . $total_pages . ')" style="padding: 8px 12px; border: 1px solid #e2e8f0; background: white; border-radius: 6px; cursor: pointer;">Last</button>';
+                echo '</div></div>';
+            }
+            
+            echo '</div>';
+            
+            // Add pagination JavaScript
+            echo '<script>
+            var userCurrentPage = 1;
+            var userTotalPages = ' . $total_pages . ';
+            
+            function changeUserPage(page) {
+                if (page === "prev") {
+                    if (userCurrentPage > 1) userCurrentPage--;
+                } else if (page === "next") {
+                    if (userCurrentPage < userTotalPages) userCurrentPage++;
+                } else {
+                    userCurrentPage = page;
+                }
+                
+                // Hide all rows
+                document.querySelectorAll(".user-row").forEach(row => row.style.display = "none");
+                // Show current page rows
+                document.querySelectorAll(".user-row[data-page=\"" + userCurrentPage + "\"]").forEach(row => row.style.display = "");
+                // Update page info
+                document.getElementById("user-page-info").textContent = "Page " + userCurrentPage + " of " + userTotalPages;
+            }
+            </script>';
         } else {
             echo '<h2 style="margin: 30px 0 20px 0; color: #2d3748; font-size: 24px; font-weight: 600;"><i class="fas fa-users"></i> Affected Users</h2>';
             echo '<div style="background: white; padding: 40px; text-align: center; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">';
@@ -586,7 +658,7 @@ echo '</select>';
 echo '</div>';
 echo '<div>';
 echo '<label style="display: block; margin-bottom: 8px; font-weight: 600; color: #495057;">Hours Back:</label>';
-echo '<input type="number" name="hours_back" value="24" min="1" max="168" style="width: 100%; padding: 10px 15px; border: 2px solid #e9ecef; border-radius: 8px; font-size: 15px;">';
+echo '<input type="number" name="hours_back" value="1" min="1" max="168" style="width: 100%; padding: 10px 15px; border: 2px solid #e9ecef; border-radius: 8px; font-size: 15px;">';
 echo '</div>';
 echo '</div>';
 echo '<div style="display: flex; align-items: center; gap: 8px; margin-bottom: 15px;">';
