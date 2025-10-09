@@ -1421,9 +1421,118 @@ input[type="checkbox"]:disabled {
                         echo "<!-- Total Violations: {$violations_today} -->\n";
                         echo "<!-- END DEBUG -->\n";
                         
-                        // Security score calculation
+                        // ========================================
+                        // DYNAMIC SECURITY STATUS CHECKS
+                        // ========================================
+                        
+                        // 1. Rate Limiting Status - Check if rate limiting is configured and active
+                        $rate_limit_global = get_config('local_alx_report_api', 'rate_limit');
+                        $rate_limit_active = !empty($rate_limit_global) && $rate_limit_global > 0;
+                        $rate_limit_status = $rate_limit_active ? 'Active' : 'Disabled';
+                        $rate_limit_color = $rate_limit_active ? '#10b981' : '#ef4444';
+                        
+                        // 2. Token Security Status - Check for expired tokens and HTTPS
+                        $token_security_status = 'Secure';
+                        $token_security_color = '#10b981';
+                        $token_issues = [];
+                        
+                        try {
+                            // Check if HTTPS is enabled
+                            $is_https = !empty($CFG->wwwroot) && strpos($CFG->wwwroot, 'https://') === 0;
+                            if (!$is_https) {
+                                $token_issues[] = 'HTTP (not HTTPS)';
+                            }
+                            
+                            // Check for expired tokens
+                            if ($DB->get_manager()->table_exists('external_tokens')) {
+                                $service_id = $DB->get_field('external_services', 'id', ['shortname' => 'alx_report_api_custom']);
+                                if (!$service_id) {
+                                    $service_id = $DB->get_field('external_services', 'id', ['shortname' => 'alx_report_api']);
+                                }
+                                
+                                if ($service_id) {
+                                    $expired_tokens = $DB->count_records_select('external_tokens',
+                                        'externalserviceid = ? AND validuntil > 0 AND validuntil < ?',
+                                        [$service_id, time()]
+                                    );
+                                    
+                                    if ($expired_tokens > 0) {
+                                        $token_issues[] = "{$expired_tokens} expired token(s)";
+                                    }
+                                }
+                            }
+                            
+                            // Set status based on issues found
+                            if (count($token_issues) > 0) {
+                                $token_security_status = 'Warning';
+                                $token_security_color = '#f59e0b';
+                            }
+                        } catch (Exception $e) {
+                            $token_security_status = 'Unknown';
+                            $token_security_color = '#6b7280';
+                            error_log('Token security check error: ' . $e->getMessage());
+                        }
+                        
+                        // 3. Access Control Status - Check web services, REST protocol, and service status
+                        $access_control_status = 'Enabled';
+                        $access_control_color = '#10b981';
+                        $access_issues = [];
+                        
+                        try {
+                            // Check if web services are enabled
+                            if (empty($CFG->enablewebservices)) {
+                                $access_issues[] = 'Web services disabled';
+                            }
+                            
+                            // Check if REST protocol is enabled (with fallback for different Moodle versions)
+                            $rest_enabled = false;
+                            try {
+                                // Try standard table first
+                                if ($DB->get_manager()->table_exists('webservice_protocol')) {
+                                    $rest_enabled = $DB->record_exists('webservice_protocol', ['name' => 'rest', 'enabled' => 1]);
+                                } else {
+                                    // Fallback: Check if webserviceprotocols config contains 'rest'
+                                    $protocols = get_config('moodle', 'webserviceprotocols');
+                                    $rest_enabled = !empty($protocols) && strpos($protocols, 'rest') !== false;
+                                }
+                            } catch (Exception $e) {
+                                // If table doesn't exist or query fails, assume REST is enabled if web services are on
+                                $rest_enabled = !empty($CFG->enablewebservices);
+                            }
+                            
+                            if (!$rest_enabled) {
+                                $access_issues[] = 'REST protocol disabled';
+                            }
+                            
+                            // Check if service exists and is enabled
+                            $service = $DB->get_record('external_services', ['shortname' => 'alx_report_api_custom']);
+                            if (!$service) {
+                                $service = $DB->get_record('external_services', ['shortname' => 'alx_report_api']);
+                            }
+                            
+                            if (!$service) {
+                                $access_issues[] = 'Service not found';
+                            } else if (empty($service->enabled)) {
+                                $access_issues[] = 'Service disabled';
+                            }
+                            
+                            // Set status based on issues found
+                            if (count($access_issues) > 0) {
+                                $access_control_status = 'Issues';
+                                $access_control_color = '#ef4444';
+                            }
+                        } catch (Exception $e) {
+                            $access_control_status = 'Unknown';
+                            $access_control_color = '#6b7280';
+                            error_log('Access control check error: ' . $e->getMessage());
+                        }
+                        
+                        // Security score calculation (adjusted based on all security factors)
                         $security_score = 100;
                         if ($violations_today > 0) $security_score -= ($violations_today * 10);
+                        if (!$rate_limit_active) $security_score -= 20;
+                        if (count($token_issues) > 0) $security_score -= (count($token_issues) * 10);
+                        if (count($access_issues) > 0) $security_score -= (count($access_issues) * 15);
                         $security_score = max(0, $security_score);
                         ?>
 
@@ -1442,7 +1551,9 @@ input[type="checkbox"]:disabled {
                         <div style="margin-bottom: 16px;">
                             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                                 <strong style="color: #1f2937;">Rate Limiting:</strong>
-                                <span style="background: #10b981; color: white; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 600;">Active</span>
+                                <span style="background: <?php echo $rate_limit_color; ?>; color: white; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 600;">
+                                    <?php echo $rate_limit_status; ?>
+                                </span>
                             </div>
                         </div>
 
@@ -1450,7 +1561,10 @@ input[type="checkbox"]:disabled {
                         <div style="margin-bottom: 16px;">
                             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                                 <strong style="color: #1f2937;">Token Security:</strong>
-                                <span style="background: #10b981; color: white; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 600;">Secure</span>
+                                <span style="background: <?php echo $token_security_color; ?>; color: white; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 600;" 
+                                      title="<?php echo !empty($token_issues) ? implode(', ', $token_issues) : 'All tokens are secure'; ?>">
+                                    <?php echo $token_security_status; ?>
+                                </span>
                             </div>
                         </div>
 
@@ -1458,7 +1572,10 @@ input[type="checkbox"]:disabled {
                         <div style="margin-bottom: 20px;">
                             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                                 <strong style="color: #1f2937;">Access Control:</strong>
-                                <span style="background: #10b981; color: white; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 600;">Enabled</span>
+                                <span style="background: <?php echo $access_control_color; ?>; color: white; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 600;"
+                                      title="<?php echo !empty($access_issues) ? implode(', ', $access_issues) : 'All access controls are enabled'; ?>">
+                                    <?php echo $access_control_status; ?>
+                                </span>
                             </div>
                         </div>
 
