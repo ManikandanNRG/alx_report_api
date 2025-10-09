@@ -543,9 +543,11 @@ try {
         </div>
 
         <!-- Sync Trend Chart -->
-        <div class="chart-container">
+        <div class="chart-container" style="margin-bottom: 30px;">
             <h3>📈 Sync Trends (Last 24 Hours)</h3>
-            <canvas id="syncTrendChart" height="80"></canvas>
+            <div style="position: relative; height: 300px; width: 100%;">
+                <canvas id="syncTrendChart"></canvas>
+            </div>
         </div>
 
         <!-- Company Sync Status Table -->
@@ -1210,7 +1212,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         label: '➕ Records Created',
                         data: <?php 
                             // Get REAL hourly created data from database (LAST 24 HOURS, not just today)
-                            $created_data = [];
+                            $sync_created_data = [];
                             
                             if ($DB->get_manager()->table_exists('local_alx_api_reporting')) {
                                 $table_info = $DB->get_columns('local_alx_api_reporting');
@@ -1232,14 +1234,14 @@ document.addEventListener('DOMContentLoaded', function() {
                                             [$hour_start, $hour_end]
                                         );
                                     }
-                                    $created_data[] = $count;
+                                    $sync_created_data[] = $count;
                                 }
                             } else {
                                 // No table = no data
-                                $created_data = array_fill(0, 24, 0);
+                                $sync_created_data = array_fill(0, 24, 0);
                             }
                             
-                            echo json_encode($created_data);
+                            echo json_encode($sync_created_data);
                         ?>,
                         borderColor: '#3b82f6',
                         backgroundColor: 'rgba(59, 130, 246, 0.1)',
@@ -1251,7 +1253,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         label: '🔄 Records Updated',
                         data: <?php 
                             // Get REAL hourly updated data from database (LAST 24 HOURS)
-                            $updated_data = [];
+                            $sync_updated_data = [];
                             
                             if ($DB->get_manager()->table_exists('local_alx_api_reporting')) {
                                 $table_info = $DB->get_columns('local_alx_api_reporting');
@@ -1274,14 +1276,14 @@ document.addEventListener('DOMContentLoaded', function() {
                                             [$hour_start, $hour_end, $hour_start]
                                         );
                                     }
-                                    $updated_data[] = $count;
+                                    $sync_updated_data[] = $count;
                                 }
                             } else {
                                 // No table = no data
-                                $updated_data = array_fill(0, 24, 0);
+                                $sync_updated_data = array_fill(0, 24, 0);
                             }
                             
-                            echo json_encode($updated_data);
+                            echo json_encode($sync_updated_data);
                         ?>,
                         borderColor: '#10b981',
                         backgroundColor: 'rgba(16, 185, 129, 0.1)',
@@ -1293,7 +1295,7 @@ document.addEventListener('DOMContentLoaded', function() {
             },
             options: {
                 responsive: true,
-                maintainAspectRatio: true,
+                maintainAspectRatio: false,
                 plugins: {
                     legend: { 
                         display: true,
@@ -1312,7 +1314,15 @@ document.addEventListener('DOMContentLoaded', function() {
                         beginAtZero: true,
                         ticks: {
                             precision: 0
-                        }
+                        },
+                        suggestedMax: <?php 
+                            // Calculate max value for Y-axis auto-scaling
+                            $max_created = !empty($sync_created_data) ? max($sync_created_data) : 0;
+                            $max_updated = !empty($sync_updated_data) ? max($sync_updated_data) : 0;
+                            $max_value = max($max_created, $max_updated);
+                            // Add 20% padding to max value for better visualization
+                            echo $max_value > 0 ? ceil($max_value * 1.2) : 10;
+                        ?>
                     }
                 }
             }
