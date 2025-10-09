@@ -1087,6 +1087,11 @@ input[type="checkbox"]:disabled {
         <button class="tab-button" onclick="switchTab(event, 'data')">
             <i class="fas fa-database"></i>
             Data Management
+            <!-- Hover Dropdown Menu -->
+            <div class="tab-dropdown" onclick="event.stopPropagation();">
+                <a href="populate_reporting_table.php">📊 Populate Report Table</a>
+                <a href="sync_reporting_data.php">🔄 Manual Sync Data</a>
+            </div>
         </button>
         <button class="tab-button" onclick="switchTab(event, 'monitoring')">
             <i class="fas fa-chart-bar"></i>
