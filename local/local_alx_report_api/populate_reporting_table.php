@@ -57,6 +57,10 @@ $cleanup_action = optional_param('cleanup_action', '', PARAM_ALPHA);
 $cleanup_companyid = optional_param('cleanup_companyid', 0, PARAM_INT);
 $cleanup_confirm = optional_param('cleanup_confirm', 0, PARAM_INT);
 
+// Pagination parameters for results display
+$results_page = optional_param('results_page', 1, PARAM_INT);
+$results_perpage = 50; // Show 50 companies per page
+
 // Process company selection
 if ($action === 'populate' && $confirm) {
     // Determine which companies to process
@@ -528,7 +532,73 @@ if ($action === 'populate' && $confirm) {
         // 1. COMPANY INFORMATION CARDS
         echo '<h3 style="color: #2d3748; font-size: 20px; font-weight: 600; margin: 0 0 20px 0; padding-bottom: 10px; border-bottom: 2px solid #e2e8f0;"><i class="fas fa-building"></i> Company Information</h3>';
         
-        // Get detailed company stats
+        // Get total count first for pagination
+        $count_sql = "SELECT COUNT(DISTINCT c.id) as total
+                      FROM {company} c
+                      LEFT JOIN {local_alx_api_reporting} r ON r.companyid = c.id
+                      " . $where_clause . "
+                      HAVING COUNT(r.id) > 0";
+        
+        $count_params = array_merge($company_params);
+        $total_companies_result = $DB->get_record_sql($count_sql, $count_params);
+        $total_companies = $total_companies_result ? $total_companies_result->total : 0;
+        $total_pages = ceil($total_companies / $results_perpage);
+        $offset = ($results_page - 1) * $results_perpage;
+        
+        // Display pagination controls if needed
+        if ($total_companies > $results_perpage) {
+            echo '<div style="background: white; padding: 20px; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">';
+            echo '<div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">';
+            
+            // Pagination info
+            $showing_from = (($results_page - 1) * $results_perpage) + 1;
+            $showing_to = min($results_page * $results_perpage, $total_companies);
+            echo '<div>';
+            echo '<strong style="color: #2d3748;">Showing companies ' . $showing_from . '-' . $showing_to . ' of ' . $total_companies . '</strong>';
+            echo '<span style="color: #64748b; margin-left: 10px;">(Page ' . $results_page . ' of ' . $total_pages . ')</span>';
+            echo '</div>';
+            
+            // Pagination buttons
+            echo '<div style="display: flex; gap: 10px; flex-wrap: wrap;">';
+            
+            // First page
+            if ($results_page > 1) {
+                echo '<a href="?results_page=1" style="padding: 8px 16px; background: #f8f9fa; border: 1px solid #e2e8f0; border-radius: 6px; text-decoration: none; color: #2d3748; font-weight: 500;">« First</a>';
+            }
+            
+            // Previous page
+            if ($results_page > 1) {
+                echo '<a href="?results_page=' . ($results_page - 1) . '" style="padding: 8px 16px; background: #667eea; color: white; border-radius: 6px; text-decoration: none; font-weight: 500;">‹ Previous</a>';
+            }
+            
+            // Page numbers (show 5 pages around current)
+            $start_page = max(1, $results_page - 2);
+            $end_page = min($total_pages, $results_page + 2);
+            
+            for ($i = $start_page; $i <= $end_page; $i++) {
+                if ($i == $results_page) {
+                    echo '<span style="padding: 8px 16px; background: #667eea; color: white; border-radius: 6px; font-weight: 600;">' . $i . '</span>';
+                } else {
+                    echo '<a href="?results_page=' . $i . '" style="padding: 8px 16px; background: #f8f9fa; border: 1px solid #e2e8f0; border-radius: 6px; text-decoration: none; color: #2d3748; font-weight: 500;">' . $i . '</a>';
+                }
+            }
+            
+            // Next page
+            if ($results_page < $total_pages) {
+                echo '<a href="?results_page=' . ($results_page + 1) . '" style="padding: 8px 16px; background: #667eea; color: white; border-radius: 6px; text-decoration: none; font-weight: 600;">Next ›</a>';
+            }
+            
+            // Last page
+            if ($results_page < $total_pages) {
+                echo '<a href="?results_page=' . $total_pages . '" style="padding: 8px 16px; background: #f8f9fa; border: 1px solid #e2e8f0; border-radius: 6px; text-decoration: none; color: #2d3748; font-weight: 500;">Last »</a>';
+            }
+            
+            echo '</div>'; // Close buttons
+            echo '</div>'; // Close flex container
+            echo '</div>'; // Close pagination box
+        }
+        
+        // Get detailed company stats with LIMIT and OFFSET
         $company_stats_sql = "SELECT 
                                 c.id,
                                 c.name,
@@ -543,7 +613,8 @@ if ($action === 'populate' && $confirm) {
                               " . $where_clause . "
                               GROUP BY c.id, c.name, c.shortname
                               HAVING COUNT(r.id) > 0
-                              ORDER BY total_records DESC";
+                              ORDER BY total_records DESC
+                              LIMIT $results_perpage OFFSET $offset";
         
         $params = array_merge(['starttime1' => $start_time, 'starttime2' => $start_time, 'starttime3' => $start_time], $company_params);
         $company_stats = $DB->get_records_sql($company_stats_sql, $params);
@@ -592,6 +663,59 @@ if ($action === 'populate' && $confirm) {
             }
             
             echo '</div>';
+            
+            // Bottom pagination controls
+            if ($total_companies > $results_perpage) {
+                echo '<div style="background: white; padding: 20px; border-radius: 12px; margin-top: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">';
+                echo '<div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">';
+                
+                // Pagination info
+                $showing_from = (($results_page - 1) * $results_perpage) + 1;
+                $showing_to = min($results_page * $results_perpage, $total_companies);
+                echo '<div>';
+                echo '<strong style="color: #2d3748;">Showing companies ' . $showing_from . '-' . $showing_to . ' of ' . $total_companies . '</strong>';
+                echo '<span style="color: #64748b; margin-left: 10px;">(Page ' . $results_page . ' of ' . $total_pages . ')</span>';
+                echo '</div>';
+                
+                // Pagination buttons
+                echo '<div style="display: flex; gap: 10px; flex-wrap: wrap;">';
+                
+                // First page
+                if ($results_page > 1) {
+                    echo '<a href="?results_page=1" style="padding: 8px 16px; background: #f8f9fa; border: 1px solid #e2e8f0; border-radius: 6px; text-decoration: none; color: #2d3748; font-weight: 500;">« First</a>';
+                }
+                
+                // Previous page
+                if ($results_page > 1) {
+                    echo '<a href="?results_page=' . ($results_page - 1) . '" style="padding: 8px 16px; background: #667eea; color: white; border-radius: 6px; text-decoration: none; font-weight: 500;">‹ Previous</a>';
+                }
+                
+                // Page numbers (show 5 pages around current)
+                $start_page = max(1, $results_page - 2);
+                $end_page = min($total_pages, $results_page + 2);
+                
+                for ($i = $start_page; $i <= $end_page; $i++) {
+                    if ($i == $results_page) {
+                        echo '<span style="padding: 8px 16px; background: #667eea; color: white; border-radius: 6px; font-weight: 600;">' . $i . '</span>';
+                    } else {
+                        echo '<a href="?results_page=' . $i . '" style="padding: 8px 16px; background: #f8f9fa; border: 1px solid #e2e8f0; border-radius: 6px; text-decoration: none; color: #2d3748; font-weight: 500;">' . $i . '</a>';
+                    }
+                }
+                
+                // Next page
+                if ($results_page < $total_pages) {
+                    echo '<a href="?results_page=' . ($results_page + 1) . '" style="padding: 8px 16px; background: #667eea; color: white; border-radius: 6px; text-decoration: none; font-weight: 600;">Next ›</a>';
+                }
+                
+                // Last page
+                if ($results_page < $total_pages) {
+                    echo '<a href="?results_page=' . $total_pages . '" style="padding: 8px 16px; background: #f8f9fa; border: 1px solid #e2e8f0; border-radius: 6px; text-decoration: none; color: #2d3748; font-weight: 500;">Last »</a>';
+                }
+                
+                echo '</div>'; // Close buttons
+                echo '</div>'; // Close flex container
+                echo '</div>'; // Close pagination box
+            }
         }
         
         if (!empty($affected_companies)) {
