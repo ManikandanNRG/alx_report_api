@@ -516,14 +516,15 @@ try {
             <div class="metric-card">
                 <div class="metric-icon">🔄</div>
                 <div class="metric-value"><?php 
-                    // Get records updated today
+                    // Get records updated today (where updated_at is different from created_at)
                     $records_updated = 0;
                     if ($DB->get_manager()->table_exists('local_alx_api_reporting')) {
                         $today_start = mktime(0, 0, 0);
                         $table_info = $DB->get_columns('local_alx_api_reporting');
-                        if (isset($table_info['updated_at'])) {
+                        if (isset($table_info['updated_at']) && isset($table_info['created_at'])) {
+                            // Count records where updated_at is today AND updated_at != created_at
                             $records_updated = $DB->count_records_select('local_alx_api_reporting', 
-                                'updated_at >= ? AND created_at < ?', [$today_start, $today_start]);
+                                'updated_at >= ? AND updated_at != created_at', [$today_start]);
                         }
                     }
                     echo number_format($records_updated);
@@ -599,11 +600,11 @@ try {
                                                 'companyid = ? AND created_at >= ?', [$company->id, $today_start]);
                                         }
                                         
-                                        // Updated today
-                                        if (isset($table_info['updated_at'])) {
+                                        // Updated today (where updated_at is different from created_at)
+                                        if (isset($table_info['updated_at']) && isset($table_info['created_at'])) {
                                             $updated_today = $DB->count_records_select('local_alx_api_reporting', 
-                                                'companyid = ? AND updated_at >= ? AND created_at < ?', 
-                                                [$company->id, $today_start, $today_start]);
+                                                'companyid = ? AND updated_at >= ? AND updated_at != created_at', 
+                                                [$company->id, $today_start]);
                                         }
                                         
                                         // Last sync time for this company - try multiple fields
