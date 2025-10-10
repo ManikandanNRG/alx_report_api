@@ -666,7 +666,7 @@ foreach ($company_intelligence as $key => $company) {
             // Count cache hits for this company today
             $cache_hits_sql = "SELECT COUNT(*) as cache_hits 
                               FROM {local_alx_api_cache} 
-                              WHERE companyid = ? AND created_at >= ?";
+                              WHERE companyid = ? AND timecreated >= ?";
             $cache_result = $DB->get_record_sql($cache_hits_sql, [$company['shortname'], $today_start]);
             $company_cache_data['cache_hits'] = $cache_result ? $cache_result->cache_hits : 0;
             
