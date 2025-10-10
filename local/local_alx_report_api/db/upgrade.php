@@ -194,6 +194,103 @@ function xmldb_local_alx_report_api_upgrade($oldversion) {
             error_log("ALX Report API Upgrade: Admin token already exists or tokens table not available, skipping");
         }
 
+        // Upgrade to version 2024100803 - Standardize time field names
+        if ($oldversion < 2024100803) {
+            error_log("ALX Report API Upgrade: Starting field rename to version 2024100803");
+            
+            // 1. Rename field in local_alx_api_logs table
+            $table = new xmldb_table('local_alx_api_logs');
+            $field = new xmldb_field('timeaccessed', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
+            
+            if ($dbman->field_exists($table, $field)) {
+                error_log("ALX Report API Upgrade: Renaming timeaccessed to timecreated in local_alx_api_logs");
+                
+                // Drop old index first
+                $index = new xmldb_index('timeaccessed', XMLDB_INDEX_NOTUNIQUE, array('timeaccessed'));
+                if ($dbman->index_exists($table, $index)) {
+                    $dbman->drop_index($table, $index);
+                }
+                
+                // Rename field
+                $dbman->rename_field($table, $field, 'timecreated');
+                
+                // Add new index
+                $index = new xmldb_index('timecreated', XMLDB_INDEX_NOTUNIQUE, array('timecreated'));
+                if (!$dbman->index_exists($table, $index)) {
+                    $dbman->add_index($table, $index);
+                }
+                
+                error_log("ALX Report API Upgrade: Successfully renamed timeaccessed to timecreated in local_alx_api_logs");
+            }
+            
+            // 2. Rename fields in local_alx_api_reporting table
+            $table = new xmldb_table('local_alx_api_reporting');
+            
+            // Rename created_at to timecreated
+            $field = new xmldb_field('created_at', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL);
+            if ($dbman->field_exists($table, $field)) {
+                error_log("ALX Report API Upgrade: Renaming created_at to timecreated in local_alx_api_reporting");
+                $dbman->rename_field($table, $field, 'timecreated');
+            }
+            
+            // Rename updated_at to timemodified
+            $field = new xmldb_field('updated_at', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL);
+            if ($dbman->field_exists($table, $field)) {
+                error_log("ALX Report API Upgrade: Renaming updated_at to timemodified in local_alx_api_reporting");
+                $dbman->rename_field($table, $field, 'timemodified');
+            }
+            
+            // 3. Rename fields in local_alx_api_sync_status table
+            $table = new xmldb_table('local_alx_api_sync_status');
+            
+            // Rename created_at to timecreated
+            $field = new xmldb_field('created_at', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL);
+            if ($dbman->field_exists($table, $field)) {
+                error_log("ALX Report API Upgrade: Renaming created_at to timecreated in local_alx_api_sync_status");
+                $dbman->rename_field($table, $field, 'timecreated');
+            }
+            
+            // Rename updated_at to timemodified
+            $field = new xmldb_field('updated_at', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL);
+            if ($dbman->field_exists($table, $field)) {
+                error_log("ALX Report API Upgrade: Renaming updated_at to timemodified in local_alx_api_sync_status");
+                $dbman->rename_field($table, $field, 'timemodified');
+            }
+            
+            // 4. Rename fields in local_alx_api_cache table
+            $table = new xmldb_table('local_alx_api_cache');
+            
+            // Drop old index first
+            $index = new xmldb_index('cache_timestamp', XMLDB_INDEX_NOTUNIQUE, array('cache_timestamp'));
+            if ($dbman->index_exists($table, $index)) {
+                $dbman->drop_index($table, $index);
+            }
+            
+            // Rename cache_timestamp to timecreated
+            $field = new xmldb_field('cache_timestamp', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL);
+            if ($dbman->field_exists($table, $field)) {
+                error_log("ALX Report API Upgrade: Renaming cache_timestamp to timecreated in local_alx_api_cache");
+                $dbman->rename_field($table, $field, 'timecreated');
+            }
+            
+            // Add new index
+            $index = new xmldb_index('timecreated', XMLDB_INDEX_NOTUNIQUE, array('timecreated'));
+            if (!$dbman->index_exists($table, $index)) {
+                $dbman->add_index($table, $index);
+            }
+            
+            // Rename last_accessed to timeaccessed
+            $field = new xmldb_field('last_accessed', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL);
+            if ($dbman->field_exists($table, $field)) {
+                error_log("ALX Report API Upgrade: Renaming last_accessed to timeaccessed in local_alx_api_cache");
+                $dbman->rename_field($table, $field, 'timeaccessed');
+            }
+            
+            // Save point reached
+            upgrade_plugin_savepoint(true, 2024100803, 'local', 'alx_report_api');
+            error_log("ALX Report API Upgrade: Field rename to version 2024100803 completed successfully");
+        }
+
         error_log("ALX Report API Upgrade: Upgrade completed successfully");
         return true;
 
