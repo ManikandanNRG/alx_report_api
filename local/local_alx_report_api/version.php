@@ -25,7 +25,7 @@
 defined('MOODLE_INTERNAL') || die();
 
 $plugin->component = 'local_alx_report_api';
-$plugin->version   = 2024100801; // Added email alert system with scheduled task
+$plugin->version   = 2024100803; // Standardized time field names across all tables
 $plugin->requires = 2022112800; // Moodle 4.2.6
 $plugin->maturity = MATURITY_STABLE;
-$plugin->release = '1.5.0'; // Email alert system fully functional 
+$plugin->release = '1.6.0'; // Field naming standardization + error handling improvements 
