@@ -27,3 +27,9 @@ desktop.ini
 
 # Windows specific
 *.lnk 
+#
+ Ignore plugin ZIP backups
+__plugin_zip/
+
+# Ignore backup folders
+Backup*/
