@@ -179,8 +179,8 @@ function local_alx_report_api_get_usage_stats($companyid, $days = 30) {
             return $stats;
         }
         
-        // Determine which time field to use
-        $time_field = isset($table_info['timeaccessed']) ? 'timeaccessed' : 'timecreated';
+        // Use standard Moodle field name
+        $time_field = 'timecreated';
         
         $cutoff = time() - ($days * 24 * 3600);
 
@@ -683,8 +683,8 @@ function local_alx_report_api_populate_reporting_table($companyid = 0, $batch_si
                         $reporting_record->status = $record->status;
                         $reporting_record->last_updated = $current_time;
                         $reporting_record->is_deleted = 0;
-                        $reporting_record->created_at = $current_time;
-                        $reporting_record->updated_at = $current_time;
+                        $reporting_record->timecreated = $current_time;
+                        $reporting_record->timemodified = $current_time;
                         
                         $DB->insert_record('local_alx_api_reporting', $reporting_record);
                         $batch_inserted++;
@@ -701,7 +701,7 @@ function local_alx_report_api_populate_reporting_table($companyid = 0, $batch_si
                         $existing->percentage = $record->percentage;
                         $existing->status = $record->status;
                         $existing->last_updated = $current_time;
-                        $existing->updated_at = $current_time;
+                        $existing->timemodified = $current_time;
                         
                         $DB->update_record('local_alx_api_reporting', $existing);
                         $batch_updated++;
@@ -856,7 +856,7 @@ function local_alx_report_api_update_reporting_record($userid, $companyid, $cour
             $existing->status = $record->status;
             $existing->last_updated = $current_time;
             $existing->is_deleted = 0;
-            $existing->updated_at = $current_time;
+            $existing->timemodified = $current_time;
             
             return $DB->update_record('local_alx_api_reporting', $existing);
         } else {
@@ -875,8 +875,8 @@ function local_alx_report_api_update_reporting_record($userid, $companyid, $cour
             $reporting_record->status = $record->status;
             $reporting_record->last_updated = $current_time;
             $reporting_record->is_deleted = 0;
-            $reporting_record->created_at = $current_time;
-            $reporting_record->updated_at = $current_time;
+            $reporting_record->timecreated = $current_time;
+            $reporting_record->timemodified = $current_time;
             
             return $DB->insert_record('local_alx_api_reporting', $reporting_record);
         }
@@ -907,7 +907,7 @@ function local_alx_report_api_soft_delete_reporting_record($userid, $companyid, 
     if ($existing) {
         $existing->is_deleted = 1;
         $existing->last_updated = time();
-        $existing->updated_at = time();
+        $existing->timemodified = time();
         return $DB->update_record('local_alx_api_reporting', $existing);
     }
     
@@ -984,7 +984,7 @@ function local_alx_report_api_update_sync_status($companyid, $token, $records_co
         $existing->last_sync_status = $status;
         $existing->last_sync_error = $error_message;
         $existing->total_syncs = $existing->total_syncs + 1;
-        $existing->updated_at = $current_time;
+        $existing->timemodified = $current_time;
         
         return $DB->update_record('local_alx_api_sync_status', $existing);
     } else {
@@ -999,8 +999,8 @@ function local_alx_report_api_update_sync_status($companyid, $token, $records_co
         $sync_status->last_sync_status = $status;
         $sync_status->last_sync_error = $error_message;
         $sync_status->total_syncs = 1;
-        $sync_status->created_at = $current_time;
-        $sync_status->updated_at = $current_time;
+        $sync_status->timecreated = $current_time;
+        $sync_status->timemodified = $current_time;
         
         return $DB->insert_record('local_alx_api_sync_status', $sync_status);
     }
@@ -1094,7 +1094,7 @@ function local_alx_report_api_cache_get($cache_key, $companyid) {
         
         // Update hit count and last accessed
         $cache_record->hit_count++;
-        $cache_record->last_accessed = time();
+        $cache_record->timeaccessed = time();
         $DB->update_record('local_alx_api_cache', $cache_record);
         
         return json_decode($cache_record->cache_data, true);
@@ -1128,9 +1128,9 @@ function local_alx_report_api_cache_set($cache_key, $companyid, $data, $ttl = 36
     if ($existing) {
         // Update existing cache
         $existing->cache_data = json_encode($data);
-        $existing->cache_timestamp = $current_time;
+        $existing->timecreated = $current_time;
         $existing->expires_at = $expires_at;
-        $existing->last_accessed = $current_time;
+        $existing->timeaccessed = $current_time;
         
         return $DB->update_record('local_alx_api_cache', $existing);
     } else {
@@ -1139,10 +1139,10 @@ function local_alx_report_api_cache_set($cache_key, $companyid, $data, $ttl = 36
         $cache_record->cache_key = $cache_key;
         $cache_record->companyid = $companyid;
         $cache_record->cache_data = json_encode($data);
-        $cache_record->cache_timestamp = $current_time;
+        $cache_record->timecreated = $current_time;
         $cache_record->expires_at = $expires_at;
         $cache_record->hit_count = 0;
-        $cache_record->last_accessed = $current_time;
+        $cache_record->timeaccessed = $current_time;
         
         return $DB->insert_record('local_alx_api_cache', $cache_record);
     }
@@ -1241,9 +1241,8 @@ function local_alx_report_api_get_system_stats() {
         $today_start = mktime(0, 0, 0);
         $week_start = strtotime('-7 days', $today_start);
         
-        // Determine which time field to use
-        $table_info = $DB->get_columns('local_alx_api_logs');
-        $time_field = isset($table_info['timeaccessed']) ? 'timeaccessed' : 'timecreated';
+        // Use standard Moodle field name
+        $time_field = 'timecreated';
         
         $stats['api_calls_today'] = $DB->count_records_select(
             'local_alx_api_logs',
@@ -1340,9 +1339,8 @@ function local_alx_report_api_get_company_stats($companyid = 0) {
             $today_start = mktime(0, 0, 0);
             $week_start = strtotime('-7 days', $today_start);
             
-            // Determine which time field to use
-            $table_info = $DB->get_columns('local_alx_api_logs');
-            $time_field = isset($table_info['timeaccessed']) ? 'timeaccessed' : 'timecreated';
+            // Use standard Moodle field name
+            $time_field = 'timecreated';
             
             // Determine which company field to use
             if (isset($table_info['companyid'])) {
@@ -1428,9 +1426,8 @@ function local_alx_report_api_get_recent_logs($limit = 10) {
     $logs = [];
     
     if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
-        // Check which time field exists
-        $table_info = $DB->get_columns('local_alx_api_logs');
-        $time_field = isset($table_info['timeaccessed']) ? 'timeaccessed' : 'timecreated';
+        // Use standard Moodle field name
+        $time_field = 'timecreated';
         
         $sql = "SELECT l.*, c.name as company_name, u.firstname, u.lastname
                 FROM {local_alx_api_logs} l
@@ -1607,9 +1604,8 @@ function local_alx_report_api_get_system_health() {
                 
                 // Check for data staleness
                 if (in_array($table, ['local_alx_api_reporting', 'local_alx_api_logs'])) {
-                    // Determine which time field to use
-                    $table_info = $DB->get_columns($table);
-                    $time_field = isset($table_info['timeaccessed']) ? 'timeaccessed' : 'timecreated';
+                    // Use standard Moodle field name
+                    $time_field = 'timecreated';
                     
                     $last_update = $DB->get_field_sql("SELECT MAX({$time_field}) FROM {{$table}}");
                     $age_hours = $last_update ? round((time() - $last_update) / 3600, 1) : 0;
@@ -1745,9 +1741,8 @@ function local_alx_report_api_get_system_health() {
     
     // 6. Performance metrics
     if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
-        // Determine which time field to use
-        $table_info = $DB->get_columns('local_alx_api_logs');
-        $time_field = isset($table_info['timeaccessed']) ? 'timeaccessed' : 'timecreated';
+        // Use standard Moodle field name
+        $time_field = 'timecreated';
         
         $recent_calls = $DB->count_records_select('local_alx_api_logs', 
             "{$time_field} > ?", [time() - 3600]); // Last hour
@@ -1854,9 +1849,8 @@ function local_alx_report_api_get_api_analytics($hours = 24) {
     
     try {
     
-    // Determine which time field to use
-    $table_info = $DB->get_columns('local_alx_api_logs');
-    $time_field = isset($table_info['timeaccessed']) ? 'timeaccessed' : 'timecreated';
+    // Use standard Moodle field name
+    $time_field = 'timecreated';
     
     $start_time = time() - ($hours * 3600);
     
@@ -2058,9 +2052,8 @@ function local_alx_report_api_get_rate_limit_monitoring() {
         return $monitoring;
     }
     
-    // Determine which time field to use
-    $table_info = $DB->get_columns('local_alx_api_logs');
-    $time_field = isset($table_info['timeaccessed']) ? 'timeaccessed' : 'timecreated';
+    // Use standard Moodle field name
+    $time_field = 'timecreated';
     
     $today_start = mktime(0, 0, 0);
     
@@ -2651,7 +2644,7 @@ function local_alx_report_api_get_comprehensive_analytics($hours = 24, $specific
     $since = time() - ($hours * 3600);
     
     // Base query conditions
-    $where_conditions = ['timeaccessed >= ?'];
+    $where_conditions = ['timecreated >= ?'];
     $params = [$since];
     
     if ($specific_company) {
@@ -2855,8 +2848,8 @@ function local_alx_report_api_get_comprehensive_analytics($hours = 24, $specific
             u.email
         FROM {local_alx_api_logs} l
         LEFT JOIN {user} u ON l.userid = u.id
-        WHERE l.timeaccessed >= ? AND (l.error_message IS NOT NULL AND l.error_message != '')
-        ORDER BY l.timeaccessed DESC
+        WHERE l.timecreated >= ? AND (l.error_message IS NOT NULL AND l.error_message != '')
+        ORDER BY l.timecreated DESC
         LIMIT 20
     ";
     
@@ -3017,7 +3010,7 @@ function local_alx_report_api_check_error_alert($userid, $company_shortname, $en
     
     // Check error frequency (multiple errors in short time)
     $recent_errors = $DB->count_records_select('local_alx_api_logs', 
-        'userid = ? AND endpoint = ? AND timeaccessed >= ? AND (error_message IS NOT NULL AND error_message != "")',
+        'userid = ? AND endpoint = ? AND timecreated >= ? AND (error_message IS NOT NULL AND error_message != "")',
         [$userid, $endpoint, time() - 300] // Last 5 minutes
     );
     
@@ -3054,7 +3047,7 @@ function local_alx_report_api_check_error_alert($userid, $company_shortname, $en
 function local_alx_report_api_get_api_logs_export($date_from, $date_to, $company_filter = null) {
     global $DB;
     
-    $where_conditions = ['timeaccessed >= ? AND timeaccessed <= ?'];
+    $where_conditions = ['timecreated >= ? AND timecreated <= ?'];
     $params = [$date_from, $date_to];
     
     if ($company_filter) {
@@ -3730,7 +3723,7 @@ function local_alx_report_api_get_performance_bottlenecks($hours = 24) {
             STDDEV(response_time_ms) as response_time_variance,
             COUNT(CASE WHEN response_time_ms > 1000 THEN 1 END) as slow_calls
         FROM {local_alx_api_logs}
-        WHERE timeaccessed >= ? AND response_time_ms IS NOT NULL
+        WHERE timecreated >= ? AND response_time_ms IS NOT NULL
         GROUP BY endpoint
         HAVING AVG(response_time_ms) > 500 OR COUNT(CASE WHEN response_time_ms > 1000 THEN 1 END) > 0
         ORDER BY avg_response_time DESC
@@ -3747,8 +3740,8 @@ function local_alx_report_api_get_performance_bottlenecks($hours = 24) {
             COUNT(CASE WHEN response_time_ms > 1000 THEN 1 END) as slow_calls,
             COUNT(CASE WHEN error_message IS NOT NULL AND error_message != '' THEN 1 END) as error_count
         FROM {local_alx_api_logs}
-        WHERE timeaccessed >= ?
-        GROUP BY HOUR(FROM_UNIXTIME(timeaccessed))
+        WHERE timecreated >= ?
+        GROUP BY HOUR(FROM_UNIXTIME(timecreated))
         ORDER BY hour_of_day
     ";
     $hourly_performance = $DB->get_records_sql($hourly_performance_sql, [$start_time]);
@@ -3763,7 +3756,7 @@ function local_alx_report_api_get_performance_bottlenecks($hours = 24) {
             AVG(record_count) as avg_records_per_call,
             COUNT(DISTINCT userid) as unique_users
         FROM {local_alx_api_logs}
-        WHERE timeaccessed >= ? AND company_shortname IS NOT NULL
+        WHERE timecreated >= ? AND company_shortname IS NOT NULL
         GROUP BY company_shortname
         HAVING AVG(response_time_ms) > 300 OR COUNT(CASE WHEN response_time_ms > 1000 THEN 1 END) > 5
         ORDER BY avg_response_time DESC
@@ -3784,7 +3777,7 @@ function local_alx_report_api_get_performance_bottlenecks($hours = 24) {
             SUM(record_count) as total_records_requested
         FROM {local_alx_api_logs} logs
         JOIN {user} u ON logs.userid = u.id
-        WHERE timeaccessed >= ?
+        WHERE timecreated >= ?
         GROUP BY logs.userid, logs.company_shortname
         HAVING COUNT(*) > 50 OR SUM(record_count) > 10000
         ORDER BY total_calls DESC
@@ -3804,8 +3797,8 @@ function local_alx_report_api_get_performance_bottlenecks($hours = 24) {
             COUNT(DISTINCT userid) as unique_users,
             COUNT(DISTINCT company_shortname) as unique_companies
         FROM {local_alx_api_logs}
-        WHERE timeaccessed >= ?
-        GROUP BY FROM_UNIXTIME(timeaccessed, '%Y-%m-%d %H:00:00')
+        WHERE timecreated >= ?
+        GROUP BY FROM_UNIXTIME(timecreated, '%Y-%m-%d %H:00:00')
         ORDER BY calls_count DESC
         LIMIT 10
     ";

@@ -90,12 +90,10 @@ try {
     try {
         if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
             $today_start = mktime(0, 0, 0);
-            // Use timeaccessed (new field) or fall back to timecreated (old field)
-            $table_info = $DB->get_columns('local_alx_api_logs');
+            // Use standard Moodle field name
+            $time_field = 'timecreated';
             
-            if ($table_info) {
-                $time_field = isset($table_info['timeaccessed']) ? 'timeaccessed' : 'timecreated';
-                $api_calls_today = $DB->count_records_select('local_alx_api_logs', "{$time_field} >= ?", [$today_start]);
+            $api_calls_today = $DB->count_records_select('local_alx_api_logs', "{$time_field} >= ?", [$today_start]);
             } else {
                 error_log('ALX Report API Control Center: Could not get table structure for local_alx_api_logs');
             }
@@ -1189,8 +1187,8 @@ input[type="checkbox"]:disabled {
                                 
                                 // Check if we have response time tracking
                                 if (isset($table_info['response_time_ms'])) {
-                                    // Use timeaccessed (new field) or fall back to timecreated (old field)
-                                    $time_field = isset($table_info['timeaccessed']) ? 'timeaccessed' : 'timecreated';
+                                    // Use standard Moodle field name
+                                    $time_field = 'timecreated';
                                     $avg_response = $DB->get_field_sql("
                                         SELECT AVG(response_time_ms) 
                                         FROM {local_alx_api_logs} 
@@ -1201,8 +1199,8 @@ input[type="checkbox"]:disabled {
                                 
                                 // Check if we have error tracking
                                 if (isset($table_info['error_message'])) {
-                                    // Use timeaccessed (new field) or fall back to timecreated (old field)
-                                    $time_field = isset($table_info['timeaccessed']) ? 'timeaccessed' : 'timecreated';
+                                    // Use standard Moodle field name
+                                    $time_field = 'timecreated';
                                     $total_calls = $DB->count_records_select('local_alx_api_logs', "{$time_field} >= ?", [time() - 86400]);
                                     $error_calls = $DB->count_records_select('local_alx_api_logs', 
                                         "{$time_field} >= ? AND error_message IS NOT NULL AND error_message != ?", 
@@ -1429,8 +1427,8 @@ input[type="checkbox"]:disabled {
                         
                         try {
                             if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
-                                $table_info = $DB->get_columns('local_alx_api_logs');
-                                $time_field = isset($table_info['timeaccessed']) ? 'timeaccessed' : 'timecreated';
+                                // Use standard Moodle field name
+                                $time_field = 'timecreated';
                                 
                                 // Get all companies and check each one's usage against their specific limit
                                 $companies = local_alx_report_api_get_companies();
@@ -2048,8 +2046,8 @@ input[type="checkbox"]:disabled {
                                         // Show current usage
                                         $today_start = mktime(0, 0, 0, date('n'), date('j'), date('Y'));
                                         if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
-                                            $table_info = $DB->get_columns('local_alx_api_logs');
-                                            $time_field = isset($table_info['timeaccessed']) ? 'timeaccessed' : 'timecreated';
+                                            // Use standard Moodle field name
+                                            $time_field = 'timecreated';
                                             
                                             // Get company users
                                             $company_users = $DB->get_records('company_users', ['companyid' => $companyid], '', 'userid');
@@ -2193,8 +2191,8 @@ input[type="checkbox"]:disabled {
             $auth_stats = [];
             if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
                 $today_start = mktime(0, 0, 0);
-                $table_info = $DB->get_columns('local_alx_api_logs');
-                $time_field = isset($table_info['timeaccessed']) ? 'timeaccessed' : 'timecreated';
+                // Use standard Moodle field name
+                $time_field = 'timecreated';
                 
                 // Get real unique users count
                 $auth_stats['unique_users'] = $DB->count_records_sql(
@@ -2262,8 +2260,8 @@ input[type="checkbox"]:disabled {
         
         // If we have recent calls (last hour), use that for more accurate rate
         if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
-            $table_info = $DB->get_columns('local_alx_api_logs');
-            $time_field = isset($table_info['timeaccessed']) ? 'timeaccessed' : 'timecreated';
+            // Use standard Moodle field name
+            $time_field = 'timecreated';
             $last_hour_calls = $DB->count_records_select('local_alx_api_logs', 
                 "{$time_field} >= ?", [time() - 3600]);
             if ($last_hour_calls > 0) {
@@ -2530,8 +2528,8 @@ input[type="checkbox"]:disabled {
                     $today_start = mktime(0, 0, 0); // Start of today 00:00
                     
                     if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
-                        $table_info = $DB->get_columns('local_alx_api_logs');
-                        $time_field = isset($table_info['timeaccessed']) ? 'timeaccessed' : 'timecreated';
+                        // Use standard Moodle field name
+                        $time_field = 'timecreated';
                         
                         // Get REAL data for each hour (00:00 to 23:59)
                         for ($i = 0; $i < 24; $i++) {

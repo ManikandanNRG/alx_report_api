@@ -606,8 +606,8 @@ if ($action === 'populate' && $confirm) {
                                 COUNT(DISTINCT r.userid) as total_users,
                                 COUNT(DISTINCT r.courseid) as active_courses,
                                 COUNT(r.id) as total_records,
-                                SUM(CASE WHEN r.created_at >= :starttime1 THEN 1 ELSE 0 END) as records_created,
-                                SUM(CASE WHEN r.updated_at >= :starttime2 AND r.created_at < :starttime3 THEN 1 ELSE 0 END) as records_updated
+                                SUM(CASE WHEN r.timecreated >= :starttime1 THEN 1 ELSE 0 END) as records_created,
+                                SUM(CASE WHEN r.timemodified >= :starttime2 AND r.timecreated < :starttime3 THEN 1 ELSE 0 END) as records_updated
                               FROM {company} c
                               LEFT JOIN {local_alx_api_reporting} r ON r.companyid = c.id
                               " . $where_clause . "
@@ -759,8 +759,8 @@ if ($action === 'populate' && $confirm) {
                                     c.id,
                                     c.fullname,
                                     COUNT(r.id) as total_changes,
-                                    SUM(CASE WHEN r.created_at >= :coursetime1 THEN 1 ELSE 0 END) as records_created,
-                                    SUM(CASE WHEN r.updated_at >= :coursetime2 AND r.created_at < :coursetime3 THEN 1 ELSE 0 END) as records_updated
+                                    SUM(CASE WHEN r.timecreated >= :coursetime1 THEN 1 ELSE 0 END) as records_created,
+                                    SUM(CASE WHEN r.timemodified >= :coursetime2 AND r.timecreated < :coursetime3 THEN 1 ELSE 0 END) as records_updated
                                 FROM {local_alx_api_reporting} r
                                 JOIN {course} c ON c.id = r.courseid
                                 $course_where
@@ -831,10 +831,10 @@ if ($action === 'populate' && $confirm) {
                                 u.lastname,
                                 u.email,
                                 COUNT(DISTINCT r.courseid) as courses_synced,
-                                SUM(CASE WHEN r.created_at >= :usertime1 THEN 1 ELSE 0 END) as records_created,
-                                SUM(CASE WHEN r.updated_at >= :usertime2 AND r.created_at < :usertime3 THEN 1 ELSE 0 END) as records_updated,
+                                SUM(CASE WHEN r.timecreated >= :usertime1 THEN 1 ELSE 0 END) as records_created,
+                                SUM(CASE WHEN r.timemodified >= :usertime2 AND r.timecreated < :usertime3 THEN 1 ELSE 0 END) as records_updated,
                                 CASE 
-                                    WHEN SUM(CASE WHEN r.created_at >= :usertime4 THEN 1 ELSE 0 END) > 0 THEN 'Created'
+                                    WHEN SUM(CASE WHEN r.timecreated >= :usertime4 THEN 1 ELSE 0 END) > 0 THEN 'Created'
                                     ELSE 'Updated'
                                 END as status
                             FROM {user} u

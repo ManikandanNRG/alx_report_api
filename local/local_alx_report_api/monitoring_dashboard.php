@@ -119,8 +119,8 @@ $api_analytics = local_alx_report_api_get_api_analytics(24);
 // Generate hourly performance data for last 24 hours - LIVE DATA
 $hourly_performance = [];
 if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
-    $table_info = $DB->get_columns('local_alx_api_logs');
-    $time_field = isset($table_info['timeaccessed']) ? 'timeaccessed' : 'timecreated';
+    // Use standard Moodle field name
+    $time_field = 'timecreated';
     
     for ($i = 23; $i >= 0; $i--) {
         $hour_start = time() - ($i * 3600);
@@ -188,8 +188,8 @@ foreach ($companies as $company) {
         
         // Check for recent sync activity in logs
         if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
-            $table_info = $DB->get_columns('local_alx_api_logs');
-            $time_field = isset($table_info['timeaccessed']) ? 'timeaccessed' : 'timecreated';
+            // Use standard Moodle field name
+            $time_field = 'timecreated';
             
             // Get sync data from last 24 hours - check if response_time field exists
             if (isset($table_info['response_time'])) {
@@ -268,8 +268,8 @@ foreach ($companies as $company) {
         
         // Get actual record changes from reporting table
         if ($DB->get_manager()->table_exists('local_alx_reporting_table')) {
-            $table_info = $DB->get_columns('local_alx_reporting_table');
-            $time_field = isset($table_info['timeaccessed']) ? 'timeaccessed' : 'timecreated';
+            // Use standard Moodle field name
+            $time_field = 'timecreated';
             
             // Records added in last 24 hours
             $company_field = isset($table_info['company_shortname']) ? 'company_shortname' : 'companyid';
@@ -396,8 +396,8 @@ if (!empty($status_issues)) {
 // Calculate last populate time - LIVE DATA
 $last_populate_time = 'Never';
 if ($DB->get_manager()->table_exists('local_alx_reporting_table')) {
-    $table_info = $DB->get_columns('local_alx_reporting_table');
-    $time_field = isset($table_info['timeaccessed']) ? 'timeaccessed' : 'timecreated';
+    // Use standard Moodle field name
+    $time_field = 'timecreated';
     
     $latest_record = $DB->get_record_sql("SELECT MAX({$time_field}) as latest FROM {local_alx_reporting_table}");
     if ($latest_record && $latest_record->latest) {
@@ -441,8 +441,8 @@ if ($DB->get_manager()->table_exists('local_alx_reporting_table')) {
 // Calculate error rate - LIVE DATA
 $error_rate = 0;
 if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
-    $table_info = $DB->get_columns('local_alx_api_logs');
-    $time_field = isset($table_info['timeaccessed']) ? 'timeaccessed' : 'timecreated';
+    // Use standard Moodle field name
+    $time_field = 'timecreated';
     
     $total_requests = $DB->count_records_select('local_alx_api_logs', "{$time_field} >= ?", [time() - 86400]);
     if ($total_requests > 0) {
@@ -477,8 +477,8 @@ if ($DB->get_manager()->table_exists('local_alx_reporting_table')) {
 // Calculate sync status - LIVE DATA
 $sync_status = 'INACTIVE';
 if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
-    $table_info = $DB->get_columns('local_alx_api_logs');
-    $time_field = isset($table_info['timeaccessed']) ? 'timeaccessed' : 'timecreated';
+    // Use standard Moodle field name
+    $time_field = 'timecreated';
     
     // Build sync activity query based on available fields
     $sync_conditions = [];

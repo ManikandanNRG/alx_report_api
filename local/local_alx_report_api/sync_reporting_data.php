@@ -248,7 +248,7 @@ if ($action && $confirm) {
                 // Get all affected users
                 $all_users_sql = "SELECT u.id, u.firstname, u.lastname, u.email, 
                                         COUNT(r.id) as course_count,
-                                        MIN(r.created_at) as first_created
+                                        MIN(r.timecreated) as first_created
                                 FROM {local_alx_api_reporting} r
                                 JOIN {user} u ON u.id = r.userid
                                 WHERE r.last_updated >= ?";
@@ -294,7 +294,7 @@ if ($action && $confirm) {
                     // Get all affected users
                     $all_users_sql = "SELECT u.id, u.firstname, u.lastname, u.email, 
                                             COUNT(r.id) as course_count,
-                                            MIN(r.created_at) as first_created
+                                            MIN(r.timecreated) as first_created
                                     FROM {local_alx_api_reporting} r
                                     JOIN {user} u ON u.id = r.userid
                                     WHERE r.companyid = ? AND r.last_updated >= ?

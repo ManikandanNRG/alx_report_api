@@ -258,8 +258,8 @@ $last_24h = time() - 86400;
 try {
     // Check if API logs table exists
     if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
-        $table_info = $DB->get_columns('local_alx_api_logs');
-        $time_field = isset($table_info['timeaccessed']) ? 'timeaccessed' : 'timecreated';
+        // Use standard Moodle field name
+        $time_field = 'timecreated';
         
         // Total API calls in last 24 hours
         $api_performance['total_calls_24h'] = $DB->count_records_select('local_alx_api_logs', 
@@ -355,8 +355,8 @@ try {
     
     // Count rate limit violations (users who exceeded daily limit)
     if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
-        $table_info = $DB->get_columns('local_alx_api_logs');
-        $time_field = isset($table_info['timeaccessed']) ? 'timeaccessed' : 'timecreated';
+        // Use standard Moodle field name
+        $time_field = 'timecreated';
         
         $violation_sql = "SELECT userid, COUNT(*) as request_count 
                          FROM {local_alx_api_logs} 
@@ -380,8 +380,8 @@ $hourly_success = [];
 $hourly_errors = [];
 
 if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
-    $table_info = $DB->get_columns('local_alx_api_logs');
-    $time_field = isset($table_info['timeaccessed']) ? 'timeaccessed' : 'timecreated';
+    // Use standard Moodle field name
+    $time_field = 'timecreated';
     
     // Check if table has any data
     $has_data = $DB->count_records('local_alx_api_logs') > 0;
@@ -470,8 +470,8 @@ foreach ($companies as $company) {
             
             // Get company's API usage today
             if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
-                $table_info = $DB->get_columns('local_alx_api_logs');
-                $time_field = isset($table_info['timeaccessed']) ? 'timeaccessed' : 'timecreated';
+                // Use standard Moodle field name
+                $time_field = 'timecreated';
                 
                 // Build query based on available fields
                 $company_where = '';
@@ -562,7 +562,8 @@ try {
         $table_info = $DB->get_columns('local_alx_api_logs');
         
         if (isset($table_info['response_time'])) {
-            $time_field = isset($table_info['timeaccessed']) ? 'timeaccessed' : 'timecreated';
+            // Use standard Moodle field name
+            $time_field = 'timecreated';
             
             // Get all response times from last 24 hours
             $response_times_sql = "SELECT response_time 
@@ -615,7 +616,8 @@ try {
         $table_info = $DB->get_columns('local_alx_api_logs');
         
         if (isset($table_info['status'])) {
-            $time_field = isset($table_info['timeaccessed']) ? 'timeaccessed' : 'timecreated';
+            // Use standard Moodle field name
+            $time_field = 'timecreated';
             
             // Count blocked/failed requests due to rate limiting
             $blocked_sql = "SELECT COUNT(*) as blocked_count 

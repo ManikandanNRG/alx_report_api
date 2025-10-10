@@ -64,8 +64,8 @@ $total_records = 0;
 
 if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
     $today_start = mktime(0, 0, 0);
-    $table_info = $DB->get_columns('local_alx_api_logs');
-    $time_field = isset($table_info['timeaccessed']) ? 'timeaccessed' : 'timecreated';
+    // Use standard Moodle field name
+    $time_field = 'timecreated';
     
     $api_calls_today = $DB->count_records_select('local_alx_api_logs', "{$time_field} >= ?", [$today_start]);
     
@@ -103,8 +103,8 @@ try {
     
     // Calculate rate limit violations by checking company-specific limits
     if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
-        $table_info = $DB->get_columns('local_alx_api_logs');
-        $time_field = isset($table_info['timeaccessed']) ? 'timeaccessed' : 'timecreated';
+        // Use standard Moodle field name
+        $time_field = 'timecreated';
         
         // Get all companies and check each one's usage against their specific limit
         $companies = local_alx_report_api_get_companies();
@@ -743,8 +743,8 @@ try {
                         $error_count = 0;
                         
                         if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
-                            $table_info = $DB->get_columns('local_alx_api_logs');
-                            $time_field = isset($table_info['timeaccessed']) ? 'timeaccessed' : 'timecreated';
+                            // Use standard Moodle field name
+                            $time_field = 'timecreated';
                             
                             // Get calls today for this company
                             $company_calls = $DB->count_records_select('local_alx_api_logs', 
@@ -824,8 +824,8 @@ try {
                         $avg_requests = 0;
                         if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
                             $thirty_days_ago = time() - (30 * 86400);
-                            $table_info = $DB->get_columns('local_alx_api_logs');
-                            $time_field = isset($table_info['timeaccessed']) ? 'timeaccessed' : 'timecreated';
+                            // Use standard Moodle field name
+                            $time_field = 'timecreated';
                             $recent_requests = $DB->count_records_select('local_alx_api_logs', 
                                 "{$time_field} >= ? AND company_shortname = ?", [$thirty_days_ago, $company->shortname]);
                             $avg_requests = round($recent_requests / 30);
@@ -867,8 +867,8 @@ try {
                                 // Get actual error types for this company
                                 $error_types = [];
                                 if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
-                                    $table_info = $DB->get_columns('local_alx_api_logs');
-                                    $time_field = isset($table_info['timeaccessed']) ? 'timeaccessed' : 'timecreated';
+                                    // Use standard Moodle field name
+                                    $time_field = 'timecreated';
                                     $errors = $DB->get_records_select('local_alx_api_logs',
                                         "{$time_field} >= ? AND company_shortname = ? AND error_message IS NOT NULL",
                                         [$today_start, $company->shortname],
@@ -1098,8 +1098,8 @@ $hourly_success = [];
 $hourly_errors = [];
 
 if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
-    $table_info = $DB->get_columns('local_alx_api_logs');
-    $time_field = isset($table_info['timeaccessed']) ? 'timeaccessed' : 'timecreated';
+    // Use standard Moodle field name
+    $time_field = 'timecreated';
     
     for ($i = 23; $i >= 0; $i--) {
         // Create clean hourly timestamps (00:00, 01:00, 02:00, etc.)

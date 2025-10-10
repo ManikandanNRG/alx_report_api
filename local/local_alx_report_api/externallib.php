@@ -206,9 +206,8 @@ class local_alx_report_api_external extends external_api {
         // Count requests from this user today
         $request_count = 0;
         if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
-            // Determine which time field to use
-            $table_info = $DB->get_columns('local_alx_api_logs');
-            $time_field = isset($table_info['timeaccessed']) ? 'timeaccessed' : 'timecreated';
+            // Use standard Moodle field name
+            $time_field = 'timecreated';
             
             $request_count = $DB->count_records_select(
                 'local_alx_api_logs', 
@@ -242,7 +241,7 @@ class local_alx_report_api_external extends external_api {
                     $log->record_count = 0;
                     $log->error_message = "Rate limit exceeded: {$request_count}/{$rate_limit} requests";
                     $log->response_time_ms = 0;
-                    $log->timeaccessed = time();
+                    $log->timecreated = time();
                     $log->ip_address = $_SERVER['REMOTE_ADDR'] ?? '';
                     $log->user_agent = $_SERVER['HTTP_USER_AGENT'] ?? '';
                     

@@ -36,9 +36,8 @@ try {
     // Get API calls today
     if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
         $today_start = mktime(0, 0, 0);
-        // Check which time field exists
-        $table_info = $DB->get_columns('local_alx_api_logs');
-        $time_field = isset($table_info['timeaccessed']) ? 'timeaccessed' : 'timecreated';
+        // Use standard Moodle field name
+        $time_field = 'timecreated';
         $stats['api_calls_today'] = $DB->count_records_select('local_alx_api_logs', "{$time_field} >= ?", [$today_start]);
     }
     
