@@ -503,11 +503,8 @@ try {
                     $records_created = 0;
                     if ($DB->get_manager()->table_exists('local_alx_api_reporting')) {
                         $today_start = mktime(0, 0, 0);
-                        $table_info = $DB->get_columns('local_alx_api_reporting');
-                        if (isset($table_info['created_at'])) {
-                            $records_created = $DB->count_records_select('local_alx_api_reporting', 
-                                'created_at >= ?', [$today_start]);
-                        }
+                        $records_created = $DB->count_records_select('local_alx_api_reporting', 
+                            'timecreated >= ?', [$today_start]);
                     }
                     echo number_format($records_created);
                 ?></div>
@@ -516,16 +513,13 @@ try {
             <div class="metric-card">
                 <div class="metric-icon">🔄</div>
                 <div class="metric-value"><?php 
-                    // Get records updated today (where updated_at is different from created_at)
+                    // Get records updated today (where timemodified is different from timecreated)
                     $records_updated = 0;
                     if ($DB->get_manager()->table_exists('local_alx_api_reporting')) {
                         $today_start = mktime(0, 0, 0);
-                        $table_info = $DB->get_columns('local_alx_api_reporting');
-                        if (isset($table_info['updated_at']) && isset($table_info['created_at'])) {
-                            // Count records where updated_at is today AND updated_at != created_at
-                            $records_updated = $DB->count_records_select('local_alx_api_reporting', 
-                                'updated_at >= ? AND updated_at != created_at', [$today_start]);
-                        }
+                        // Count records where timemodified is today AND timemodified != timecreated
+                        $records_updated = $DB->count_records_select('local_alx_api_reporting', 
+                            'timemodified >= ? AND timemodified != timecreated', [$today_start]);
                     }
                     echo number_format($records_updated);
                 ?></div>
@@ -595,17 +589,13 @@ try {
                                         }
                                         
                                         // Created today
-                                        if (isset($table_info['created_at'])) {
-                                            $created_today = $DB->count_records_select('local_alx_api_reporting', 
-                                                'companyid = ? AND created_at >= ?', [$company->id, $today_start]);
-                                        }
+                                        $created_today = $DB->count_records_select('local_alx_api_reporting', 
+                                            'companyid = ? AND timecreated >= ?', [$company->id, $today_start]);
                                         
-                                        // Updated today (where updated_at is different from created_at)
-                                        if (isset($table_info['updated_at']) && isset($table_info['created_at'])) {
-                                            $updated_today = $DB->count_records_select('local_alx_api_reporting', 
-                                                'companyid = ? AND updated_at >= ? AND updated_at != created_at', 
-                                                [$company->id, $today_start]);
-                                        }
+                                        // Updated today (where timemodified is different from timecreated)
+                                        $updated_today = $DB->count_records_select('local_alx_api_reporting', 
+                                            'companyid = ? AND timemodified >= ? AND timemodified != timecreated', 
+                                            [$company->id, $today_start]);
                                         
                                         // Last sync time for this company - try multiple fields
                                         if (isset($table_info['last_updated'])) {
@@ -616,17 +606,9 @@ try {
                                             if ($last_record && $last_record->last_time) {
                                                 $company_last_sync = date('H:i', $last_record->last_time);
                                             }
-                                        } elseif (isset($table_info['updated_at'])) {
+                                        } else {
                                             $last_record = $DB->get_record_sql(
-                                                "SELECT MAX(updated_at) as last_time FROM {local_alx_api_reporting} WHERE companyid = ?",
-                                                [$company->id]
-                                            );
-                                            if ($last_record && $last_record->last_time) {
-                                                $company_last_sync = date('H:i', $last_record->last_time);
-                                            }
-                                        } elseif (isset($table_info['created_at'])) {
-                                            $last_record = $DB->get_record_sql(
-                                                "SELECT MAX(created_at) as last_time FROM {local_alx_api_reporting} WHERE companyid = ?",
+                                                "SELECT MAX(timemodified) as last_time FROM {local_alx_api_reporting} WHERE companyid = ?",
                                                 [$company->id]
                                             );
                                             if ($last_record && $last_record->last_time) {
@@ -1216,8 +1198,6 @@ document.addEventListener('DOMContentLoaded', function() {
                             $sync_created_data = [];
                             
                             if ($DB->get_manager()->table_exists('local_alx_api_reporting')) {
-                                $table_info = $DB->get_columns('local_alx_api_reporting');
-                                
                                 // Get data for last 24 hours (not just today)
                                 for ($i = 23; $i >= 0; $i--) {
                                     $current_hour = date('H') - $i;
@@ -1228,13 +1208,10 @@ document.addEventListener('DOMContentLoaded', function() {
                                     $hour_start = mktime($current_hour, 0, 0);
                                     $hour_end = $hour_start + 3600;
                                     
-                                    $count = 0;
-                                    if (isset($table_info['created_at'])) {
-                                        $count = $DB->count_records_select('local_alx_api_reporting',
-                                            'created_at >= ? AND created_at < ?',
-                                            [$hour_start, $hour_end]
-                                        );
-                                    }
+                                    $count = $DB->count_records_select('local_alx_api_reporting',
+                                        'timecreated >= ? AND timecreated < ?',
+                                        [$hour_start, $hour_end]
+                                    );
                                     $sync_created_data[] = $count;
                                 }
                             } else {
@@ -1257,8 +1234,6 @@ document.addEventListener('DOMContentLoaded', function() {
                             $sync_updated_data = [];
                             
                             if ($DB->get_manager()->table_exists('local_alx_api_reporting')) {
-                                $table_info = $DB->get_columns('local_alx_api_reporting');
-                                
                                 // Get data for last 24 hours
                                 for ($i = 23; $i >= 0; $i--) {
                                     $current_hour = date('H') - $i;
@@ -1269,14 +1244,11 @@ document.addEventListener('DOMContentLoaded', function() {
                                     $hour_start = mktime($current_hour, 0, 0);
                                     $hour_end = $hour_start + 3600;
                                     
-                                    $count = 0;
                                     // Count records that were updated (not created) in this hour
-                                    if (isset($table_info['updated_at']) && isset($table_info['created_at'])) {
-                                        $count = $DB->count_records_select('local_alx_api_reporting',
-                                            'updated_at >= ? AND updated_at < ? AND created_at < ?',
-                                            [$hour_start, $hour_end, $hour_start]
-                                        );
-                                    }
+                                    $count = $DB->count_records_select('local_alx_api_reporting',
+                                        'timemodified >= ? AND timemodified < ? AND timecreated < ?',
+                                        [$hour_start, $hour_end, $hour_start]
+                                    );
                                     $sync_updated_data[] = $count;
                                 }
                             } else {

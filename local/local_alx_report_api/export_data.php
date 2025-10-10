@@ -105,7 +105,7 @@ if ($format === 'csv' || $format === 'json') {
     if ($DB->get_manager()->table_exists('local_alx_api_reporting')) {
         try {
             // Build WHERE clause
-            $where_conditions = ['created_at > ?'];
+            $where_conditions = ['timecreated > ?'];
             $params = [$time_limit];
             
             // Add company filter if specified
@@ -129,7 +129,7 @@ if ($format === 'csv' || $format === 'json') {
             $reports = $DB->get_records_sql("
                 SELECT * FROM {local_alx_api_reporting} 
                 WHERE {$where_sql}
-                ORDER BY created_at DESC 
+                ORDER BY timecreated DESC 
                 LIMIT {$perpage} OFFSET {$offset}
             ", $params);
             
@@ -147,8 +147,8 @@ if ($format === 'csv' || $format === 'json') {
                     'timestarted' => $report->timestarted ? date('Y-m-d H:i:s', $report->timestarted) : 'Not started',
                     'percentage' => $report->percentage ?? 0,
                     'status' => $report->status ?? 'unknown',
-                    'created_at' => date('Y-m-d H:i:s', $report->created_at),
-                    'updated_at' => date('Y-m-d H:i:s', $report->updated_at)
+                    'timecreated' => date('Y-m-d H:i:s', $report->timecreated),
+                    'timemodified' => date('Y-m-d H:i:s', $report->timemodified)
                 ];
             }
         } catch (Exception $e) {
@@ -215,7 +215,7 @@ if ($format === 'csv' || $format === 'json') {
         // Write reporting data section
         if (!empty($reporting_data)) {
             fputcsv($output, ['Reporting Data (' . $time_label . ')']);
-            fputcsv($output, ['ID', 'User ID', 'Company ID', 'Course ID', 'First Name', 'Last Name', 'Email', 'Course Name', 'Time Completed', 'Time Started', 'Percentage', 'Status', 'Created At', 'Updated At']);
+            fputcsv($output, ['ID', 'User ID', 'Company ID', 'Course ID', 'First Name', 'Last Name', 'Email', 'Course Name', 'Time Completed', 'Time Started', 'Percentage', 'Status', 'Time Created', 'Time Modified']);
             foreach ($reporting_data as $report) {
                 fputcsv($output, [
                     $report['id'], 
@@ -230,8 +230,8 @@ if ($format === 'csv' || $format === 'json') {
                     $report['timestarted'], 
                     $report['percentage'], 
                     $report['status'], 
-                    $report['created_at'], 
-                    $report['updated_at']
+                    $report['timecreated'], 
+                    $report['timemodified']
                 ]);
             }
         }
@@ -475,7 +475,7 @@ echo $OUTPUT->header();
                 $total_records = $DB->count_records('local_alx_api_reporting');
                 $preview_reports = $DB->count_records_sql("
                     SELECT COUNT(*) FROM {local_alx_api_reporting} 
-                    WHERE created_at > ?
+                    WHERE timecreated > ?
                 ", [$time_limit]);
                 
                 if ($total_records == 0) {
