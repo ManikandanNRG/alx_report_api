@@ -67,6 +67,9 @@ if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
     // Use standard Moodle field name
     $time_field = 'timecreated';
     
+    // Get table structure to check for optional fields
+    $table_info = $DB->get_columns('local_alx_api_logs');
+    
     $api_calls_today = $DB->count_records_select('local_alx_api_logs', "{$time_field} >= ?", [$today_start]);
     
     if (isset($table_info['response_time_ms'])) {
@@ -105,6 +108,9 @@ try {
     if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
         // Use standard Moodle field name
         $time_field = 'timecreated';
+        
+        // Get table structure to check for optional fields
+        $table_info = $DB->get_columns('local_alx_api_logs');
         
         // Get all companies and check each one's usage against their specific limit
         $companies = local_alx_report_api_get_companies();
@@ -471,13 +477,13 @@ try {
 
     <!-- Tab Navigation -->
     <div class="tab-navigation">
-        <button class="tab-button <?php echo $active_tab === 'autosync' ? 'active' : ''; ?>" onclick="switchTab('autosync')">
+        <button class="tab-button <?php echo $active_tab === 'autosync' ? 'active' : ''; ?>" onclick="switchTab('autosync', event)">
             <i class="fas fa-sync"></i> Data Sync Monitor
         </button>
-        <button class="tab-button <?php echo $active_tab === 'performance' ? 'active' : ''; ?>" onclick="switchTab('performance')">
+        <button class="tab-button <?php echo $active_tab === 'performance' ? 'active' : ''; ?>" onclick="switchTab('performance', event)">
             <i class="fas fa-tachometer-alt"></i> API Monitor
         </button>
-        <button class="tab-button <?php echo $active_tab === 'security' ? 'active' : ''; ?>" onclick="switchTab('security')">
+        <button class="tab-button <?php echo $active_tab === 'security' ? 'active' : ''; ?>" onclick="switchTab('security', event)">
             <i class="fas fa-shield-alt"></i> Security Monitor
         </button>
     </div>
@@ -728,6 +734,9 @@ try {
                             // Use standard Moodle field name
                             $time_field = 'timecreated';
                             
+                            // Get table structure to check for optional fields
+                            $table_info = $DB->get_columns('local_alx_api_logs');
+                            
                             // Get calls today for this company
                             $company_calls = $DB->count_records_select('local_alx_api_logs', 
                                 "{$time_field} >= ? AND company_shortname = ?", [$today_start, $company->shortname]);
@@ -854,7 +863,7 @@ try {
                                     $errors = $DB->get_records_select('local_alx_api_logs',
                                         "{$time_field} >= ? AND company_shortname = ? AND error_message IS NOT NULL",
                                         [$today_start, $company->shortname],
-                                        'timeaccessed DESC',
+                                        'timecreated DESC',
                                         'error_message',
                                         0,
                                         3 // Get last 3 errors
@@ -1147,7 +1156,7 @@ if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
 
 <script>
 // Tab switching function
-function switchTab(tabName) {
+function switchTab(tabName, event) {
     // Update URL without reload
     const url = new URL(window.location);
     url.searchParams.set('tab', tabName);
@@ -1167,7 +1176,9 @@ function switchTab(tabName) {
     document.getElementById(tabName + '-tab').classList.add('active');
     
     // Add active class to clicked button
-    event.target.closest('.tab-button').classList.add('active');
+    if (event) {
+        event.target.closest('.tab-button').classList.add('active');
+    }
 }
 
 // Initialize charts
