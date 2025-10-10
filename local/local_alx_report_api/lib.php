@@ -158,52 +158,63 @@ function local_alx_report_api_cleanup_logs($days = 90) {
 function local_alx_report_api_get_usage_stats($companyid, $days = 30) {
     global $DB;
 
+    // Initialize with safe default values
     $stats = [
         'total_requests' => 0,
         'unique_users' => 0,
         'last_access' => 0,
     ];
 
-    if (!$DB->get_manager()->table_exists('local_alx_api_logs')) {
-        return $stats;
-    }
+    try {
+        // Check if logs table exists
+        if (!$DB->get_manager()->table_exists('local_alx_api_logs')) {
+            error_log('ALX Report API: local_alx_api_logs table does not exist');
+            return $stats;
+        }
 
-    // Determine which time field to use
-    $table_info = $DB->get_columns('local_alx_api_logs');
-    $time_field = isset($table_info['timeaccessed']) ? 'timeaccessed' : 'timecreated';
-    
-    $cutoff = time() - ($days * 24 * 3600);
+        // Get table structure to determine available fields
+        $table_info = $DB->get_columns('local_alx_api_logs');
+        if (!$table_info) {
+            error_log('ALX Report API: Unable to get table structure for local_alx_api_logs');
+            return $stats;
+        }
+        
+        // Determine which time field to use
+        $time_field = isset($table_info['timeaccessed']) ? 'timeaccessed' : 'timecreated';
+        
+        $cutoff = time() - ($days * 24 * 3600);
 
-    // Check if we have the old companyid field or new company_shortname field
-    if (isset($table_info['companyid'])) {
-        // Old schema
-        $stats['total_requests'] = $DB->count_records_select(
-            'local_alx_api_logs',
-            "companyid = ? AND {$time_field} > ?",
-            [$companyid, $cutoff]
-        );
+        // Check if we have the old companyid field or new company_shortname field
+        if (isset($table_info['companyid'])) {
+            // Old schema - query by companyid
+            $stats['total_requests'] = $DB->count_records_select(
+                'local_alx_api_logs',
+                "companyid = ? AND {$time_field} > ?",
+                [$companyid, $cutoff]
+            );
 
-        // Unique users.
-        $sql = "SELECT COUNT(DISTINCT userid) 
-                FROM {local_alx_api_logs} 
-                WHERE companyid = ? AND {$time_field} > ?";
-        $stats['unique_users'] = $DB->count_records_sql($sql, [$companyid, $cutoff]);
+            // Unique users
+            $sql = "SELECT COUNT(DISTINCT userid) 
+                    FROM {local_alx_api_logs} 
+                    WHERE companyid = ? AND {$time_field} > ?";
+            $stats['unique_users'] = $DB->count_records_sql($sql, [$companyid, $cutoff]);
 
-        // Last access.
-        $last_access = $DB->get_field_select(
-            'local_alx_api_logs',
-            "MAX({$time_field})",
-            'companyid = ?',
-            [$companyid]
-        );
-        $stats['last_access'] = $last_access ?: 0;
-    } else {
-        // New schema or no company field - return zero stats
-        $stats = [
-            'total_requests' => 0,
-            'unique_users' => 0,
-            'last_access' => 0,
-        ];
+            // Last access
+            $last_access = $DB->get_field_select(
+                'local_alx_api_logs',
+                "MAX({$time_field})",
+                'companyid = ?',
+                [$companyid]
+            );
+            $stats['last_access'] = $last_access ?: 0;
+        } else {
+            // New schema or no company field - return zero stats
+            error_log('ALX Report API: companyid field not found in local_alx_api_logs table');
+        }
+
+    } catch (Exception $e) {
+        error_log('ALX Report API: Error getting usage stats - ' . $e->getMessage());
+        // Return safe default stats
     }
 
     return $stats;
@@ -217,11 +228,22 @@ function local_alx_report_api_get_usage_stats($companyid, $days = 30) {
 function local_alx_report_api_get_companies() {
     global $DB;
     
-    if ($DB->get_manager()->table_exists('company')) {
-        return $DB->get_records('company', null, 'name ASC', 'id, name, shortname');
+    try {
+        // Check if IOMAD company table exists
+        if (!$DB->get_manager()->table_exists('company')) {
+            error_log('ALX Report API: Company table does not exist. IOMAD may not be installed.');
+            return [];
+        }
+        
+        // Get all companies ordered by name
+        $companies = $DB->get_records('company', null, 'name ASC', 'id, name, shortname');
+        
+        return $companies ? $companies : [];
+        
+    } catch (Exception $e) {
+        error_log('ALX Report API: Error getting companies - ' . $e->getMessage());
+        return [];
     }
-    
-    return [];
 }
 
 /**
@@ -309,12 +331,33 @@ function local_alx_report_api_set_company_setting($companyid, $setting_name, $se
 function local_alx_report_api_get_company_settings($companyid) {
     global $DB;
     
-    $settings = $DB->get_records('local_alx_api_settings', 
-        ['companyid' => $companyid], '', 'setting_name, setting_value');
-    
     $result = [];
-    foreach ($settings as $setting) {
-        $result[$setting->setting_name] = $setting->setting_value;
+    
+    try {
+        // Validate company ID
+        if (empty($companyid) || $companyid <= 0) {
+            error_log('ALX Report API: Invalid company ID provided to get_company_settings');
+            return [];
+        }
+        
+        // Check if settings table exists
+        if (!$DB->get_manager()->table_exists('local_alx_api_settings')) {
+            error_log('ALX Report API: local_alx_api_settings table does not exist');
+            return [];
+        }
+        
+        $settings = $DB->get_records('local_alx_api_settings', 
+            ['companyid' => $companyid], '', 'setting_name, setting_value');
+        
+        if ($settings) {
+            foreach ($settings as $setting) {
+                $result[$setting->setting_name] = $setting->setting_value;
+            }
+        }
+        
+    } catch (Exception $e) {
+        error_log('ALX Report API: Error getting company settings - ' . $e->getMessage());
+        return [];
     }
     
     return $result;
@@ -378,19 +421,35 @@ function local_alx_report_api_copy_company_settings($from_companyid, $to_company
 function local_alx_report_api_get_company_courses($companyid) {
     global $DB;
     
-    if (!$DB->get_manager()->table_exists('company_course')) {
+    try {
+        // Check if IOMAD company_course table exists
+        if (!$DB->get_manager()->table_exists('company_course')) {
+            error_log('ALX Report API: company_course table does not exist. IOMAD may not be installed.');
+            return [];
+        }
+        
+        // Validate company ID
+        if (empty($companyid) || $companyid <= 0) {
+            error_log('ALX Report API: Invalid company ID provided to get_company_courses');
+            return [];
+        }
+        
+        $sql = "SELECT c.id, c.fullname, c.shortname, c.visible
+                FROM {course} c
+                JOIN {company_course} cc ON cc.courseid = c.id
+                WHERE cc.companyid = :companyid
+                    AND c.visible = 1
+                    AND c.id != 1
+                ORDER BY c.fullname ASC";
+        
+        $courses = $DB->get_records_sql($sql, ['companyid' => $companyid]);
+        
+        return $courses ? $courses : [];
+        
+    } catch (Exception $e) {
+        error_log('ALX Report API: Error getting company courses - ' . $e->getMessage());
         return [];
     }
-    
-    $sql = "SELECT c.id, c.fullname, c.shortname, c.visible
-            FROM {course} c
-            JOIN {company_course} cc ON cc.courseid = c.id
-            WHERE cc.companyid = :companyid
-                AND c.visible = 1
-                AND c.id != 1
-            ORDER BY c.fullname ASC";
-    
-    return $DB->get_records_sql($sql, ['companyid' => $companyid]);
 }
 
 /**
@@ -403,15 +462,35 @@ function local_alx_report_api_get_enabled_courses($companyid) {
     global $DB;
     
     $enabled_courses = [];
-    $company_settings = local_alx_report_api_get_company_settings($companyid);
     
-    foreach ($company_settings as $setting_name => $setting_value) {
-        if (strpos($setting_name, 'course_') === 0 && $setting_value == 1) {
-            $course_id = (int)str_replace('course_', '', $setting_name);
-            if ($course_id > 0) {
-                $enabled_courses[] = $course_id;
+    try {
+        // Validate company ID
+        if (empty($companyid) || $companyid <= 0) {
+            error_log('ALX Report API: Invalid company ID provided to get_enabled_courses');
+            return [];
+        }
+        
+        // Get company settings
+        $company_settings = local_alx_report_api_get_company_settings($companyid);
+        
+        if (empty($company_settings)) {
+            // No settings found - this is normal for new companies
+            return [];
+        }
+        
+        // Extract enabled course IDs from settings
+        foreach ($company_settings as $setting_name => $setting_value) {
+            if (strpos($setting_name, 'course_') === 0 && $setting_value == 1) {
+                $course_id = (int)str_replace('course_', '', $setting_name);
+                if ($course_id > 0) {
+                    $enabled_courses[] = $course_id;
+                }
             }
         }
+        
+    } catch (Exception $e) {
+        error_log('ALX Report API: Error getting enabled courses - ' . $e->getMessage());
+        return [];
     }
     
     return $enabled_courses;
@@ -985,28 +1064,45 @@ function local_alx_report_api_determine_sync_mode($companyid, $token) {
 function local_alx_report_api_cache_get($cache_key, $companyid) {
     global $DB;
     
-    $cache_record = $DB->get_record('local_alx_api_cache', [
-        'cache_key' => $cache_key,
-        'companyid' => $companyid
-    ]);
-    
-    if (!$cache_record) {
+    try {
+        // Check if cache table exists
+        if (!$DB->get_manager()->table_exists('local_alx_api_cache')) {
+            error_log('ALX Report API: local_alx_api_cache table does not exist');
+            return false;
+        }
+        
+        // Validate inputs
+        if (empty($cache_key) || empty($companyid)) {
+            return false;
+        }
+        
+        $cache_record = $DB->get_record('local_alx_api_cache', [
+            'cache_key' => $cache_key,
+            'companyid' => $companyid
+        ]);
+        
+        if (!$cache_record) {
+            return false;
+        }
+        
+        // Check if expired
+        if ($cache_record->expires_at < time()) {
+            // Delete expired cache
+            $DB->delete_records('local_alx_api_cache', ['id' => $cache_record->id]);
+            return false;
+        }
+        
+        // Update hit count and last accessed
+        $cache_record->hit_count++;
+        $cache_record->last_accessed = time();
+        $DB->update_record('local_alx_api_cache', $cache_record);
+        
+        return json_decode($cache_record->cache_data, true);
+        
+    } catch (Exception $e) {
+        error_log('ALX Report API: Error getting cache - ' . $e->getMessage());
         return false;
     }
-    
-    // Check if expired
-    if ($cache_record->expires_at < time()) {
-        // Delete expired cache
-        $DB->delete_records('local_alx_api_cache', ['id' => $cache_record->id]);
-        return false;
-    }
-    
-    // Update hit count and last accessed
-    $cache_record->hit_count++;
-    $cache_record->last_accessed = time();
-    $DB->update_record('local_alx_api_cache', $cache_record);
-    
-    return json_decode($cache_record->cache_data, true);
 }
 
 /**
@@ -1729,8 +1825,15 @@ function local_alx_report_api_get_system_health() {
 function local_alx_report_api_get_api_analytics($hours = 24) {
     global $DB;
     
+    // Initialize with safe default structure
     $analytics = [
-        'summary' => [],
+        'summary' => [
+            'total_calls' => 0,
+            'unique_users' => 0,
+            'unique_companies' => 0,
+            'time_period' => $hours . ' hours',
+            'calls_per_hour' => 0
+        ],
         'trends' => [],
         'performance' => [],
         'top_users' => [],
@@ -1738,17 +1841,18 @@ function local_alx_report_api_get_api_analytics($hours = 24) {
         'security' => []
     ];
     
-    // Check if logs table exists
-    if (!$DB->get_manager()->table_exists('local_alx_api_logs')) {
-        $analytics['summary'] = [
-            'total_calls' => 0,
-            'unique_users' => 0,
-            'unique_companies' => 0,
-            'time_period' => $hours . ' hours',
-            'calls_per_hour' => 0
-        ];
+    try {
+        // Check if logs table exists
+        if (!$DB->get_manager()->table_exists('local_alx_api_logs')) {
+            error_log('ALX Report API: local_alx_api_logs table does not exist');
+            return $analytics;
+        }
+    } catch (Exception $e) {
+        error_log('ALX Report API: Error checking table existence - ' . $e->getMessage());
         return $analytics;
     }
+    
+    try {
     
     // Determine which time field to use
     $table_info = $DB->get_columns('local_alx_api_logs');
@@ -1913,6 +2017,11 @@ function local_alx_report_api_get_api_analytics($hours = 24) {
         }
     } catch (Exception $e) {
         // Security tracking might not be implemented
+    }
+    
+    } catch (Exception $e) {
+        error_log('ALX Report API: Error getting API analytics - ' . $e->getMessage());
+        // Return safe default analytics structure
     }
     
     return $analytics;
@@ -2846,6 +2955,12 @@ function local_alx_report_api_log_api_call($userid, $company_shortname, $endpoin
     global $DB;
     
     try {
+        // Check if logs table exists
+        if (!$DB->get_manager()->table_exists('local_alx_api_logs')) {
+            error_log('ALX Report API: local_alx_api_logs table does not exist - cannot log API call');
+            return;
+        }
+        
         $log = new stdClass();
         $log->userid = $userid;
         $log->company_shortname = $company_shortname;

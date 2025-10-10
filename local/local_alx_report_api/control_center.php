@@ -44,50 +44,77 @@ $PAGE->requires->js_amd_inline("
     console.log('Control Center Enhanced Version Loading: " . $cache_buster . "');
 ");
 
-// Get initial data with error handling
+// Get initial data with comprehensive error handling
 $companies = [];
 $total_records = 0;
 $total_companies = 0;
 $api_calls_today = 0;
 $system_health = '✅'; // Default to healthy
+$health_issues = [];
+$load_errors = []; // Track specific loading errors
 
 try {
     // Get companies using the same function as monitoring dashboard
-    $companies = local_alx_report_api_get_companies();
-    $total_companies = count($companies);
+    try {
+        $companies = local_alx_report_api_get_companies();
+        $total_companies = count($companies);
+        
+        if ($total_companies == 0) {
+            $health_issues[] = 'No companies configured';
+        }
+    } catch (Exception $e) {
+        error_log('ALX Report API Control Center: Error loading companies - ' . $e->getMessage());
+        $load_errors[] = 'Could not load companies';
+        $health_issues[] = 'Company data unavailable';
+    }
     
     // Get total records from reporting table (same as monitoring dashboard)
-    if ($DB->get_manager()->table_exists('local_alx_api_reporting')) {
-        $total_records = $DB->count_records('local_alx_api_reporting', ['is_deleted' => 0]); // Only active records
+    try {
+        if ($DB->get_manager()->table_exists('local_alx_api_reporting')) {
+            $total_records = $DB->count_records('local_alx_api_reporting', ['is_deleted' => 0]); // Only active records
+            
+            if ($total_records == 0) {
+                $health_issues[] = 'No reporting data';
+            }
+        } else {
+            $health_issues[] = 'Reporting table missing';
+            $load_errors[] = 'Reporting table does not exist';
+        }
+    } catch (Exception $e) {
+        error_log('ALX Report API Control Center: Error loading reporting data - ' . $e->getMessage());
+        $load_errors[] = 'Could not load reporting data';
+        $health_issues[] = 'Reporting data unavailable';
     }
     
     // Get API calls today (check if table exists first)
-    if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
-        $today_start = mktime(0, 0, 0);
-        // Use timeaccessed (new field) or fall back to timecreated (old field)
-        $table_info = $DB->get_columns('local_alx_api_logs');
-        $time_field = isset($table_info['timeaccessed']) ? 'timeaccessed' : 'timecreated';
-        $api_calls_today = $DB->count_records_select('local_alx_api_logs', "{$time_field} >= ?", [$today_start]);
-    }
-    
-    // Determine system health based on actual conditions
-    $health_issues = [];
-    
-    // Check if reporting table exists and has data
-    if (!$DB->get_manager()->table_exists('local_alx_api_reporting')) {
-        $health_issues[] = 'Reporting table missing';
-    } elseif ($total_records == 0) {
-        $health_issues[] = 'No reporting data';
-    }
-    
-    // Check if companies exist
-    if ($total_companies == 0) {
-        $health_issues[] = 'No companies configured';
+    try {
+        if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
+            $today_start = mktime(0, 0, 0);
+            // Use timeaccessed (new field) or fall back to timecreated (old field)
+            $table_info = $DB->get_columns('local_alx_api_logs');
+            
+            if ($table_info) {
+                $time_field = isset($table_info['timeaccessed']) ? 'timeaccessed' : 'timecreated';
+                $api_calls_today = $DB->count_records_select('local_alx_api_logs', "{$time_field} >= ?", [$today_start]);
+            } else {
+                error_log('ALX Report API Control Center: Could not get table structure for local_alx_api_logs');
+            }
+        } else {
+            // Logs table missing is not critical - just means no API calls yet
+            error_log('ALX Report API Control Center: local_alx_api_logs table does not exist');
+        }
+    } catch (Exception $e) {
+        error_log('ALX Report API Control Center: Error loading API call stats - ' . $e->getMessage());
+        // Not critical - continue with 0 API calls
     }
     
     // Check if web services are enabled
-    if (empty($CFG->enablewebservices)) {
-        $health_issues[] = 'Web services disabled';
+    try {
+        if (empty($CFG->enablewebservices)) {
+            $health_issues[] = 'Web services disabled';
+        }
+    } catch (Exception $e) {
+        error_log('ALX Report API Control Center: Error checking web services - ' . $e->getMessage());
     }
     
     // Set system health icon based on issues
@@ -100,9 +127,10 @@ try {
     }
     
 } catch (Exception $e) {
-    // Log error but continue with default values
-    error_log('ALX Report API Control Center: ' . $e->getMessage());
+    // Catch-all for any unexpected errors
+    error_log('ALX Report API Control Center: Unexpected error during initialization - ' . $e->getMessage());
     $system_health = '❌';
+    $load_errors[] = 'Unexpected error during page load';
 }
 
 echo $OUTPUT->header();
@@ -1045,6 +1073,22 @@ input[type="checkbox"]:disabled {
 </style>
 
 <div class="control-center-container">
+    
+    <?php
+    // Display any loading errors to the admin
+    if (!empty($load_errors)) {
+        echo '<div class="alert alert-warning" style="margin-bottom: 24px; padding: 16px; background: #fff3cd; border: 1px solid #ffc107; border-radius: 8px;">';
+        echo '<h4 style="margin: 0 0 8px 0; color: #856404;"><i class="fas fa-exclamation-triangle"></i> Warning: Some Data Could Not Be Loaded</h4>';
+        echo '<ul style="margin: 8px 0 0 20px; color: #856404;">';
+        foreach ($load_errors as $error) {
+            echo '<li>' . htmlspecialchars($error) . '</li>';
+        }
+        echo '</ul>';
+        echo '<p style="margin: 8px 0 0 0; color: #856404; font-size: 14px;">The dashboard will display with available data. Check the Moodle error logs for details.</p>';
+        echo '</div>';
+    }
+    ?>
+    
     <!-- Header Section -->
     <div class="control-header">
         <h1>

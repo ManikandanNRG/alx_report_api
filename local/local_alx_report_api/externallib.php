@@ -176,8 +176,16 @@ class local_alx_report_api_external extends external_api {
     private static function check_rate_limit($userid) {
         global $DB, $CFG;
         
-        // Get user's company ID
-        $companyid = self::get_user_company($userid);
+        try {
+            // Validate user ID
+            if (empty($userid) || $userid <= 0) {
+                error_log('ALX Report API: Invalid user ID provided to check_rate_limit');
+                // Don't throw exception - just skip rate limiting for invalid users
+                return;
+            }
+            
+            // Get user's company ID
+            $companyid = self::get_user_company($userid);
         
         // Get company-specific rate limit or global default
         $company_rate_limit = null;
@@ -261,6 +269,16 @@ class local_alx_report_api_external extends external_api {
             
             throw new moodle_exception('ratelimitexceeded', 'local_alx_report_api', '', null, 
                 "Daily rate limit exceeded. You have made {$request_count} requests today. Limit is {$rate_limit} requests per day. Try again tomorrow.");
+        }
+        
+        } catch (moodle_exception $e) {
+            // Re-throw rate limit exceptions (these are expected)
+            throw $e;
+            
+        } catch (Exception $e) {
+            // Log unexpected errors but don't block API access
+            error_log('ALX Report API: Error checking rate limit - ' . $e->getMessage());
+            // Don't throw - allow API call to proceed if rate limiting fails
         }
     }
 
@@ -515,15 +533,26 @@ class local_alx_report_api_external extends external_api {
     private static function get_user_company($userid) {
         global $DB;
 
-        // Check if IOMAD is installed and get company association.
-        if ($DB->get_manager()->table_exists('company_users')) {
+        try {
+            // Validate user ID
+            if (empty($userid) || $userid <= 0) {
+                error_log('ALX Report API: Invalid user ID provided to get_user_company');
+                return false;
+            }
+
+            // Check if IOMAD is installed and get company association
+            if (!$DB->get_manager()->table_exists('company_users')) {
+                error_log('ALX Report API: company_users table does not exist. IOMAD may not be installed.');
+                return false;
+            }
+            
             $company = $DB->get_record('company_users', ['userid' => $userid], 'companyid');
             return $company ? $company->companyid : false;
+            
+        } catch (Exception $e) {
+            error_log('ALX Report API: Error getting user company - ' . $e->getMessage());
+            return false;
         }
-
-        // Fallback: If IOMAD is not available, you might need to implement
-        // your own company association logic here.
-        return false;
     }
 
     /**
@@ -537,9 +566,23 @@ class local_alx_report_api_external extends external_api {
     private static function get_company_course_progress($companyid, $limit, $offset) {
         global $DB;
 
-        // Debug logging
-        self::debug_log("=== API Request Start (Combined Approach) ===");
-        self::debug_log("Company ID: $companyid, Limit: $limit, Offset: $offset");
+        try {
+            // Validate inputs
+            if (empty($companyid) || $companyid <= 0) {
+                self::debug_log("ERROR: Invalid company ID: $companyid");
+                throw new moodle_exception('invalidcompanyid', 'local_alx_report_api', '', null, 
+                    'Invalid company ID provided');
+            }
+            
+            if ($limit < 0 || $offset < 0) {
+                self::debug_log("ERROR: Invalid limit ($limit) or offset ($offset)");
+                throw new moodle_exception('invalidparameters', 'local_alx_report_api', '', null, 
+                    'Limit and offset must be non-negative');
+            }
+
+            // Debug logging
+            self::debug_log("=== API Request Start (Combined Approach) ===");
+            self::debug_log("Company ID: $companyid, Limit: $limit, Offset: $offset");
 
         // Get the API token for sync tracking
         $token = self::get_authorization_token();
@@ -773,10 +816,30 @@ class local_alx_report_api_external extends external_api {
             return [];
         }
 
-        self::debug_log("Final result count: " . count($result));
-        self::debug_log("=== API Request End (Combined Approach) ===");
+            self::debug_log("Final result count: " . count($result));
+            self::debug_log("=== API Request End (Combined Approach) ===");
 
-        return $result;
+            return $result;
+            
+        } catch (moodle_exception $e) {
+            // Re-throw Moodle exceptions (these are expected errors with user-friendly messages)
+            self::debug_log("ERROR: Moodle exception - " . $e->getMessage());
+            throw $e;
+            
+        } catch (dml_exception $e) {
+            // Database errors
+            self::debug_log("ERROR: Database exception - " . $e->getMessage());
+            error_log('ALX Report API: Database error in get_company_course_progress - ' . $e->getMessage());
+            throw new moodle_exception('databaseerror', 'local_alx_report_api', '', null, 
+                'A database error occurred. Please contact your administrator.');
+                
+        } catch (Exception $e) {
+            // Catch any other unexpected errors
+            self::debug_log("ERROR: Unexpected exception - " . $e->getMessage());
+            error_log('ALX Report API: Unexpected error in get_company_course_progress - ' . $e->getMessage());
+            throw new moodle_exception('unexpectederror', 'local_alx_report_api', '', null, 
+                'An unexpected error occurred. Please contact your administrator.');
+        }
     }
 
     /**
