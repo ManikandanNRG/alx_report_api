@@ -172,45 +172,37 @@ function local_alx_report_api_get_usage_stats($companyid, $days = 30) {
             return $stats;
         }
 
-        // Get table structure to determine available fields
-        $table_info = $DB->get_columns('local_alx_api_logs');
-        if (!$table_info) {
-            error_log('ALX Report API: Unable to get table structure for local_alx_api_logs');
+        // Get company shortname from company ID
+        $company = $DB->get_record('company', ['id' => $companyid], 'shortname');
+        if (!$company) {
+            error_log("ALX Report API: Company with ID {$companyid} not found");
             return $stats;
         }
         
-        // Use standard Moodle field name
-        $time_field = 'timecreated';
-        
+        $company_shortname = $company->shortname;
         $cutoff = time() - ($days * 24 * 3600);
 
-        // Check if we have the old companyid field or new company_shortname field
-        if (isset($table_info['companyid'])) {
-            // Old schema - query by companyid
-            $stats['total_requests'] = $DB->count_records_select(
-                'local_alx_api_logs',
-                "companyid = ? AND {$time_field} > ?",
-                [$companyid, $cutoff]
-            );
+        // Query using company_shortname (current schema uses this field)
+        $stats['total_requests'] = $DB->count_records_select(
+            'local_alx_api_logs',
+            "company_shortname = ? AND timecreated > ?",
+            [$company_shortname, $cutoff]
+        );
 
-            // Unique users
-            $sql = "SELECT COUNT(DISTINCT userid) 
-                    FROM {local_alx_api_logs} 
-                    WHERE companyid = ? AND {$time_field} > ?";
-            $stats['unique_users'] = $DB->count_records_sql($sql, [$companyid, $cutoff]);
+        // Unique users
+        $sql = "SELECT COUNT(DISTINCT userid) 
+                FROM {local_alx_api_logs} 
+                WHERE company_shortname = ? AND timecreated > ?";
+        $stats['unique_users'] = $DB->count_records_sql($sql, [$company_shortname, $cutoff]);
 
-            // Last access
-            $last_access = $DB->get_field_select(
-                'local_alx_api_logs',
-                "MAX({$time_field})",
-                'companyid = ?',
-                [$companyid]
-            );
-            $stats['last_access'] = $last_access ?: 0;
-        } else {
-            // New schema or no company field - return zero stats
-            error_log('ALX Report API: companyid field not found in local_alx_api_logs table');
-        }
+        // Last access
+        $last_access = $DB->get_field_select(
+            'local_alx_api_logs',
+            "MAX(timecreated)",
+            'company_shortname = ?',
+            [$company_shortname]
+        );
+        $stats['last_access'] = $last_access ?: 0;
 
     } catch (Exception $e) {
         error_log('ALX Report API: Error getting usage stats - ' . $e->getMessage());
@@ -1860,18 +1852,10 @@ function local_alx_report_api_get_api_analytics($hours = 24) {
         "SELECT COUNT(DISTINCT userid) FROM {local_alx_api_logs} WHERE {$time_field} >= ?", [$start_time]
     );
     
-    // Check if companyid field exists (old logs) or company_shortname (new logs)
-    if (isset($table_info['companyid'])) {
-        $unique_companies = $DB->count_records_sql(
-            "SELECT COUNT(DISTINCT companyid) FROM {local_alx_api_logs} WHERE {$time_field} >= ?", [$start_time]
-        );
-    } else if (isset($table_info['company_shortname'])) {
-        $unique_companies = $DB->count_records_sql(
-            "SELECT COUNT(DISTINCT company_shortname) FROM {local_alx_api_logs} WHERE {$time_field} >= ?", [$start_time]
-        );
-    } else {
-        $unique_companies = 0;
-    }
+    // Count unique companies using company_shortname field
+    $unique_companies = $DB->count_records_sql(
+        "SELECT COUNT(DISTINCT company_shortname) FROM {local_alx_api_logs} WHERE {$time_field} >= ?", [$start_time]
+    );
     
     $analytics['summary'] = [
         'total_calls' => $total_calls,
