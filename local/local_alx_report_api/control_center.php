@@ -137,6 +137,10 @@ echo $OUTPUT->header();
 echo '<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">';
 echo '<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">';
 
+// Load ALX design system variables
+$cssurl = new moodle_url('/local/alx_report_api/styles/alx-variables.css');
+echo '<link rel="stylesheet" href="' . $cssurl->out() . '">';
+
 // Debug indicator for cache busting
 echo '<div style="position: fixed; top: 0; right: 0; background: #10b981; color: white; padding: 4px 8px; font-size: 10px; z-index: 9999;">Enhanced v' . time() . '</div>';
 
