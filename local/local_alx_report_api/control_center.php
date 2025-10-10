@@ -94,9 +94,6 @@ try {
             $time_field = 'timecreated';
             
             $api_calls_today = $DB->count_records_select('local_alx_api_logs', "{$time_field} >= ?", [$today_start]);
-            } else {
-                error_log('ALX Report API Control Center: Could not get table structure for local_alx_api_logs');
-            }
         } else {
             // Logs table missing is not critical - just means no API calls yet
             error_log('ALX Report API Control Center: local_alx_api_logs table does not exist');
@@ -136,10 +133,6 @@ echo $OUTPUT->header();
 // Include modern CSS and JavaScript
 echo '<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">';
 echo '<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">';
-
-// Load ALX design system variables
-$cssurl = new moodle_url('/local/alx_report_api/styles/alx-variables.css');
-echo '<link rel="stylesheet" href="' . $cssurl->out() . '">';
 
 // Debug indicator for cache busting
 echo '<div style="position: fixed; top: 0; right: 0; background: #10b981; color: white; padding: 4px 8px; font-size: 10px; z-index: 9999;">Enhanced v' . time() . '</div>';

@@ -40,8 +40,13 @@ function xmldb_local_alx_report_api_upgrade($oldversion) {
         // Log upgrade attempt
         error_log("ALX Report API Upgrade: Starting upgrade from version {$oldversion}");
         
-        // Create local_alx_api_logs table if it doesn't exist (matches install.xml exactly)
-        if (!$dbman->table_exists('local_alx_api_logs')) {
+        // Only create tables if this is an upgrade from an old version (not a fresh install)
+        // Fresh installs use install.xml, upgrades need to create missing tables
+        if ($oldversion > 0 && $oldversion < 2024100801) {
+            // This is an upgrade from a very old version, create missing tables
+            
+            // Create local_alx_api_logs table if it doesn't exist (matches install.xml exactly)
+            if (!$dbman->table_exists('local_alx_api_logs')) {
             error_log("ALX Report API Upgrade: Creating local_alx_api_logs table");
             $table = new xmldb_table('local_alx_api_logs');
             $table->add_field('id', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE, null);
@@ -193,7 +198,9 @@ function xmldb_local_alx_report_api_upgrade($oldversion) {
         } else {
             error_log("ALX Report API Upgrade: Admin token already exists or tokens table not available, skipping");
         }
-
+        
+        } // End of old version table creation block
+        
         // Upgrade to version 2024100803 - Standardize time field names
         if ($oldversion < 2024100803) {
             error_log("ALX Report API Upgrade: Starting field rename to version 2024100803");
