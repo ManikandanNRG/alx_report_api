@@ -23,11 +23,10 @@
  */
 
 require_once(__DIR__ . '/../../config.php');
-require_once($CFG->libdir . '/adminlib.php');
 require_once(__DIR__ . '/lib.php');
 
 // Check permissions.
-admin_externalpage_setup('local_alx_report_api_export');
+require_login();
 require_capability('moodle/site:config', context_system::instance());
 
 // Get export parameters
@@ -264,174 +263,10 @@ $PAGE->set_heading('Export API Report Data');
 // Include modern styling
 echo '<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">';
 echo '<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">';
+echo '<link rel="stylesheet" href="' . new moodle_url('/local/alx_report_api/styles/export-data.css') . '">';
 
 echo $OUTPUT->header();
 ?>
-
-<style>
-.export-container {
-    max-width: 800px;
-    margin: 0 auto;
-    padding: 20px;
-    font-family: 'Inter', sans-serif;
-}
-
-.export-header {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    padding: 30px;
-    border-radius: 12px;
-    text-align: center;
-    margin-bottom: 30px;
-    box-shadow: 0 4px 20px rgba(102, 126, 234, 0.3);
-}
-
-.export-header h1 {
-    margin: 0 0 10px 0;
-    font-size: 2rem;
-    font-weight: 700;
-}
-
-.export-header p {
-    margin: 0;
-    font-size: 1.1rem;
-    opacity: 0.9;
-}
-
-.export-options {
-    background: white;
-    border-radius: 12px;
-    padding: 30px;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
-    margin-bottom: 30px;
-}
-
-.export-section {
-    margin-bottom: 30px;
-}
-
-.export-section h3 {
-    color: #333;
-    margin-bottom: 15px;
-    font-size: 1.2rem;
-    font-weight: 600;
-}
-
-.export-buttons {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 15px;
-    margin-top: 20px;
-}
-
-.export-btn {
-    background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
-    color: white;
-    padding: 15px 20px;
-    border: none;
-    border-radius: 8px;
-    text-decoration: none;
-    text-align: center;
-    font-weight: 600;
-    font-size: 1rem;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    box-shadow: 0 2px 10px rgba(40, 167, 69, 0.3);
-}
-
-.export-btn:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 20px rgba(40, 167, 69, 0.4);
-    color: white;
-    text-decoration: none;
-}
-
-.export-btn i {
-    margin-right: 8px;
-}
-
-.time-range-options {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-    gap: 10px;
-    margin-bottom: 20px;
-}
-
-.time-range-btn {
-    background: #f8f9fa;
-    border: 2px solid #dee2e6;
-    color: #495057;
-    padding: 10px 15px;
-    border-radius: 6px;
-    text-decoration: none;
-    text-align: center;
-    font-weight: 500;
-    transition: all 0.3s ease;
-}
-
-.time-range-btn:hover, .time-range-btn.active {
-    background: #007bff;
-    border-color: #007bff;
-    color: white;
-    text-decoration: none;
-}
-
-.stats-preview {
-    background: #f8f9fa;
-    border-radius: 8px;
-    padding: 20px;
-    margin-top: 20px;
-}
-
-.stats-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-    gap: 15px;
-}
-
-.stat-item {
-    text-align: center;
-    padding: 15px;
-    background: white;
-    border-radius: 6px;
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
-}
-
-.stat-value {
-    font-size: 1.5rem;
-    font-weight: 700;
-    color: #007bff;
-    margin-bottom: 5px;
-}
-
-.stat-label {
-    font-size: 0.9rem;
-    color: #6c757d;
-    font-weight: 500;
-}
-
-.back-button {
-    background: linear-gradient(135deg, #6c757d 0%, #495057 100%);
-    color: white;
-    padding: 12px 20px;
-    border: none;
-    border-radius: 8px;
-    text-decoration: none;
-    font-weight: 600;
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    transition: all 0.3s ease;
-    box-shadow: 0 2px 10px rgba(108, 117, 125, 0.3);
-}
-
-.back-button:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 20px rgba(108, 117, 125, 0.4);
-    color: white;
-    text-decoration: none;
-}
-</style>
 
 <div class="export-container">
     <div class="export-header">
