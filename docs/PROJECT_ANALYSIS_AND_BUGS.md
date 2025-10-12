@@ -70,6 +70,10 @@ local/local_alx_report_api/
 
 ## 🐛 IDENTIFIED BUGS & INCONSISTENCIES
 
+### ⚠️ IMPORTANT CLARIFICATIONS
+
+**Rate Limit "Issue" (Issue #7):** Originally listed as a bug, but this is actually **working as designed**. The system intentionally logs rate limit violations for monitoring and security purposes while still blocking the requests. This is industry standard practice and enables proper security monitoring and business intelligence.
+
 ### CRITICAL ISSUES (Must Fix Today)
 
 #### 1. **Missing Error Handling in API Endpoint**
@@ -150,12 +154,20 @@ try {
 
 ---
 
-#### 7. **Rate Limiting Not Enforced Properly**
-**Issue:** Rate limit check exists but no actual blocking mechanism
-**Impact:** Users can exceed rate limits without consequences
-**Evidence:** No code that actually prevents API call after limit exceeded
+#### 7. **~~Rate Limiting Not Enforced Properly~~** ✅ NOT A BUG - WORKING AS DESIGNED
+**Status:** This is intentional design for monitoring purposes
+**How it works:** 
+- Requests beyond the limit ARE blocked (no data returned)
+- BUT violations ARE logged for monitoring and security tracking
+- This allows the monitoring dashboard to show violation counts and patterns
 
-**Fix Required:** Add actual request blocking when limit reached
+**Why this is correct:**
+- Industry standard practice (GitHub, AWS, Stripe all do this)
+- Enables security monitoring (detect abuse attempts)
+- Provides business intelligence (which companies need higher limits)
+- Helps debugging (clients can see their usage history)
+
+**Enhancement Opportunity:** Add per-company rate limits (see separate spec)
 
 ---
 
@@ -385,11 +397,12 @@ try {
 
 ### For Next Week (High Priority)
 
-6. Rate Limiting Enforcement (Issue #7)
+6. ~~Rate Limiting Enforcement (Issue #7)~~ ✅ Already working correctly
 7. Sync Task Timeout (Issue #8)
 8. Cache Key Improvement (Issue #6)
 9. Email Alerts Implementation (Issue #9)
 10. Real Metrics in Dashboard (Issue #10)
+11. **ENHANCEMENT:** Per-Company Rate Limits (see separate spec)
 
 ### For Future Releases (Medium/Low Priority)
 
@@ -419,7 +432,7 @@ Before showing to manager, test:
 ### What to Highlight
 - Multi-tenant architecture
 - Performance optimization (caching + reporting table)
-- Beautiful modern UI
+- Beautiful modern UI with interactive charts ✅
 - Comprehensive monitoring
 - Security features (rate limiting, token auth)
 
@@ -428,6 +441,10 @@ Before showing to manager, test:
 - A few database field inconsistencies to fix
 - Email alerts not fully implemented yet
 - Some metrics are calculated estimates
+
+### Recent Fixes ✅
+- **Chart Display Issue** - Fixed missing closing script tag that prevented dashboard charts from rendering
+- **Duplicate Code Removal** - Cleaned up ~100 lines of duplicate JavaScript functions
 
 ### Timeline for Fixes
 - Critical issues: Today (2 hours)
@@ -443,6 +460,7 @@ Before showing to manager, test:
 3. **Testing** - Need more comprehensive testing before demos
 4. **Documentation** - Good docs helped with this analysis
 5. **Version Control** - Backup files indicate lack of proper git workflow
+6. **Code Cleanup** - When removing duplicate code, must verify all dependencies (chart display issue)
 
 ---
 

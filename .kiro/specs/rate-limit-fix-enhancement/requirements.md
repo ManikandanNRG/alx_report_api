@@ -2,33 +2,23 @@
 
 ## Introduction
 
-This feature addresses a critical security vulnerability in the ALX Report API plugin's rate limiting system and enhances it with per-company rate limit configuration. Currently, the rate limit check throws an exception when exceeded, but the request is still logged in the `finally` block, causing the rate limit counter to increment indefinitely. This makes rate limiting completely ineffective.
+This feature enhances the ALX Report API plugin's rate limiting system with per-company rate limit configuration. 
 
-Additionally, the current implementation uses a global rate limit for all companies, which doesn't align with the multi-tenant architecture. This enhancement will allow administrators to set different rate limits for different companies, supporting tiered service levels and better resource allocation.
+**CLARIFICATION:** The current rate limiting system is **working as designed**. When a rate limit is exceeded:
+- ✅ The request IS blocked (no data is returned to the client)
+- ✅ The violation IS logged for monitoring and security purposes
+- ✅ This is industry standard practice (GitHub, AWS, Stripe all do this)
+- ✅ Enables security monitoring, business intelligence, and debugging
 
-**Critical Issue:** Rate limiting is currently bypassed due to logging happening in the `finally` block after the rate limit exception is thrown.
+The current implementation uses a global rate limit for all companies. This enhancement will allow administrators to set different rate limits for different companies, supporting tiered service levels and better resource allocation.
 
-**Enhancement:** Add per-company rate limit configuration while maintaining backward compatibility with the global default.
+**Enhancement Goal:** Add per-company rate limit configuration while maintaining backward compatibility with the global default.
 
 ---
 
 ## Requirements
 
-### Requirement 1: Fix Rate Limit Bypass Bug
-
-**User Story:** As a system administrator, I want rate limiting to actually block requests when the limit is exceeded, so that the API is protected from abuse and resource exhaustion.
-
-#### Acceptance Criteria
-
-1. WHEN a user exceeds their daily rate limit THEN the system SHALL throw an exception AND SHALL NOT log the request to the database
-2. WHEN a rate limit exception is thrown THEN the request count SHALL NOT increment beyond the configured limit
-3. WHEN a user makes request #101 with a 100 request/day limit THEN the system SHALL return an error AND the database SHALL show exactly 100 logged requests (not 101)
-4. WHEN rate limiting blocks a request THEN the system SHALL optionally log the violation to a separate alert/monitoring system (not the main API logs table)
-5. WHEN a legitimate request is made within the rate limit THEN the system SHALL process normally AND log the request as before
-
----
-
-### Requirement 2: Per-Company Rate Limit Configuration
+### Requirement 1: Per-Company Rate Limit Configuration
 
 **User Story:** As a system administrator, I want to set different rate limits for different companies, so that I can offer tiered service levels and allocate resources appropriately based on company size or subscription tier.
 
@@ -43,7 +33,7 @@ Additionally, the current implementation uses a global rate limit for all compan
 
 ---
 
-### Requirement 3: Backward Compatibility
+### Requirement 2: Backward Compatibility
 
 **User Story:** As a system administrator, I want the rate limit fix to work with existing configurations, so that I don't need to reconfigure all companies after the update.
 
@@ -57,7 +47,7 @@ Additionally, the current implementation uses a global rate limit for all compan
 
 ---
 
-### Requirement 4: Rate Limit Monitoring & Visibility
+### Requirement 3: Rate Limit Monitoring & Visibility
 
 **User Story:** As a system administrator, I want to see rate limit usage and violations, so that I can monitor API usage patterns and adjust limits as needed.
 
@@ -71,7 +61,7 @@ Additionally, the current implementation uses a global rate limit for all compan
 
 ---
 
-### Requirement 5: Admin UI Enhancement
+### Requirement 4: Admin UI Enhancement
 
 **User Story:** As a system administrator, I want an intuitive interface to manage per-company rate limits, so that I can easily configure and monitor rate limiting across all companies.
 
@@ -85,7 +75,7 @@ Additionally, the current implementation uses a global rate limit for all compan
 
 ---
 
-### Requirement 6: Testing & Validation
+### Requirement 5: Testing & Validation
 
 **User Story:** As a developer, I want comprehensive testing of the rate limit system, so that I can ensure it works correctly and doesn't break existing functionality.
 
@@ -126,13 +116,13 @@ Additionally, the current implementation uses a global rate limit for all compan
 
 ## Success Criteria
 
-1. ✅ Rate limit bypass bug is completely fixed - requests beyond limit are blocked and not logged
-2. ✅ Per-company rate limits are configurable via company settings page
-3. ✅ Global default rate limit continues to work for companies without custom settings
-4. ✅ Rate limit violations are logged to alerts table for monitoring
-5. ✅ Admin UI provides clear interface for managing rate limits
-6. ✅ All existing functionality continues to work without modification
-7. ✅ No 500 errors or breaking changes introduced
+1. ✅ Per-company rate limits are configurable via company settings page
+2. ✅ Global default rate limit continues to work for companies without custom settings
+3. ✅ Rate limit violations continue to be logged for monitoring (current behavior maintained)
+4. ✅ Admin UI provides clear interface for managing rate limits
+5. ✅ All existing functionality continues to work without modification
+6. ✅ No 500 errors or breaking changes introduced
+7. ✅ Rate limiting continues to block requests while logging violations for security monitoring
 
 ---
 
@@ -183,13 +173,14 @@ Additionally, the current implementation uses a global rate limit for all compan
 
 ## Acceptance Testing Scenarios
 
-### Scenario 1: Rate Limit Bypass Fix
+### Scenario 1: Rate Limit Enforcement (Current Behavior - Should Remain)
 1. Set global rate limit to 5 requests/day
-2. Make 5 successful API requests
-3. Make 6th request - should fail with rate limit error
-4. Check database - should show exactly 5 logged requests (not 6)
-5. Make 7th request - should still fail
-6. Check database - should still show exactly 5 logged requests (not 7)
+2. Make 5 successful API requests - all succeed and are logged
+3. Make 6th request - should fail with rate limit error BUT be logged as violation
+4. Check database - should show 6 logged requests (5 successful + 1 violation)
+5. Make 7th request - should still fail and be logged as violation
+6. Check database - should show 7 logged requests (5 successful + 2 violations)
+7. Monitoring dashboard should show: 5 successful calls, 2 violations
 
 ### Scenario 2: Per-Company Rate Limits
 1. Company A: Set custom rate limit to 10 requests/day
@@ -218,15 +209,14 @@ Additionally, the current implementation uses a global rate limit for all compan
 
 ## Definition of Done
 
-- [ ] Rate limit bypass bug is fixed (requests not logged after limit exceeded)
 - [ ] Per-company rate limit setting is stored in `local_alx_api_settings` table
 - [ ] Company settings page UI includes rate limit field with validation
 - [ ] Rate limit check uses company setting with fallback to global default
-- [ ] Rate limit violations are logged to `local_alx_api_alerts` table
+- [ ] Rate limit violations continue to be logged for monitoring (existing behavior maintained)
 - [ ] All acceptance criteria are met and tested
 - [ ] No existing functionality is broken
 - [ ] Code is reviewed and follows plugin standards
-- [ ] Documentation is updated (if needed)
+- [ ] Documentation is updated to clarify rate limit logging is intentional
 - [ ] Changes are deployed without errors
 
 ---
