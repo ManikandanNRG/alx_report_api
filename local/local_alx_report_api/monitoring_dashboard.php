@@ -58,22 +58,22 @@ $db_performance = [];
 try {
     // Query response time measurement
     $start_time = microtime(true);
-    if ($DB->get_manager()->table_exists('local_alx_api_reporting')) {
-        $sample_query = $DB->get_records('local_alx_api_reporting', [], '', 'id', 0, 10);
+    if ($DB->get_manager()->table_exists(\local_alx_report_api\constants::TABLE_REPORTING)) {
+        $sample_query = $DB->get_records(\local_alx_report_api\constants::TABLE_REPORTING, [], '', 'id', 0, 10);
         $db_performance['query_response_time'] = round((microtime(true) - $start_time) * 1000, 2);
         
         // Report table statistics
-        $db_performance['total_records'] = $DB->count_records('local_alx_api_reporting');
+        $db_performance['total_records'] = $DB->count_records(\local_alx_report_api\constants::TABLE_REPORTING);
         
         // Check if is_deleted field exists before using it
-        $table_info = $DB->get_columns('local_alx_api_reporting');
+        $table_info = $DB->get_columns(\local_alx_report_api\constants::TABLE_REPORTING);
         if (isset($table_info['is_deleted'])) {
-            $db_performance['active_records'] = $DB->count_records('local_alx_api_reporting', ['is_deleted' => 0]);
+            $db_performance['active_records'] = $DB->count_records(\local_alx_report_api\constants::TABLE_REPORTING, ['is_deleted' => 0]);
         } else {
             $db_performance['active_records'] = $db_performance['total_records']; // All records are active if no is_deleted field
         }
         
-        $db_performance['records_added_today'] = $DB->count_records_select('local_alx_api_reporting', 'timecreated >= ?', [mktime(0, 0, 0)]);
+        $db_performance['records_added_today'] = $DB->count_records_select(\local_alx_report_api\constants::TABLE_REPORTING, 'timecreated >= ?', [mktime(0, 0, 0)]);
     } else {
         $db_performance['query_response_time'] = 0;
         $db_performance['total_records'] = 0;
@@ -82,9 +82,9 @@ try {
     }
     
     // Cache performance - LIVE DATA
-    if ($DB->get_manager()->table_exists('local_alx_api_cache')) {
-        $db_performance['cache_entries'] = $DB->count_records('local_alx_api_cache');
-        $db_performance['active_cache'] = $DB->count_records_select('local_alx_api_cache', 'expires_at > ?', [time()]);
+    if ($DB->get_manager()->table_exists(\local_alx_report_api\constants::TABLE_CACHE)) {
+        $db_performance['cache_entries'] = $DB->count_records(\local_alx_report_api\constants::TABLE_CACHE);
+        $db_performance['active_cache'] = $DB->count_records_select(\local_alx_report_api\constants::TABLE_CACHE, 'expires_at > ?', [time()]);
         $db_performance['cache_hit_rate'] = $db_performance['cache_entries'] > 0 ? 
             round(($db_performance['active_cache'] / $db_performance['cache_entries']) * 100, 1) : 0;
     } else {
@@ -118,7 +118,7 @@ $api_analytics = local_alx_report_api_get_api_analytics(24);
 
 // Generate hourly performance data for last 24 hours - LIVE DATA
 $hourly_performance = [];
-if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
+if ($DB->get_manager()->table_exists(\local_alx_report_api\constants::TABLE_LOGS)) {
     // Use standard Moodle field name
     $time_field = 'timecreated';
     
@@ -128,7 +128,7 @@ if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
         
         // Get response times for this hour
         if (isset($table_info['response_time'])) {
-            $response_times = $DB->get_records_select('local_alx_api_logs', 
+            $response_times = $DB->get_records_select(\local_alx_report_api\constants::TABLE_LOGS, 
                 "{$time_field} >= ? AND {$time_field} < ?", 
                 [$hour_start, $hour_end], '', 'response_time');
             
@@ -167,7 +167,7 @@ $cache_success_count = 0;
 
 foreach ($companies as $company) {
     // Check if company has API configuration
-    if ($DB->record_exists('local_alx_api_settings', ['companyid' => $company->id])) {
+    if ($DB->record_exists(\local_alx_report_api\constants::TABLE_SETTINGS, ['companyid' => $company->id])) {
         // Get records count for this company
         $records_count = 0;
         if ($DB->get_manager()->table_exists('local_alx_reporting_table')) {
@@ -187,7 +187,7 @@ foreach ($companies as $company) {
         $cache_time = 0;
         
         // Check for recent sync activity in logs
-        if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
+        if ($DB->get_manager()->table_exists(\local_alx_report_api\constants::TABLE_LOGS)) {
             // Use standard Moodle field name
             $time_field = 'timecreated';
             
@@ -197,11 +197,11 @@ foreach ($companies as $company) {
                 if (isset($table_info['status'])) {
                     // Check if endpoint field exists
                     if (isset($table_info['endpoint'])) {
-                        $recent_logs = $DB->get_records_select('local_alx_api_logs', 
+                        $recent_logs = $DB->get_records_select(\local_alx_report_api\constants::TABLE_LOGS, 
                             "{$time_field} >= ? AND endpoint LIKE '%sync%'", 
                             [time() - 86400], '', 'id,response_time,status', 0, 10);
                     } else {
-                        $recent_logs = $DB->get_records_select('local_alx_api_logs', 
+                        $recent_logs = $DB->get_records_select(\local_alx_report_api\constants::TABLE_LOGS, 
                             "{$time_field} >= ?", 
                             [time() - 86400], '', 'id,response_time,status', 0, 10);
                     }
@@ -216,11 +216,11 @@ foreach ($companies as $company) {
                 } else {
                     // response_time exists but status doesn't
                     if (isset($table_info['endpoint'])) {
-                        $recent_logs = $DB->get_records_select('local_alx_api_logs', 
+                        $recent_logs = $DB->get_records_select(\local_alx_report_api\constants::TABLE_LOGS, 
                             "{$time_field} >= ? AND endpoint LIKE '%sync%'", 
                             [time() - 86400], '', 'id,response_time', 0, 10);
                     } else {
-                        $recent_logs = $DB->get_records_select('local_alx_api_logs', 
+                        $recent_logs = $DB->get_records_select(\local_alx_report_api\constants::TABLE_LOGS, 
                             "{$time_field} >= ?", 
                             [time() - 86400], '', 'id,response_time', 0, 10);
                     }
@@ -235,11 +235,11 @@ foreach ($companies as $company) {
                 // If response_time field doesn't exist, get basic sync data
                 if (isset($table_info['status'])) {
                     if (isset($table_info['endpoint'])) {
-                        $recent_logs = $DB->get_records_select('local_alx_api_logs', 
+                        $recent_logs = $DB->get_records_select(\local_alx_report_api\constants::TABLE_LOGS, 
                             "{$time_field} >= ? AND endpoint LIKE '%sync%'", 
                             [time() - 86400], '', 'id,status', 0, 10);
                     } else {
-                        $recent_logs = $DB->get_records_select('local_alx_api_logs', 
+                        $recent_logs = $DB->get_records_select(\local_alx_report_api\constants::TABLE_LOGS, 
                             "{$time_field} >= ?", 
                             [time() - 86400], '', 'id,status', 0, 10);
                     }
@@ -253,7 +253,7 @@ foreach ($companies as $company) {
                     }
                 } else {
                     // Neither response_time nor status exist, just check for sync activity
-                    $recent_logs = $DB->get_records_select('local_alx_api_logs', 
+                    $recent_logs = $DB->get_records_select(\local_alx_report_api\constants::TABLE_LOGS, 
                         "{$time_field} >= ?", 
                         [time() - 86400], '', 'id', 0, 10);
                     
@@ -440,15 +440,15 @@ if ($DB->get_manager()->table_exists('local_alx_reporting_table')) {
 
 // Calculate error rate - LIVE DATA
 $error_rate = 0;
-if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
+if ($DB->get_manager()->table_exists(\local_alx_report_api\constants::TABLE_LOGS)) {
     // Use standard Moodle field name
     $time_field = 'timecreated';
     
-    $total_requests = $DB->count_records_select('local_alx_api_logs', "{$time_field} >= ?", [time() - 86400]);
+    $total_requests = $DB->count_records_select(\local_alx_report_api\constants::TABLE_LOGS, "{$time_field} >= ?", [time() - 86400]);
     if ($total_requests > 0) {
         // Check if status field exists before using it
         if (isset($table_info['status'])) {
-            $error_requests = $DB->count_records_select('local_alx_api_logs', "{$time_field} >= ? AND status != ?", [time() - 86400, 'success']);
+            $error_requests = $DB->count_records_select(\local_alx_report_api\constants::TABLE_LOGS, "{$time_field} >= ? AND status != ?", [time() - 86400, 'success']);
             $error_rate = round(($error_requests / $total_requests) * 100, 1);
         } else {
             // If no status field, assume all requests are successful (0% error rate)
@@ -476,7 +476,7 @@ if ($DB->get_manager()->table_exists('local_alx_reporting_table')) {
 
 // Calculate sync status - LIVE DATA
 $sync_status = 'INACTIVE';
-if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
+if ($DB->get_manager()->table_exists(\local_alx_report_api\constants::TABLE_LOGS)) {
     // Use standard Moodle field name
     $time_field = 'timecreated';
     
@@ -493,7 +493,7 @@ if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
         $sync_where = "{$time_field} >= ? AND (" . implode(' OR ', $sync_conditions) . ")";
         
         // Check for sync activity in last 24 hours
-        $recent_sync = $DB->get_record_select('local_alx_api_logs', 
+        $recent_sync = $DB->get_record_select(\local_alx_report_api\constants::TABLE_LOGS, 
             $sync_where, 
             [time() - 86400], 'id', IGNORE_MISSING);
         
@@ -501,7 +501,7 @@ if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
             $sync_status = 'ACTIVE';
         } else {
             // Check for any sync activity in last week
-            $week_sync = $DB->get_record_select('local_alx_api_logs', 
+            $week_sync = $DB->get_record_select(\local_alx_report_api\constants::TABLE_LOGS, 
                 $sync_where, 
                 [time() - 604800], 'id', IGNORE_MISSING);
             
@@ -511,7 +511,7 @@ if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
         }
     } else {
         // No endpoint or action fields, check for any recent activity
-        $recent_activity = $DB->get_record_select('local_alx_api_logs', 
+        $recent_activity = $DB->get_record_select(\local_alx_report_api\constants::TABLE_LOGS, 
             "{$time_field} >= ?", 
             [time() - 86400], 'id', IGNORE_MISSING);
         

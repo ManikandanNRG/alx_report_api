@@ -22,12 +22,12 @@ try {
     // Check if our tables exist
     echo "<h2>Checking Plugin Tables...</h2>";
     $tables = [
-        'local_alx_api_logs',
-        'local_alx_api_settings',
-        'local_alx_api_reporting',
-        'local_alx_api_sync_status',
-        'local_alx_api_cache',
-        'local_alx_api_alerts'
+        \local_alx_report_api\constants::TABLE_LOGS,
+        \local_alx_report_api\constants::TABLE_SETTINGS,
+        \local_alx_report_api\constants::TABLE_REPORTING,
+        \local_alx_report_api\constants::TABLE_SYNC_STATUS,
+        \local_alx_report_api\constants::TABLE_CACHE,
+        \local_alx_report_api\constants::TABLE_ALERTS
     ];
     
     foreach ($tables as $table) {
@@ -41,8 +41,8 @@ try {
     
     // Check field names in logs table
     echo "<h2>Checking Field Names in logs table...</h2>";
-    if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
-        $columns = $DB->get_columns('local_alx_api_logs');
+    if ($DB->get_manager()->table_exists(\local_alx_report_api\constants::TABLE_LOGS)) {
+        $columns = $DB->get_columns(\local_alx_report_api\constants::TABLE_LOGS);
         echo "<p>Fields in local_alx_api_logs:</p><ul>";
         foreach ($columns as $column) {
             echo "<li>" . $column->name . " (" . $column->type . ")</li>";

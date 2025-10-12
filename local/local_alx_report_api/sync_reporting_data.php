@@ -97,9 +97,9 @@ if ($action && $confirm) {
                 
                 // Track before state
                 if ($companyid > 0) {
-                    $before_count = $DB->count_records('local_alx_api_reporting', ['companyid' => $companyid]);
+                    $before_count = $DB->count_records(\local_alx_report_api\constants::TABLE_REPORTING, ['companyid' => $companyid]);
                 } else {
-                    $before_count = $DB->count_records('local_alx_api_reporting');
+                    $before_count = $DB->count_records(\local_alx_report_api\constants::TABLE_REPORTING);
                 }
                 
                 // Call sync function (false = no progress output to avoid JS errors)
@@ -111,9 +111,9 @@ if ($action && $confirm) {
                 
                 // Track after state and get details
                 if ($companyid > 0) {
-                    $after_count = $DB->count_records('local_alx_api_reporting', ['companyid' => $companyid]);
+                    $after_count = $DB->count_records(\local_alx_report_api\constants::TABLE_REPORTING, ['companyid' => $companyid]);
                 } else {
-                    $after_count = $DB->count_records('local_alx_api_reporting');
+                    $after_count = $DB->count_records(\local_alx_report_api\constants::TABLE_REPORTING);
                 }
                 echo "📈 Before count: $before_count, After count: $after_count\n";
                 flush();
@@ -165,9 +165,9 @@ if ($action && $confirm) {
                     echo "Started at: " . date('Y-m-d H:i:s') . "\n\n";
                     flush();
                     
-                    $before_count = $DB->count_records('local_alx_api_reporting', ['companyid' => $companyid]);
+                    $before_count = $DB->count_records(\local_alx_report_api\constants::TABLE_REPORTING, ['companyid' => $companyid]);
                     $result = local_alx_report_api_populate_reporting_table($companyid, 1000, false);
-                    $after_count = $DB->count_records('local_alx_api_reporting', ['companyid' => $companyid]);
+                    $after_count = $DB->count_records(\local_alx_report_api\constants::TABLE_REPORTING, ['companyid' => $companyid]);
                     
                     // Get details (same as above)
                     $course_sql = "SELECT c.id, c.fullname, COUNT(r.id) as record_count
@@ -219,7 +219,7 @@ if ($action && $confirm) {
                 
                 $orphaned = $DB->get_records_sql($sql, $params);
                 foreach ($orphaned as $record) {
-                    $DB->set_field('local_alx_api_reporting', 'is_deleted', 1, ['id' => $record->id]);
+                    $DB->set_field(\local_alx_report_api\constants::TABLE_REPORTING, 'is_deleted', 1, ['id' => $record->id]);
                     $deleted_count++;
                 }
                 
@@ -478,7 +478,7 @@ echo '<style>
 </style>';
 
 // Check if reporting table exists
-if (!$DB->get_manager()->table_exists('local_alx_api_reporting')) {
+if (!$DB->get_manager()->table_exists(\local_alx_report_api\constants::TABLE_REPORTING)) {
     echo '<div class="sync-container">';
     echo '<div class="alert alert-danger">Reporting table does not exist. Please upgrade the plugin first.</div>';
     echo '</div>';
@@ -487,8 +487,8 @@ if (!$DB->get_manager()->table_exists('local_alx_api_reporting')) {
 }
 
 $companies = local_alx_report_api_get_companies();
-$total_records = $DB->count_records('local_alx_api_reporting');
-$last_update = $DB->get_field_select('local_alx_api_reporting', 'MAX(last_updated)', '1=1');
+$total_records = $DB->count_records(\local_alx_report_api\constants::TABLE_REPORTING);
+$last_update = $DB->get_field_select(\local_alx_report_api\constants::TABLE_REPORTING, 'MAX(last_updated)', '1=1');
 
 echo '<div class="sync-container">';
 
