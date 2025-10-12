@@ -27,8 +27,8 @@ $PAGE->set_url('/local/alx_report_api/monitoring_dashboard.php');
 $PAGE->set_title('Monitoring Dashboard - ALX Report API');
 $PAGE->set_heading('Monitoring Dashboard');
 
-// Get active tab from URL parameter
-$active_tab = optional_param('tab', 'autosync', PARAM_ALPHA);
+// Get active tab from URL parameter (default to performance since it's first)
+$active_tab = optional_param('tab', 'performance', PARAM_ALPHA);
 
 // Include modern fonts and icons
 echo '<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">';
@@ -187,11 +187,11 @@ try {
 
     <!-- Tab Navigation -->
     <div class="tab-navigation">
-        <button class="tab-button <?php echo $active_tab === 'autosync' ? 'active' : ''; ?>" onclick="switchTab('autosync', event)">
-            <i class="fas fa-sync"></i> Data Sync Monitor
-        </button>
         <button class="tab-button <?php echo $active_tab === 'performance' ? 'active' : ''; ?>" onclick="switchTab('performance', event)">
             <i class="fas fa-tachometer-alt"></i> API Monitor
+        </button>
+        <button class="tab-button <?php echo $active_tab === 'autosync' ? 'active' : ''; ?>" onclick="switchTab('autosync', event)">
+            <i class="fas fa-sync"></i> Data Sync Monitor
         </button>
         <button class="tab-button <?php echo $active_tab === 'security' ? 'active' : ''; ?>" onclick="switchTab('security', event)">
             <i class="fas fa-shield-alt"></i> Security Monitor
