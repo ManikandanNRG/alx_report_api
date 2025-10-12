@@ -26,8 +26,6 @@ require_once(__DIR__ . '/../../config.php');
 require_once($CFG->libdir . '/adminlib.php');
 require_once(__DIR__ . '/lib.php');
 
-use local_alx_report_api\constants;
-
 // Require admin login
 admin_externalpage_setup('local_alx_report_api_company_settings');
 
@@ -180,7 +178,7 @@ if ($companyid && isset($companies[$companyid])) {
     
     // Critical Warning about Historical Data Population
     global $DB;
-    $reporting_records = $DB->count_records(constants::TABLE_REPORTING, ['companyid' => $companyid, 'is_deleted' => 0]);
+    $reporting_records = $DB->count_records('local_alx_api_reporting', ['companyid' => $companyid, 'is_deleted' => 0]);
     if ($reporting_records === 0) {
         echo '<div class="alert" style="background: #f8d7da; color: #721c24; border: 2px solid #f5c6cb; padding: 20px; margin: 20px 0; border-radius: 8px;">';
         echo '<h4 style="margin: 0 0 15px 0; font-weight: bold;">🚨 CRITICAL: Historical Data Population Required</h4>';

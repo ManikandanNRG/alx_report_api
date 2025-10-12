@@ -6,8 +6,6 @@
 
 require_once(__DIR__ . '/../../config.php');
 
-use local_alx_report_api\constants;
-
 echo "<!DOCTYPE html><html><head><title>ALX API Test</title></head><body>";
 echo "<h1>ALX Report API - Diagnostic Test</h1>";
 
@@ -24,12 +22,12 @@ try {
     // Check if our tables exist
     echo "<h2>Checking Plugin Tables...</h2>";
     $tables = [
-        constants::TABLE_LOGS,
-        constants::TABLE_SETTINGS,
-        constants::TABLE_REPORTING,
-        constants::TABLE_SYNC_STATUS,
-        constants::TABLE_CACHE,
-        constants::TABLE_ALERTS
+        'local_alx_api_logs',
+        'local_alx_api_settings',
+        'local_alx_api_reporting',
+        'local_alx_api_sync_status',
+        'local_alx_api_cache',
+        'local_alx_api_alerts'
     ];
     
     foreach ($tables as $table) {
@@ -43,8 +41,8 @@ try {
     
     // Check field names in logs table
     echo "<h2>Checking Field Names in logs table...</h2>";
-    if ($DB->get_manager()->table_exists(constants::TABLE_LOGS)) {
-        $columns = $DB->get_columns(constants::TABLE_LOGS);
+    if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
+        $columns = $DB->get_columns('local_alx_api_logs');
         echo "<p>Fields in local_alx_api_logs:</p><ul>";
         foreach ($columns as $column) {
             echo "<li>" . $column->name . " (" . $column->type . ")</li>";
