@@ -29,6 +29,8 @@ require_once(__DIR__ . '/../../config.php');
 require_once($CFG->libdir . '/adminlib.php');
 require_once(__DIR__ . '/lib.php');
 
+use local_alx_report_api\constants;
+
 // Require admin login
 admin_externalpage_setup('local_alx_report_api_control_center');
 
@@ -70,8 +72,8 @@ try {
     
     // Get total records from reporting table (same as monitoring dashboard)
     try {
-        if ($DB->get_manager()->table_exists('local_alx_api_reporting')) {
-            $total_records = $DB->count_records('local_alx_api_reporting', ['is_deleted' => 0]); // Only active records
+        if ($DB->get_manager()->table_exists(constants::TABLE_REPORTING)) {
+            $total_records = $DB->count_records(constants::TABLE_REPORTING, ['is_deleted' => 0]); // Only active records
             
             if ($total_records == 0) {
                 $health_issues[] = 'No reporting data';
@@ -88,12 +90,12 @@ try {
     
     // Get API calls today (check if table exists first)
     try {
-        if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
+        if ($DB->get_manager()->table_exists(constants::TABLE_LOGS)) {
             $today_start = mktime(0, 0, 0);
             // Use standard Moodle field name
             $time_field = 'timecreated';
             
-            $api_calls_today = $DB->count_records_select('local_alx_api_logs', "{$time_field} >= ?", [$today_start]);
+            $api_calls_today = $DB->count_records_select(constants::TABLE_LOGS, "{$time_field} >= ?", [$today_start]);
         } else {
             // Logs table missing is not critical - just means no API calls yet
             error_log('ALX Report API Control Center: local_alx_api_logs table does not exist');
@@ -255,8 +257,8 @@ echo '<div style="position: fixed; top: 0; right: 0; background: #10b981; color:
                             $success_rate = 100;
                             
                             // Only try to calculate detailed metrics if we have the necessary fields
-                            if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
-                                $table_info = $DB->get_columns('local_alx_api_logs');
+                            if ($DB->get_manager()->table_exists(constants::TABLE_LOGS)) {
+                                $table_info = $DB->get_columns(constants::TABLE_LOGS);
                                 
                                 // Check if we have response time tracking
                                 if (isset($table_info['response_time_ms'])) {
@@ -274,8 +276,8 @@ echo '<div style="position: fixed; top: 0; right: 0; background: #10b981; color:
                                 if (isset($table_info['error_message'])) {
                                     // Use standard Moodle field name
                                     $time_field = 'timecreated';
-                                    $total_calls = $DB->count_records_select('local_alx_api_logs', "{$time_field} >= ?", [time() - 86400]);
-                                    $error_calls = $DB->count_records_select('local_alx_api_logs', 
+                                    $total_calls = $DB->count_records_select(constants::TABLE_LOGS, "{$time_field} >= ?", [time() - 86400]);
+                                    $error_calls = $DB->count_records_select(constants::TABLE_LOGS, 
                                         "{$time_field} >= ? AND error_message IS NOT NULL AND error_message != ?", 
                                         [time() - 86400, '']
                                     );
@@ -363,12 +365,12 @@ echo '<div style="position: fixed; top: 0; right: 0; background: #10b981; color:
                     <div class="card-body">
                         <?php
                         // Get sync status information
-                        if ($DB->get_manager()->table_exists('local_alx_api_sync_status')) {
-                            $total_sync_entries = $DB->count_records('local_alx_api_sync_status');
-                            $recent_syncs = $DB->count_records_select('local_alx_api_sync_status', 
+                        if ($DB->get_manager()->table_exists(constants::TABLE_SYNC_STATUS)) {
+                            $total_sync_entries = $DB->count_records(constants::TABLE_SYNC_STATUS);
+                            $recent_syncs = $DB->count_records_select(constants::TABLE_SYNC_STATUS, 
                                 'last_sync_timestamp > ?', [time() - 86400]);
                             // Fetch the most recent sync timestamp
-                            $last_sync_timestamp = $DB->get_field_sql('SELECT MAX(last_sync_timestamp) FROM {local_alx_api_sync_status}');
+                            $last_sync_timestamp = $DB->get_field_sql('SELECT MAX(last_sync_timestamp) FROM {' . constants::TABLE_SYNC_STATUS . '}');
                         } else {
                             $total_sync_entries = 0;
                             $recent_syncs = 0;
@@ -380,12 +382,12 @@ echo '<div style="position: fixed; top: 0; right: 0; background: #10b981; color:
                         $company_chart_labels = [];
                         $company_chart_colors = ['#ef4444', '#3b82f6', '#10b981', '#fbbf24', '#ec4899', '#8b5cf6', '#f97316', '#06b6d4'];
                         
-                        if ($DB->get_manager()->table_exists('local_alx_api_reporting')) {
+                        if ($DB->get_manager()->table_exists(constants::TABLE_REPORTING)) {
                             $companies_list = local_alx_report_api_get_companies();
                             $color_index = 0;
                             
                             foreach ($companies_list as $comp) {
-                                $record_count = $DB->count_records('local_alx_api_reporting', [
+                                $record_count = $DB->count_records(constants::TABLE_REPORTING, [
                                     'companyid' => $comp->id,
                                     'is_deleted' => 0
                                 ]);
@@ -499,7 +501,7 @@ echo '<div style="position: fixed; top: 0; right: 0; background: #10b981; color:
                         $debug_info = [];
                         
                         try {
-                            if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
+                            if ($DB->get_manager()->table_exists(constants::TABLE_LOGS)) {
                                 // Use standard Moodle field name
                                 $time_field = 'timecreated';
                                 
@@ -519,7 +521,7 @@ echo '<div style="position: fixed; top: 0; right: 0; background: #10b981; color:
                                     }
                                     
                                     // Count today's API calls for this company
-                                    $company_calls_today = $DB->count_records_select('local_alx_api_logs',
+                                    $company_calls_today = $DB->count_records_select(constants::TABLE_LOGS,
                                         "{$time_field} >= ? AND company_shortname = ?",
                                         [$today_start, $company->shortname]
                                     );
@@ -837,7 +839,7 @@ echo '<div style="position: fixed; top: 0; right: 0; background: #10b981; color:
                                     }
                                 } else {
                                     // Empty value - delete the setting to use global default
-                                    $DB->delete_records('local_alx_api_settings', [
+                                    $DB->delete_records(constants::TABLE_SETTINGS, [
                                         'companyid' => $companyid,
                                         'setting_name' => 'rate_limit'
                                     ]);
@@ -904,7 +906,7 @@ echo '<div style="position: fixed; top: 0; right: 0; background: #10b981; color:
                     $current_settings = local_alx_report_api_get_company_settings($companyid);
                     
                     // Check reporting data status
-                    $reporting_records = $DB->count_records('local_alx_api_reporting', ['companyid' => $companyid, 'is_deleted' => 0]);
+                    $reporting_records = $DB->count_records(constants::TABLE_REPORTING, ['companyid' => $companyid, 'is_deleted' => 0]);
                     ?>
                     
                     <!-- Company Settings Form -->
@@ -1118,7 +1120,7 @@ echo '<div style="position: fixed; top: 0; right: 0; background: #10b981; color:
                                         <?php
                                         // Show current usage
                                         $today_start = mktime(0, 0, 0, date('n'), date('j'), date('Y'));
-                                        if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
+                                        if ($DB->get_manager()->table_exists(constants::TABLE_LOGS)) {
                                             // Use standard Moodle field name
                                             $time_field = 'timecreated';
                                             
@@ -1249,9 +1251,9 @@ echo '<div style="position: fixed; top: 0; right: 0; background: #10b981; color:
             
             // Get REAL cache statistics
             $cache_stats = [];
-            if ($DB->get_manager()->table_exists('local_alx_api_cache')) {
-                $total_cache = $DB->count_records('local_alx_api_cache');
-                $active_cache = $DB->count_records_select('local_alx_api_cache', 'expires_at > ?', [time()]);
+            if ($DB->get_manager()->table_exists(constants::TABLE_CACHE)) {
+                $total_cache = $DB->count_records(constants::TABLE_CACHE);
+                $active_cache = $DB->count_records_select(constants::TABLE_CACHE, 'expires_at > ?', [time()]);
                 $cache_stats['total_entries'] = $total_cache;
                 $cache_stats['active_entries'] = $active_cache;
                 // Calculate real hit rate
@@ -1262,7 +1264,7 @@ echo '<div style="position: fixed; top: 0; right: 0; background: #10b981; color:
             
             // Get REAL authentication statistics
             $auth_stats = [];
-            if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
+            if ($DB->get_manager()->table_exists(constants::TABLE_LOGS)) {
                 $today_start = mktime(0, 0, 0);
                 // Use standard Moodle field name
                 $time_field = 'timecreated';
@@ -1277,7 +1279,7 @@ echo '<div style="position: fixed; top: 0; right: 0; background: #10b981; color:
                 $total_calls = $api_analytics['summary']['total_calls'] ?? 0;
                 $error_calls = 0;
                 if (isset($table_info['error_message'])) {
-                    $error_calls = $DB->count_records_select('local_alx_api_logs', 
+                    $error_calls = $DB->count_records_select(constants::TABLE_LOGS, 
                         "{$time_field} >= ? AND error_message IS NOT NULL", [$today_start]);
                 }
                 $auth_stats['success_rate'] = $total_calls > 0 ? round((($total_calls - $error_calls) / $total_calls) * 100, 1) : 100;
@@ -1287,9 +1289,9 @@ echo '<div style="position: fixed; top: 0; right: 0; background: #10b981; color:
             
             // Get REAL database performance
             $db_performance = [];
-            if ($DB->get_manager()->table_exists('local_alx_api_reporting')) {
+            if ($DB->get_manager()->table_exists(constants::TABLE_REPORTING)) {
                 $start_time = microtime(true);
-                $sample_query = $DB->get_records('local_alx_api_reporting', [], '', 'id', 0, 1);
+                $sample_query = $DB->get_records(constants::TABLE_REPORTING, [], '', 'id', 0, 1);
                 $db_performance['response_time'] = round((microtime(true) - $start_time) * 1000, 2);
                 $db_performance['status'] = $db_performance['response_time'] < 100 ? 'excellent' : 
                                           ($db_performance['response_time'] < 500 ? 'good' : 'slow');
@@ -1332,10 +1334,10 @@ echo '<div style="position: fixed; top: 0; right: 0; background: #10b981; color:
         $calls_per_hour = $hours_since_midnight > 0 ? round($total_calls_today / $hours_since_midnight, 1) : 0;
         
         // If we have recent calls (last hour), use that for more accurate rate
-        if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
+        if ($DB->get_manager()->table_exists(constants::TABLE_LOGS)) {
             // Use standard Moodle field name
             $time_field = 'timecreated';
-            $last_hour_calls = $DB->count_records_select('local_alx_api_logs', 
+            $last_hour_calls = $DB->count_records_select(constants::TABLE_LOGS, 
                 "{$time_field} >= ?", [time() - 3600]);
             if ($last_hour_calls > 0) {
                 $calls_per_hour = $last_hour_calls; // Use last hour's actual count
@@ -1600,7 +1602,7 @@ echo '<div style="position: fixed; top: 0; right: 0; background: #10b981; color:
                     $hourly_data = [];
                     $today_start = mktime(0, 0, 0); // Start of today 00:00
                     
-                    if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
+                    if ($DB->get_manager()->table_exists(constants::TABLE_LOGS)) {
                         // Use standard Moodle field name
                         $time_field = 'timecreated';
                         
@@ -1609,7 +1611,7 @@ echo '<div style="position: fixed; top: 0; right: 0; background: #10b981; color:
                             $hour_start = $today_start + ($i * 3600); // Each hour
                             $hour_end = $hour_start + 3600; // Next hour
                             
-                            $count = $DB->count_records_select('local_alx_api_logs', 
+                            $count = $DB->count_records_select(constants::TABLE_LOGS, 
                                 "{$time_field} >= ? AND {$time_field} < ?", 
                                 [$hour_start, $hour_end]
                             );

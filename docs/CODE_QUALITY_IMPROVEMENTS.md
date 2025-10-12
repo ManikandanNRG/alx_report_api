@@ -79,4 +79,20 @@ $DB->get_records(local_alx_report_api_tables::LOGS);
 
 ---
 
-## Status: Ready to implement
+## Status Update
+
+### Issue 1: Duplicate Functions ✅ COMPLETE
+- Removed duplicate `updateFieldStates()` and `disableField()` functions
+- Saved ~100 lines of code
+- Fixed chart display issue caused by missing script tag
+
+### Issue 2: Table Name Constants ⏳ IN PROGRESS
+- ✅ Constants class created (`classes/constants.php`)
+- ⏳ Migration pending (271 occurrences to replace)
+- 📄 Implementation guide created (`docs/TABLE_CONSTANTS_IMPLEMENTATION.md`)
+- Strategy: Incremental migration as files are touched
+
+## Next Steps
+- Migrate core files (lib.php, externallib.php) when working on them
+- Use constants for all new code going forward
+- Complete migration over next few development sessions

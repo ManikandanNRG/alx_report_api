@@ -33,6 +33,8 @@
 require_once(__DIR__ . '/../../config.php');
 require_once(__DIR__ . '/lib.php');
 
+use local_alx_report_api\constants;
+
 // Security check
 require_login();
 require_capability('moodle/site:config', context_system::instance());
@@ -93,21 +95,21 @@ if ($cleanup_action === 'clear' && $cleanup_confirm) {
     try {
         if ($cleanup_companyid > 0) {
             // Clear specific company
-            $deleted_count = $DB->count_records('local_alx_api_reporting', ['companyid' => $cleanup_companyid]);
-            $DB->delete_records('local_alx_api_reporting', ['companyid' => $cleanup_companyid]);
+            $deleted_count = $DB->count_records(constants::TABLE_REPORTING, ['companyid' => $cleanup_companyid]);
+            $DB->delete_records(constants::TABLE_REPORTING, ['companyid' => $cleanup_companyid]);
             
             // Also clear related sync status and cache
-            $DB->delete_records('local_alx_api_sync_status', ['companyid' => $cleanup_companyid]);
-            $DB->delete_records('local_alx_api_cache', ['companyid' => $cleanup_companyid]);
+            $DB->delete_records(constants::TABLE_SYNC_STATUS, ['companyid' => $cleanup_companyid]);
+            $DB->delete_records(constants::TABLE_CACHE, ['companyid' => $cleanup_companyid]);
             
             $company_name = $DB->get_field('company', 'name', ['id' => $cleanup_companyid]);
             echo "Cleared $deleted_count records for company: $company_name\n";
         } else {
             // Clear all data
-            $deleted_count = $DB->count_records('local_alx_api_reporting');
-            $DB->delete_records('local_alx_api_reporting');
-            $DB->delete_records('local_alx_api_sync_status');
-            $DB->delete_records('local_alx_api_cache');
+            $deleted_count = $DB->count_records(constants::TABLE_REPORTING);
+            $DB->delete_records(constants::TABLE_REPORTING);
+            $DB->delete_records(constants::TABLE_SYNC_STATUS);
+            $DB->delete_records(constants::TABLE_CACHE);
             
             echo "Cleared $deleted_count records for all companies\n";
         }
@@ -977,7 +979,7 @@ echo '<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;50
 echo '<link rel="stylesheet" href="' . new moodle_url('/local/alx_report_api/styles/populate-reporting-table.css') . '">';
 
 // Check if reporting table exists
-if (!$DB->get_manager()->table_exists('local_alx_api_reporting')) {
+if (!$DB->get_manager()->table_exists(constants::TABLE_REPORTING)) {
     echo '<div class="populate-container">';
     echo '<div class="alert alert-danger">Reporting table does not exist. Please upgrade the plugin first.</div>';
     echo '</div>';
@@ -986,7 +988,7 @@ if (!$DB->get_manager()->table_exists('local_alx_api_reporting')) {
 }
 
 // Get current statistics
-$total_reporting_records = $DB->count_records('local_alx_api_reporting');
+$total_reporting_records = $DB->count_records(constants::TABLE_REPORTING);
 $companies = local_alx_report_api_get_companies();
 
 echo '<div class="populate-container">';
@@ -1025,7 +1027,7 @@ echo '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(
 echo '<div><strong style="color: #64748b;">Companies Available:</strong><br><span style="font-size: 24px; color: #2d3748; font-weight: 600;">' . count($companies) . '</span></div>';
 echo '<div><strong style="color: #64748b;">Reporting Records:</strong><br><span style="font-size: 24px; color: #2d3748; font-weight: 600;">' . number_format($total_reporting_records) . '</span></div>';
 if ($total_reporting_records > 0) {
-    $last_update = $DB->get_field_select('local_alx_api_reporting', 'MAX(last_updated)', '1=1');
+    $last_update = $DB->get_field_select(constants::TABLE_REPORTING, 'MAX(last_updated)', '1=1');
     echo '<div><strong style="color: #64748b;">Last Update:</strong><br><span style="font-size: 18px; color: #2d3748;">' . ($last_update ? date('Y-m-d H:i:s', $last_update) : 'Never') . '</span></div>';
     echo '<div><strong style="color: #64748b;">Status:</strong><br><span style="display: inline-block; padding: 6px 12px; background: #d1fae5; color: #065f46; border-radius: 12px; font-size: 14px; font-weight: 600; margin-top: 8px;">✓ Data Available</span></div>';
 } else {
@@ -1070,7 +1072,7 @@ echo '<div class="custom-divider"></div>';
 
 // Individual company checkboxes
 foreach ($companies as $company) {
-    $existing_records = $DB->count_records('local_alx_api_reporting', ['companyid' => $company->id]);
+    $existing_records = $DB->count_records(constants::TABLE_REPORTING, ['companyid' => $company->id]);
     echo '<div class="company-item" id="item-' . $company->id . '">';
     echo '<div class="form-check">';
     echo '<input type="checkbox" name="company_ids[]" value="' . $company->id . '" id="company_' . $company->id . '" class="form-check-input company-checkbox" onchange="updateDropdownText(); updateItemStyle(' . $company->id . ')">';
@@ -1143,7 +1145,7 @@ if ($total_reporting_records > 0) {
     echo '<select name="cleanup_companyid" id="cleanup_companyid" style="width: 100%; padding: 10px 15px; border: 2px solid #e9ecef; border-radius: 8px; font-size: 15px; background: white;">';
     echo '<option value="0">⚠️ All Companies (Clear Everything)</option>';
     foreach ($companies as $company) {
-        $company_records = $DB->count_records('local_alx_api_reporting', ['companyid' => $company->id]);
+        $company_records = $DB->count_records(constants::TABLE_REPORTING, ['companyid' => $company->id]);
         echo '<option value="' . $company->id . '">' . htmlspecialchars($company->name) . ' (' . number_format($company_records) . ' records)</option>';
     }
     echo '</select>';

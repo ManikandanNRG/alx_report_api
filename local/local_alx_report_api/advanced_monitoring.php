@@ -26,6 +26,8 @@ require_once(__DIR__ . '/../../config.php');
 require_once($CFG->libdir . '/adminlib.php');
 require_once(__DIR__ . '/lib.php');
 
+use local_alx_report_api\constants;
+
 // Check permissions.
 admin_externalpage_setup('local_alx_report_api_advanced_monitoring');
 require_capability('moodle/site:config', context_system::instance());
@@ -151,8 +153,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
                 // Test 3: Reporting Table
                 $reporting_start = microtime(true);
                 try {
-                    if ($DB->get_manager()->table_exists('local_alx_api_reporting')) {
-                        $reporting_count = $DB->count_records('local_alx_api_reporting');
+                    if ($DB->get_manager()->table_exists(constants::TABLE_REPORTING)) {
+                        $reporting_count = $DB->count_records(constants::TABLE_REPORTING);
                         $reporting_time = round((microtime(true) - $reporting_start) * 1000, 1);
                         $test_results[] = [
                             'endpoint' => 'Reporting Table', 
@@ -257,12 +259,12 @@ $last_24h = time() - 86400;
 
 try {
     // Check if API logs table exists
-    if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
+    if ($DB->get_manager()->table_exists(constants::TABLE_LOGS)) {
         // Use standard Moodle field name
         $time_field = 'timecreated';
         
         // Total API calls in last 24 hours
-        $api_performance['total_calls_24h'] = $DB->count_records_select('local_alx_api_logs', 
+        $api_performance['total_calls_24h'] = $DB->count_records_select(constants::TABLE_LOGS, 
             "{$time_field} >= ?", [$last_24h]);
         
         // Unique API users today
@@ -286,7 +288,7 @@ try {
         
         // Calculate success rate and error rate
         if (isset($table_info['status'])) {
-            $success_count = $DB->count_records_select('local_alx_api_logs', 
+            $success_count = $DB->count_records_select(constants::TABLE_LOGS, 
                 "{$time_field} >= ? AND status = ?", [$last_24h, 'success']);
             $total_requests = $api_performance['total_calls_24h'];
             
@@ -304,7 +306,7 @@ try {
         
         // Count timeout errors (assuming response_time > 30000ms is timeout)
         if (isset($table_info['response_time'])) {
-            $api_performance['timeout_errors'] = $DB->count_records_select('local_alx_api_logs', 
+            $api_performance['timeout_errors'] = $DB->count_records_select(constants::TABLE_LOGS, 
                 "{$time_field} >= ? AND response_time > 30000", [$last_24h]);
         } else {
             $api_performance['timeout_errors'] = 0;
@@ -354,7 +356,7 @@ try {
     }
     
     // Count rate limit violations (users who exceeded daily limit)
-    if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
+    if ($DB->get_manager()->table_exists(constants::TABLE_LOGS)) {
         // Use standard Moodle field name
         $time_field = 'timecreated';
         
@@ -379,12 +381,12 @@ $hourly_incoming = [];
 $hourly_success = [];
 $hourly_errors = [];
 
-if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
+if ($DB->get_manager()->table_exists(constants::TABLE_LOGS)) {
     // Use standard Moodle field name
     $time_field = 'timecreated';
     
     // Check if table has any data
-    $has_data = $DB->count_records('local_alx_api_logs') > 0;
+    $has_data = $DB->count_records(constants::TABLE_LOGS) > 0;
     
     for ($i = 23; $i >= 0; $i--) {
         // Create clean hourly timestamps (00:00, 01:00, 02:00, etc.)
@@ -397,14 +399,14 @@ if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
         $hour_end = $hour_start + 3600;
         
         // Get hourly request counts
-        $hour_total = $DB->count_records_select('local_alx_api_logs', 
+        $hour_total = $DB->count_records_select(constants::TABLE_LOGS, 
             "{$time_field} >= ? AND {$time_field} < ?", [$hour_start, $hour_end]);
         
         $hour_success = 0;
         $hour_errors = 0;
         
         if (isset($table_info['status'])) {
-            $hour_success = $DB->count_records_select('local_alx_api_logs', 
+            $hour_success = $DB->count_records_select(constants::TABLE_LOGS, 
                 "{$time_field} >= ? AND {$time_field} < ? AND status = ?", 
                 [$hour_start, $hour_end, 'success']);
             $hour_errors = $hour_total - $hour_success;
@@ -454,7 +456,7 @@ $company_intelligence = [];
 foreach ($companies as $company) {
     try {
         // Check if company has API configuration
-        if ($DB->record_exists('local_alx_api_settings', ['companyid' => $company->id])) {
+        if ($DB->record_exists(constants::TABLE_SETTINGS, ['companyid' => $company->id])) {
             $company_data = [
                 'name' => $company->name,
                 'shortname' => $company->shortname,
@@ -469,7 +471,7 @@ foreach ($companies as $company) {
             ];
             
             // Get company's API usage today
-            if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
+            if ($DB->get_manager()->table_exists(constants::TABLE_LOGS)) {
                 // Use standard Moodle field name
                 $time_field = 'timecreated';
                 
@@ -489,7 +491,7 @@ foreach ($companies as $company) {
                 }
                 
                 // Get request count
-                $company_data['requests_today'] = $DB->count_records_select('local_alx_api_logs', 
+                $company_data['requests_today'] = $DB->count_records_select(constants::TABLE_LOGS, 
                     $company_where, $company_params);
                 
                 // Calculate remaining limit
@@ -525,7 +527,7 @@ foreach ($companies as $company) {
                 
                 // Calculate success rate
                 if (isset($table_info['status'])) {
-                    $success_count = $DB->count_records_select('local_alx_api_logs', 
+                    $success_count = $DB->count_records_select(constants::TABLE_LOGS, 
                         $company_where . " AND status = ?", 
                         array_merge($company_params, ['success']));
                     
@@ -558,8 +560,8 @@ $response_time_distribution = [
 ];
 
 try {
-    if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
-        $table_info = $DB->get_columns('local_alx_api_logs');
+    if ($DB->get_manager()->table_exists(constants::TABLE_LOGS)) {
+        $table_info = $DB->get_columns(constants::TABLE_LOGS);
         
         if (isset($table_info['response_time'])) {
             // Use standard Moodle field name
@@ -612,8 +614,8 @@ try {
     $rate_limiting_real['burst_limit'] = get_config('local_alx_report_api', 'burst_limit') ?: 0;
     
     // Calculate blocked requests (requests that would exceed limits)
-    if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
-        $table_info = $DB->get_columns('local_alx_api_logs');
+    if ($DB->get_manager()->table_exists(constants::TABLE_LOGS)) {
+        $table_info = $DB->get_columns(constants::TABLE_LOGS);
         
         if (isset($table_info['status'])) {
             // Use standard Moodle field name
@@ -633,7 +635,7 @@ try {
             $hour_start = mktime($hour, 0, 0);
             $hour_end = $hour_start + 3600;
             
-            $hour_count = $DB->count_records_select('local_alx_api_logs', 
+            $hour_count = $DB->count_records_select(constants::TABLE_LOGS, 
                 "{$time_field} >= ? AND {$time_field} < ?", [$hour_start, $hour_end]);
             
             $hourly_counts[$hour] = $hour_count;
@@ -662,10 +664,10 @@ foreach ($company_intelligence as $key => $company) {
             'total_requests' => $company['requests_today']
         ];
         
-        if ($DB->get_manager()->table_exists('local_alx_api_cache') && $company['requests_today'] > 0) {
+        if ($DB->get_manager()->table_exists(constants::TABLE_CACHE) && $company['requests_today'] > 0) {
             // Count cache hits for this company today
             $cache_hits_sql = "SELECT COUNT(*) as cache_hits 
-                              FROM {local_alx_api_cache} 
+                              FROM {" . constants::TABLE_CACHE . "} 
                               WHERE companyid = ? AND timecreated >= ?";
             $cache_result = $DB->get_record_sql($cache_hits_sql, [$company['shortname'], $today_start]);
             $company_cache_data['cache_hits'] = $cache_result ? $cache_result->cache_hits : 0;
@@ -695,7 +697,7 @@ foreach ($company_intelligence as $key => $company) {
         }
         
         // Determine real API response mode based on company settings
-        $api_settings = $DB->get_record('local_alx_api_settings', ['companyid' => $company['shortname']]);
+        $api_settings = $DB->get_record(constants::TABLE_SETTINGS, ['companyid' => $company['shortname']]);
         if ($api_settings) {
             $company_intelligence[$key]['api_mode'] = 'Configured';
         } else {

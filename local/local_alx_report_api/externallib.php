@@ -27,6 +27,8 @@ defined('MOODLE_INTERNAL') || die();
 require_once($CFG->libdir . '/externallib.php');
 require_once(__DIR__ . '/lib.php');
 
+use local_alx_report_api\constants;
+
 /**
  * External functions for the ALX Report API plugin.
  */
@@ -205,12 +207,12 @@ class local_alx_report_api_external extends external_api {
         
         // Count requests from this user today
         $request_count = 0;
-        if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
+        if ($DB->get_manager()->table_exists(constants::TABLE_LOGS)) {
             // Use standard Moodle field name
             $time_field = 'timecreated';
             
             $request_count = $DB->count_records_select(
-                'local_alx_api_logs', 
+                constants::TABLE_LOGS, 
                 "userid = ? AND {$time_field} >= ?", 
                 [$userid, $today_start]
             );
@@ -233,7 +235,7 @@ class local_alx_report_api_external extends external_api {
                 }
                 
                 // Log to API logs table
-                if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
+                if ($DB->get_manager()->table_exists(constants::TABLE_LOGS)) {
                     $log = new stdClass();
                     $log->userid = $userid;
                     $log->company_shortname = $company_shortname;
@@ -245,11 +247,11 @@ class local_alx_report_api_external extends external_api {
                     $log->ip_address = $_SERVER['REMOTE_ADDR'] ?? '';
                     $log->user_agent = $_SERVER['HTTP_USER_AGENT'] ?? '';
                     
-                    $DB->insert_record('local_alx_api_logs', $log);
+                    $DB->insert_record(constants::TABLE_LOGS, $log);
                 }
                 
                 // Also create an alert for the Security tab
-                if ($DB->get_manager()->table_exists('local_alx_api_alerts')) {
+                if ($DB->get_manager()->table_exists(constants::TABLE_ALERTS)) {
                     $user = $DB->get_record('user', ['id' => $userid], 'username, firstname, lastname');
                     $username = $user ? fullname($user) : 'Unknown';
                     
@@ -262,7 +264,7 @@ class local_alx_report_api_external extends external_api {
                     $alert->resolved = 0;
                     $alert->timecreated = time();
                     
-                    $DB->insert_record('local_alx_api_alerts', $alert);
+                    $DB->insert_record(constants::TABLE_ALERTS, $alert);
                 }
             }
             
@@ -328,7 +330,7 @@ class local_alx_report_api_external extends external_api {
     private static function log_security_event($userid, $companyid, $event_type, $status, $details = '') {
         global $DB;
         
-        if (!$DB->get_manager()->table_exists('local_alx_api_logs')) {
+        if (!$DB->get_manager()->table_exists(constants::TABLE_LOGS)) {
             return;
         }
         
@@ -346,7 +348,7 @@ class local_alx_report_api_external extends external_api {
         $log->response_data = '';
         $log->timecreated = time();
         
-        $DB->insert_record('local_alx_api_logs', $log);
+        $DB->insert_record(constants::TABLE_LOGS, $log);
     }
 
     /**
@@ -719,7 +721,7 @@ class local_alx_report_api_external extends external_api {
             if (empty($records)) {
                 self::debug_log("No records found - checking if reporting table is populated");
                 
-                $total_records = $DB->count_records('local_alx_api_reporting', [
+                $total_records = $DB->count_records(constants::TABLE_REPORTING, [
                     'companyid' => $companyid,
                     'is_deleted' => 0
                 ]);
@@ -1043,7 +1045,7 @@ class local_alx_report_api_external extends external_api {
             
         } else {
             // Check if reporting table has any data for this company
-            $total_records = $DB->count_records('local_alx_api_reporting', [
+            $total_records = $DB->count_records(constants::TABLE_REPORTING, [
                 'companyid' => $companyid,
                 'is_deleted' => 0
             ]);

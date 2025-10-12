@@ -13,6 +13,8 @@ require_once(__DIR__ . '/../../config.php');
 require_once($CFG->libdir . '/adminlib.php');
 require_once(__DIR__ . '/lib.php');
 
+use local_alx_report_api\constants;
+
 // Require admin login
 require_login();
 require_capability('moodle/site:config', context_system::instance());
@@ -199,8 +201,8 @@ echo '<div style="margin-top: 40px;">
     <h3>📊 Recent Alerts (Last 10)</h3>';
 
 global $DB;
-if ($DB->get_manager()->table_exists('local_alx_api_alerts')) {
-    $recent_alerts = $DB->get_records('local_alx_api_alerts', null, 'timecreated DESC', '*', 0, 10);
+if ($DB->get_manager()->table_exists(constants::TABLE_ALERTS)) {
+    $recent_alerts = $DB->get_records(constants::TABLE_ALERTS, null, 'timecreated DESC', '*', 0, 10);
     
     if ($recent_alerts) {
         echo '<table class="table table-striped" style="margin-top: 20px;">

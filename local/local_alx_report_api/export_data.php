@@ -25,6 +25,8 @@
 require_once(__DIR__ . '/../../config.php');
 require_once(__DIR__ . '/lib.php');
 
+use local_alx_report_api\constants;
+
 // Check permissions.
 require_login();
 require_capability('moodle/site:config', context_system::instance());
@@ -101,7 +103,7 @@ if ($format === 'csv' || $format === 'json') {
     // Get reporting data if table exists
     $reporting_data = [];
     $total_records = 0;
-    if ($DB->get_manager()->table_exists('local_alx_api_reporting')) {
+    if ($DB->get_manager()->table_exists(constants::TABLE_REPORTING)) {
         try {
             // Build WHERE clause
             $where_conditions = ['timecreated > ?'];
@@ -302,12 +304,12 @@ echo $OUTPUT->header();
         $preview_companies = $DB->count_records('company');
         $preview_tokens = $DB->count_records('external_tokens');
         $preview_reports = 0;
-        $table_exists = $DB->get_manager()->table_exists('local_alx_api_reporting');
+        $table_exists = $DB->get_manager()->table_exists(constants::TABLE_REPORTING);
         $table_status = '';
         
         if ($table_exists) {
             try {
-                $total_records = $DB->count_records('local_alx_api_reporting');
+                $total_records = $DB->count_records(constants::TABLE_REPORTING);
                 $preview_reports = $DB->count_records_sql("
                     SELECT COUNT(*) FROM {local_alx_api_reporting} 
                     WHERE timecreated > ?

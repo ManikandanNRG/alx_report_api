@@ -26,6 +26,8 @@ require_once('../../config.php');
 require_once($CFG->libdir.'/adminlib.php');
 require_once($CFG->dirroot.'/local/alx_report_api/lib.php');
 
+use local_alx_report_api\constants;
+
 // Check permissions.
 admin_externalpage_setup('local_alx_report_api_auto_sync_status');
 require_capability('moodle/site:config', context_system::instance());
@@ -69,17 +71,17 @@ $companies = local_alx_report_api_get_companies();
 $total_companies = count($companies);
 $companies_with_api = 0;
 foreach ($companies as $company) {
-    if ($DB->record_exists('local_alx_api_settings', ['companyid' => $company->id])) {
+    if ($DB->record_exists(constants::TABLE_SETTINGS, ['companyid' => $company->id])) {
         $companies_with_api++;
     }
 }
 
 // Get historical sync data (last 7 days) - LIVE DATA
 $historical_data = [];
-if ($DB->get_manager()->table_exists('local_alx_api_sync_status')) {
+if ($DB->get_manager()->table_exists(constants::TABLE_SYNC_STATUS)) {
     try {
         // Check what columns exist in the table
-        $table_info = $DB->get_columns('local_alx_api_sync_status');
+        $table_info = $DB->get_columns(constants::TABLE_SYNC_STATUS);
         $has_last_sync_status = isset($table_info['last_sync_status']);
         $has_last_sync_timestamp = isset($table_info['last_sync_timestamp']);
         
@@ -89,13 +91,13 @@ if ($DB->get_manager()->table_exists('local_alx_api_sync_status')) {
                 $day_start = time() - ($i * 24 * 3600);
                 $day_end = $day_start + (24 * 3600);
                 
-                $daily_syncs = $DB->count_records_select('local_alx_api_sync_status', 
+                $daily_syncs = $DB->count_records_select(constants::TABLE_SYNC_STATUS, 
                     'last_sync_timestamp >= ? AND last_sync_timestamp < ?', 
                     [$day_start, $day_end]);
                 
                 $successful_syncs = 0;
                 if ($has_last_sync_status) {
-                    $successful_syncs = $DB->count_records_select('local_alx_api_sync_status', 
+                    $successful_syncs = $DB->count_records_select(constants::TABLE_SYNC_STATUS, 
                         'last_sync_timestamp >= ? AND last_sync_timestamp < ? AND last_sync_status = ?', 
                         [$day_start, $day_end, 'success']);
                 } else {
