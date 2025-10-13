@@ -485,9 +485,9 @@ echo '<div style="position: fixed; top: 0; right: 0; background: #10b981; color:
                     <div class="card-header" style="border-bottom: 1px solid rgba(31,41,55,0.1); background: rgba(255,255,255,0.1);">
                         <h3 class="card-title" style="color: #1f2937; margin: 0;">
                             <i class="fas fa-shield-alt" style="color: #10b981;"></i>
-                            Performance Status
+                            Security Health Monitor
                         </h3>
-                        <p class="card-subtitle" style="color: #6b7280; margin: 4px 0 0 0;">API security and access control</p>
+                        <p class="card-subtitle" style="color: #6b7280; margin: 4px 0 0 0;">Real-time security monitoring and access control</p>
                     </div>
                     <div class="card-body">
                         <?php
@@ -558,13 +558,48 @@ echo '<div style="position: fixed; top: 0; right: 0; background: #10b981; color:
                         // 1. Rate Limiting Status - Check if rate limiting is configured and active
                         $rate_limit_global = get_config('local_alx_report_api', 'rate_limit');
                         $rate_limit_active = !empty($rate_limit_global) && $rate_limit_global > 0;
-                        $rate_limit_status = $rate_limit_active ? 'Active' : 'Disabled';
-                        $rate_limit_color = $rate_limit_active ? '#10b981' : '#ef4444';
+                        
+                        // Count companies with rate limit configured
+                        $companies_with_limit = 0;
+                        $total_companies = 0;
+                        
+                        try {
+                            $companies = local_alx_report_api_get_companies();
+                            if (is_array($companies)) {
+                                $total_companies = count($companies);
+                                foreach ($companies as $company) {
+                                    $company_settings = local_alx_report_api_get_company_settings($company->id);
+                                    if (!empty($company_settings['rate_limit']) && $company_settings['rate_limit'] > 0) {
+                                        $companies_with_limit++;
+                                    }
+                                }
+                            }
+                        } catch (Exception $e) {
+                            error_log('Rate limit count error: ' . $e->getMessage());
+                        }
+                        
+                        // Build status display
+                        if ($total_companies > 0) {
+                            $rate_limit_status = "{$companies_with_limit}/{$total_companies}";
+                            $rate_limit_percentage = ($companies_with_limit / $total_companies) * 100;
+                            if ($rate_limit_percentage == 100) {
+                                $rate_limit_color = '#10b981'; // Green - all protected
+                            } elseif ($rate_limit_percentage >= 50) {
+                                $rate_limit_color = '#f59e0b'; // Yellow - some protected
+                            } else {
+                                $rate_limit_color = '#ef4444'; // Red - few protected
+                            }
+                        } else {
+                            $rate_limit_status = $rate_limit_active ? 'Active' : 'Disabled';
+                            $rate_limit_color = $rate_limit_active ? '#10b981' : '#ef4444';
+                        }
                         
                         // 2. Token Security Status - Check for expired tokens and HTTPS
                         $token_security_status = 'Secure';
                         $token_security_color = '#10b981';
                         $token_issues = [];
+                        $valid_tokens = 0;
+                        $total_tokens = 0;
                         
                         try {
                             // Check if HTTPS is enabled
@@ -573,7 +608,7 @@ echo '<div style="position: fixed; top: 0; right: 0; background: #10b981; color:
                                 $token_issues[] = 'HTTP (not HTTPS)';
                             }
                             
-                            // Check for expired tokens
+                            // Count tokens and check for expired ones
                             if ($DB->get_manager()->table_exists('external_tokens')) {
                                 $service_id = $DB->get_field('external_services', 'id', ['shortname' => 'alx_report_api_custom']);
                                 if (!$service_id) {
@@ -581,21 +616,47 @@ echo '<div style="position: fixed; top: 0; right: 0; background: #10b981; color:
                                 }
                                 
                                 if ($service_id) {
-                                    $expired_tokens = $DB->count_records_select('external_tokens',
-                                        'externalserviceid = ? AND validuntil > 0 AND validuntil < ?',
-                                        [$service_id, time()]
-                                    );
+                                    // Get all tokens for this service
+                                    $tokens = $DB->get_records('external_tokens', ['externalserviceid' => $service_id]);
+                                    if (is_array($tokens) || is_object($tokens)) {
+                                        $total_tokens = count($tokens);
+                                        
+                                        foreach ($tokens as $token) {
+                                            // Check if token is valid (not expired or no expiry set)
+                                            if (empty($token->validuntil) || $token->validuntil > time()) {
+                                                $valid_tokens++;
+                                            }
+                                        }
+                                    }
                                     
+                                    // Count expired tokens for issues
+                                    $expired_tokens = $total_tokens - $valid_tokens;
                                     if ($expired_tokens > 0) {
                                         $token_issues[] = "{$expired_tokens} expired token(s)";
                                     }
                                 }
                             }
                             
-                            // Set status based on issues found
-                            if (count($token_issues) > 0) {
-                                $token_security_status = 'Warning';
-                                $token_security_color = '#f59e0b';
+                            // Build status display
+                            if ($total_tokens > 0) {
+                                $token_security_status = "{$valid_tokens}/{$total_tokens}";
+                                $token_percentage = ($valid_tokens / $total_tokens) * 100;
+                                if ($token_percentage == 100) {
+                                    $token_security_color = '#10b981'; // Green - all valid
+                                } elseif ($token_percentage >= 80) {
+                                    $token_security_color = '#f59e0b'; // Yellow - most valid
+                                } else {
+                                    $token_security_color = '#ef4444'; // Red - many expired
+                                }
+                            } else {
+                                // No tokens found, show status based on issues
+                                if (count($token_issues) > 0) {
+                                    $token_security_status = 'Warning';
+                                    $token_security_color = '#f59e0b';
+                                } else {
+                                    $token_security_status = 'No Tokens';
+                                    $token_security_color = '#6b7280';
+                                }
                             }
                         } catch (Exception $e) {
                             $token_security_status = 'Unknown';
@@ -680,32 +741,41 @@ echo '<div style="position: fixed; top: 0; right: 0; background: #10b981; color:
                         <!-- Rate Limiting Status -->
                         <div style="margin-bottom: 16px;">
                             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                                <strong style="color: #1f2937;">Rate Limiting:</strong>
+                                <strong style="color: #1f2937;">📊 Rate Limited API:</strong>
                                 <span style="background: <?php echo $rate_limit_color; ?>; color: white; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 600;">
                                     <?php echo $rate_limit_status; ?>
                                 </span>
+                            </div>
+                            <div style="font-size: 11px; color: #6b7280; margin-left: 4px;">
+                                (Companies with rate limit configured)
                             </div>
                         </div>
 
                         <!-- Token Security -->
                         <div style="margin-bottom: 16px;">
                             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                                <strong style="color: #1f2937;">Token Security:</strong>
+                                <strong style="color: #1f2937;">🔑 Valid Tokens:</strong>
                                 <span style="background: <?php echo $token_security_color; ?>; color: white; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 600;" 
                                       title="<?php echo !empty($token_issues) ? implode(', ', $token_issues) : 'All tokens are secure'; ?>">
                                     <?php echo $token_security_status; ?>
                                 </span>
+                            </div>
+                            <div style="font-size: 11px; color: #6b7280; margin-left: 4px;">
+                                (Active tokens / Total tokens)
                             </div>
                         </div>
 
                         <!-- Access Control -->
                         <div style="margin-bottom: 20px;">
                             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                                <strong style="color: #1f2937;">Access Control:</strong>
+                                <strong style="color: #1f2937;">🔐 REST API Access Control:</strong>
                                 <span style="background: <?php echo $access_control_color; ?>; color: white; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 600;"
                                       title="<?php echo !empty($access_issues) ? implode(', ', $access_issues) : 'All access controls are enabled'; ?>">
                                     <?php echo $access_control_status; ?>
                                 </span>
+                            </div>
+                            <div style="font-size: 11px; color: #6b7280; margin-left: 4px;">
+                                (Web services status)
                             </div>
                         </div>
 
