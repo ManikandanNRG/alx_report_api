@@ -2932,47 +2932,7 @@ function local_alx_report_api_analyze_performance_alerts($overall_stats, $endpoi
     return $alerts;
 }
 
-/**
- * Enhanced logging function with response time and error tracking.
- */
-function local_alx_report_api_log_api_call($userid, $company_shortname, $endpoint, $record_count = 0, $error_message = null, $response_time_ms = null, $additional_data = []) {
-    global $DB;
-    
-    try {
-        // Check if logs table exists
-        if (!$DB->get_manager()->table_exists(\local_alx_report_api\constants::TABLE_LOGS)) {
-            error_log('ALX Report API: local_alx_api_logs table does not exist - cannot log API call');
-            return;
-        }
-        
-        $log = new stdClass();
-        $log->userid = $userid;
-        $log->company_shortname = $company_shortname;
-        $log->endpoint = $endpoint;
-        $log->record_count = $record_count;
-        $log->error_message = $error_message;
-        $log->response_time_ms = $response_time_ms;
-        $log->timeaccessed = time();
-        $log->ip_address = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
-        $log->user_agent = substr($_SERVER['HTTP_USER_AGENT'] ?? 'unknown', 0, 255);
-        
-        // Store additional data as JSON
-        if (!empty($additional_data)) {
-            $log->additional_data = json_encode($additional_data);
-        }
-        
-        $DB->insert_record(\local_alx_report_api\constants::TABLE_LOGS, $log);
-        
-        // Check if this error should trigger an immediate alert
-        if ($error_message && !empty($error_message)) {
-            local_alx_report_api_check_error_alert($userid, $company_shortname, $endpoint, $error_message, $response_time_ms);
-        }
-        
-    } catch (Exception $e) {
-        // Don't let logging errors break the API
-        error_log("ALX Report API: Failed to log API call: " . $e->getMessage());
-    }
-}
+
 
 /**
  * Check if an error should trigger an immediate alert.
@@ -4413,5 +4373,49 @@ function local_alx_report_api_get_service_status() {
     } catch (Exception $e) {
         $status['issues'][] = 'Error checking service status: ' . $e->getMessage();
         return $status;
+    }
+}
+
+/**
+ * Log an API call to the logs table.
+ *
+ * @param int $userid User ID making the call
+ * @param string $company_shortname Company shortname
+ * @param string $endpoint API endpoint called
+ * @param int $record_count Number of records returned
+ * @param string|null $error_message Error message if any
+ * @param float|null $response_time_ms Response time in milliseconds
+ * @param array $additional_data Additional data to log
+ */
+function local_alx_report_api_log_api_call($userid, $company_shortname, $endpoint, $record_count = 0, 
+    $error_message = null, $response_time_ms = null, $additional_data = []) {
+    global $DB;
+
+    try {
+        if (!$DB->get_manager()->table_exists(\local_alx_report_api\constants::TABLE_LOGS)) {
+            return;
+        }
+
+        $log = new stdClass();
+        $log->userid = $userid;
+        $log->company_shortname = $company_shortname;
+        $log->endpoint = $endpoint;
+        $log->record_count = $record_count;
+        $log->error_message = $error_message;
+        $log->response_time_ms = $response_time_ms;
+        $log->timecreated = time(); // Fixed: Use timecreated instead of timeaccessed
+        $log->ip_address = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+        $log->user_agent = substr($_SERVER['HTTP_USER_AGENT'] ?? 'unknown', 0, 255);
+
+        // Store additional data as JSON
+        if (!empty($additional_data)) {
+            $log->additional_data = json_encode($additional_data);
+        }
+
+        $DB->insert_record(\local_alx_report_api\constants::TABLE_LOGS, $log);
+
+    } catch (Exception $e) {
+        // Don't let logging errors break the API
+        error_log("ALX Report API: Failed to log API call: " . $e->getMessage());
     }
 }
