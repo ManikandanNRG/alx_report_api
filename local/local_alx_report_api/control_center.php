@@ -600,6 +600,8 @@ echo '<div style="position: fixed; top: 0; right: 0; background: #10b981; color:
                         $token_issues = [];
                         $valid_tokens = 0;
                         $total_tokens = 0;
+                        $expiring_soon_tokens = 0;
+                        $expiring_soon_details = [];
                         
                         try {
                             // Check if HTTPS is enabled
@@ -621,10 +623,25 @@ echo '<div style="position: fixed; top: 0; right: 0; background: #10b981; color:
                                     if (is_array($tokens) || is_object($tokens)) {
                                         $total_tokens = count($tokens);
                                         
+                                        // Define expiring soon threshold (30 days)
+                                        $expiring_soon_threshold = time() + (30 * 86400); // 30 days from now
+                                        
                                         foreach ($tokens as $token) {
                                             // Check if token is valid (not expired or no expiry set)
                                             if (empty($token->validuntil) || $token->validuntil > time()) {
                                                 $valid_tokens++;
+                                                
+                                                // Check if token is expiring soon (within 30 days)
+                                                if (!empty($token->validuntil) && $token->validuntil <= $expiring_soon_threshold) {
+                                                    $expiring_soon_tokens++;
+                                                    $days_until_expiry = ceil(($token->validuntil - time()) / 86400);
+                                                    
+                                                    // Get user info for the token
+                                                    $token_user = $DB->get_record('user', ['id' => $token->userid], 'id, username, firstname, lastname');
+                                                    $user_display = $token_user ? fullname($token_user) . ' (' . $token_user->username . ')' : 'User ID: ' . $token->userid;
+                                                    
+                                                    $expiring_soon_details[] = $user_display . ' - expires in ' . $days_until_expiry . ' day(s)';
+                                                }
                                             }
                                         }
                                     }
@@ -634,6 +651,11 @@ echo '<div style="position: fixed; top: 0; right: 0; background: #10b981; color:
                                     if ($expired_tokens > 0) {
                                         $token_issues[] = "{$expired_tokens} expired token(s)";
                                     }
+                                    
+                                    // Add expiring soon to issues
+                                    if ($expiring_soon_tokens > 0) {
+                                        $token_issues[] = "{$expiring_soon_tokens} token(s) expiring within 30 days";
+                                    }
                                 }
                             }
                             
@@ -641,12 +663,21 @@ echo '<div style="position: fixed; top: 0; right: 0; background: #10b981; color:
                             if ($total_tokens > 0) {
                                 $token_security_status = "{$valid_tokens}/{$total_tokens}";
                                 $token_percentage = ($valid_tokens / $total_tokens) * 100;
-                                if ($token_percentage == 100) {
-                                    $token_security_color = '#10b981'; // Green - all valid
-                                } elseif ($token_percentage >= 80) {
-                                    $token_security_color = '#f59e0b'; // Yellow - most valid
+                                
+                                // Color logic with expiring soon check
+                                if ($expired_tokens > 0) {
+                                    // Red if any tokens are already expired
+                                    if ($token_percentage < 80) {
+                                        $token_security_color = '#ef4444'; // Red - many expired
+                                    } else {
+                                        $token_security_color = '#f59e0b'; // Yellow - some expired
+                                    }
+                                } elseif ($expiring_soon_tokens > 0) {
+                                    // Yellow if tokens are expiring soon (but none expired yet)
+                                    $token_security_color = '#f59e0b'; // Yellow - expiring soon warning
                                 } else {
-                                    $token_security_color = '#ef4444'; // Red - many expired
+                                    // Green - all valid and none expiring soon
+                                    $token_security_color = '#10b981'; // Green - all good
                                 }
                             } else {
                                 // No tokens found, show status based on issues
@@ -756,7 +787,20 @@ echo '<div style="position: fixed; top: 0; right: 0; background: #10b981; color:
                             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                                 <strong style="color: #1f2937;">🔑 Valid Tokens:</strong>
                                 <span style="background: <?php echo $token_security_color; ?>; color: white; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 600;" 
-                                      title="<?php echo !empty($token_issues) ? implode(', ', $token_issues) : 'All tokens are secure'; ?>">
+                                      title="<?php 
+                                          // Build detailed tooltip
+                                          $tooltip_parts = [];
+                                          if (!empty($token_issues)) {
+                                              $tooltip_parts[] = implode(', ', $token_issues);
+                                          }
+                                          if (!empty($expiring_soon_details)) {
+                                              $tooltip_parts[] = 'Expiring soon: ' . implode('; ', $expiring_soon_details);
+                                          }
+                                          if (empty($tooltip_parts)) {
+                                              $tooltip_parts[] = 'All tokens are valid and not expiring soon';
+                                          }
+                                          echo htmlspecialchars(implode(' | ', $tooltip_parts));
+                                      ?>">
                                     <?php echo $token_security_status; ?>
                                 </span>
                             </div>
