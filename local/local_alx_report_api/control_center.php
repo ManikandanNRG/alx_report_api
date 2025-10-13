@@ -485,7 +485,7 @@ echo '<div style="position: fixed; top: 0; right: 0; background: #10b981; color:
                     <div class="card-header" style="border-bottom: 1px solid rgba(31,41,55,0.1); background: rgba(255,255,255,0.1);">
                         <h3 class="card-title" style="color: #1f2937; margin: 0;">
                             <i class="fas fa-shield-alt" style="color: #10b981;"></i>
-                            Security Health Monitor
+                            Health Monitor
                         </h3>
                         <p class="card-subtitle" style="color: #6b7280; margin: 4px 0 0 0;">Real-time security monitoring and access control</p>
                     </div>
@@ -794,7 +794,7 @@ echo '<div style="position: fixed; top: 0; right: 0; background: #10b981; color:
                     <div class="card-footer" style="border-top: 1px solid rgba(31,41,55,0.1); background: rgba(255,255,255,0.1); padding: 16px; text-align: center;">
                         <a href="<?php echo $CFG->wwwroot; ?>/local/alx_report_api/monitoring_dashboard_new.php?tab=security" class="btn-modern" style="background: #10b981; color: white; border: 2px solid #10b981; padding: 10px 20px; border-radius: 6px; text-decoration: none; display: inline-block; font-weight: 600; transition: all 0.3s ease; box-shadow: 0 2px 4px rgba(16,185,129,0.3);">
                             <i class="fas fa-shield-alt"></i>
-                            Security Monitor
+                            Health Monitor
                         </a>
                     </div>
                 </div>

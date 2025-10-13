@@ -194,7 +194,7 @@ try {
             <i class="fas fa-sync"></i> Data Sync Monitor
         </button>
         <button class="tab-button <?php echo $active_tab === 'security' ? 'active' : ''; ?>" onclick="switchTab('security', event)">
-            <i class="fas fa-shield-alt"></i> Security Monitor
+            <i class="fas fa-shield-alt"></i> Health Monitor
         </button>
     </div>
 
