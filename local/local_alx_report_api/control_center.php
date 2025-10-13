@@ -214,7 +214,7 @@ echo '<div style="position: fixed; top: 0; right: 0; background: #10b981; color:
             <div class="tab-dropdown" onclick="event.stopPropagation();">
                 <a href="monitoring_dashboard_new.php?tab=autosync">🔄 Data Sync Monitor</a>
                 <a href="monitoring_dashboard_new.php?tab=performance">⚡ API Monitor</a>
-                <a href="monitoring_dashboard_new.php?tab=security">🔒 Security Monitor</a>
+                <a href="monitoring_dashboard_new.php?tab=security">🔒 Health Monitor</a>
             </div>
         </button>
         <button class="tab-button" onclick="switchTab(event, 'settings')">
@@ -487,7 +487,7 @@ echo '<div style="position: fixed; top: 0; right: 0; background: #10b981; color:
                             <i class="fas fa-shield-alt" style="color: #10b981;"></i>
                             Health Monitor
                         </h3>
-                        <p class="card-subtitle" style="color: #6b7280; margin: 4px 0 0 0;">Real-time security monitoring and access control</p>
+                        <p class="card-subtitle" style="color: #6b7280; margin: 4px 0 0 0;">Real-time Health monitoring and access control</p>
                     </div>
                     <div class="card-body">
                         <?php
@@ -764,7 +764,7 @@ echo '<div style="position: fixed; top: 0; right: 0; background: #10b981; color:
                                 <canvas id="security-score-chart" width="120" height="120"></canvas>
                                 <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center;">
                                     <div style="font-size: 20px; font-weight: 700; color: #10b981;"><?php echo $security_score; ?></div>
-                                    <div style="font-size: 10px; color: #6b7280;">Security Score</div>
+                                    <div style="font-size: 10px; color: #6b7280;">Health</div>
                                 </div>
                             </div>
                         </div>
