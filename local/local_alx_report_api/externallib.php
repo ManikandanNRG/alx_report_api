@@ -400,40 +400,52 @@ class local_alx_report_api_external extends external_api {
                 'offset' => $offset
             ]);
 
-            // 2. Validate limit against configured maximum
+            // 2. Validate limit is at least 1 (prevent zero or negative limits)
+            if ($params['limit'] < 1) {
+                throw new moodle_exception('invalidlimit', 'local_alx_report_api', '', null, 
+                    "Limit must be at least 1. Received: {$params['limit']}");
+            }
+
+            // 3. Validate limit against configured maximum
             $max_records = get_config('local_alx_report_api', 'max_records') ?: 1000;
             if ($params['limit'] > $max_records) {
                 throw new moodle_exception('limittoolarge', 'local_alx_report_api', '', $max_records, 
                     "Requested limit ({$params['limit']}) exceeds maximum allowed ({$max_records}) records per request.");
             }
 
-            // 3. Get current authenticated user
+            // 4. Validate offset is non-negative (prevent negative offsets)
+            if ($params['offset'] < 0) {
+                throw new moodle_exception('invalidoffset', 'local_alx_report_api', '', null, 
+                    "Offset must be non-negative. Received: {$params['offset']}");
+            }
+
+            // 5. Get current authenticated user
             if (!$USER || !$USER->id || $USER->id <= 0) {
                 throw new moodle_exception('invaliduser', 'local_alx_report_api', '', null, 
                     'User must be authenticated to access this service');
             }
 
-            // 4. Check rate limiting (global daily limit)
+            // 6. Check rate limiting (global daily limit)
             self::check_rate_limit($USER->id);
 
-            // 5. Check GET method restriction (if enabled in settings)
+            // 7. Check GET method restriction (if enabled in settings)
             $allow_get_method = get_config('local_alx_report_api', 'allow_get_method');
             if (!$allow_get_method && $_SERVER['REQUEST_METHOD'] === 'GET') {
                 throw new moodle_exception('invalidrequestmethod', 'local_alx_report_api', '', null, 
                     'GET method is disabled. Only POST method is allowed for security reasons. Enable GET method in plugin settings for development/testing.');
             }
 
-            // 6. Check rate limiting again (duplicate line removed in original, keeping consistent)
+            // 8. Check rate limiting again (duplicate line removed in original, keeping consistent)
             self::check_rate_limit($USER->id);
 
-            // 7. Get company association for the authenticated user
+            // 9. Get company association for the authenticated user
             $companyid = self::get_user_company($USER->id);
             if (!$companyid) {
                 throw new moodle_exception('nocompanyassociation', 'local_alx_report_api', '', null, 
                     'User is not associated with any company');
             }
 
-            // 8. Get company shortname for logging
+            // 10. Get company shortname for logging
             $company_shortname = 'unknown';
             if ($DB->get_manager()->table_exists('company')) {
                 $company = $DB->get_record('company', ['id' => $companyid], 'shortname');
@@ -442,10 +454,10 @@ class local_alx_report_api_external extends external_api {
                 }
             }
 
-            // 9. Get course progress data
+            // 11. Get course progress data
             $progressdata = self::get_company_course_progress($companyid, $params['limit'], $params['offset']);
             
-            // 10. Count returned records
+            // 12. Count returned records
             $record_count = count($progressdata);
 
             return $progressdata;
