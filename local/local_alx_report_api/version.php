@@ -25,7 +25,7 @@
 defined('MOODLE_INTERNAL') || die();
 
 $plugin->component = 'local_alx_report_api';
-$plugin->version   = 2024101302; // Added index on username field for performance optimization
+$plugin->version   = 2024101401; // Fixed cache key bug - includes course and field filters
 $plugin->requires = 2022112800; // Moodle 4.2.6
 $plugin->maturity = MATURITY_STABLE;
-$plugin->release = '1.7.1'; // Performance optimization - added index on username field 
+$plugin->release = '1.7.2'; // Critical bug fix - cache key now includes course and field filters 

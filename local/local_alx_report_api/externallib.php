@@ -603,20 +603,47 @@ class local_alx_report_api_external extends external_api {
         $sync_mode = local_alx_report_api_determine_sync_mode($companyid, $token);
         self::debug_log("Sync mode determined: $sync_mode");
         
+        // Get enabled courses for this company (MOVED BEFORE CACHE CHECK)
+        $enabled_courses = local_alx_report_api_get_enabled_courses($companyid);
+        self::debug_log("Enabled courses for company $companyid: " . implode(',', $enabled_courses));
+        
+        // Get company field settings (MOVED BEFORE CACHE CHECK)
+        $field_settings = [];
+        $field_names = ['userid', 'firstname', 'lastname', 'email', 'username', 'coursename', 
+                       'timecompleted', 'timecompleted_unix', 'timestarted', 'timestarted_unix', 
+                       'percentage', 'status'];
+        
+        foreach ($field_names as $field) {
+            $field_settings[$field] = local_alx_report_api_get_company_setting($companyid, 'field_' . $field, 1);
+        }
+        self::debug_log("Field settings for company $companyid: " . json_encode($field_settings));
+        
+        // Generate cache key that includes courses and fields (FIX FOR CACHE BUG)
+        // Sort courses for consistent hash
+        $courses_for_hash = $enabled_courses;
+        sort($courses_for_hash);
+        $courses_hash = empty($courses_for_hash) ? 'nocourses' : md5(implode(',', $courses_for_hash));
+        
+        // Generate fields hash (only include enabled fields)
+        $enabled_fields = array_filter($field_settings, function($v) { return $v == 1; });
+        ksort($enabled_fields);
+        $fields_hash = md5(implode(',', array_keys($enabled_fields)));
+        
+        // Build complete cache key with all parameters that affect response
+        $cache_key = "api_response_{$companyid}_{$limit}_{$offset}_{$sync_mode}_{$courses_hash}_{$fields_hash}";
+        self::debug_log("Cache key: $cache_key");
+        self::debug_log("Cache key components - Courses: [" . implode(',', $courses_for_hash) . "], Fields: [" . implode(',', array_keys($enabled_fields)) . "]");
+        
         // Check cache for ALL sync modes (universal caching)
-        $cache_key = "api_response_{$companyid}_{$limit}_{$offset}_{$sync_mode}";
         $cached_data = local_alx_report_api_cache_get($cache_key, $companyid);
         if ($cached_data !== false) {
             self::debug_log("Cache hit - returning cached data for sync mode: {$sync_mode}");
             return $cached_data;
         }
         self::debug_log("Cache miss - will fetch fresh data");
-
-        // Get enabled courses for this company
-        $enabled_courses = local_alx_report_api_get_enabled_courses($companyid);
-        self::debug_log("Enabled courses for company $companyid: " . implode(',', $enabled_courses));
         
-        // If no courses are enabled, check if any settings exist for this company
+        // Handle empty enabled courses (this logic now runs AFTER cache check)
+        // Note: enabled_courses and field_settings are already loaded above for cache key
         if (empty($enabled_courses)) {
             $existing_settings = local_alx_report_api_get_company_settings($companyid);
             $has_course_settings = false;
@@ -654,17 +681,6 @@ class local_alx_report_api_external extends external_api {
                 }
             }
         }
-
-        // Get company field settings
-        $field_settings = [];
-        $field_names = ['userid', 'firstname', 'lastname', 'email', 'username', 'coursename', 
-                       'timecompleted', 'timecompleted_unix', 'timestarted', 'timestarted_unix', 
-                       'percentage', 'status'];
-        
-        foreach ($field_names as $field) {
-            $field_settings[$field] = local_alx_report_api_get_company_setting($companyid, 'field_' . $field, 1);
-        }
-        self::debug_log("Field settings for company $companyid: " . json_encode($field_settings));
 
         // Build query based on sync mode
         $records = [];
