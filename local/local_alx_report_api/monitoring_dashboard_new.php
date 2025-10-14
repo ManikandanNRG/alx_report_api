@@ -188,9 +188,55 @@ try {
         $failed_auth = max($failed_auth, $alert_auth_failures);
     }
     
+    // Calculate Token Health Score (NEW METRIC)
+    $token_health_score = 0;
+    $token_health_text = 'N/A';
+    $token_health_detail = ''; // For showing "4/5 healthy"
+    if ($active_tokens > 0) {
+        // Count healthy tokens (not expired and not expiring in next 30 days)
+        $expiry_threshold = time() + (30 * 24 * 3600); // 30 days from now (consistent with token expiry warning)
+        
+        if ($DB->get_manager()->table_exists('external_tokens')) {
+            $service_id = $DB->get_field('external_services', 'id', ['shortname' => 'alx_report_api_custom']);
+            if (!$service_id) {
+                $service_id = $DB->get_field('external_services', 'id', ['shortname' => 'alx_report_api']);
+            }
+            
+            if ($service_id) {
+                $tokens = $DB->get_records_select('external_tokens', 
+                    'externalserviceid = ? AND tokentype = ?', 
+                    [$service_id, EXTERNAL_TOKEN_PERMANENT], 
+                    '', 'id, validuntil');
+                
+                $healthy_tokens = 0;
+                $current_time = time();
+                foreach ($tokens as $token) {
+                    // Healthy = not expired AND not expiring soon
+                    if (!$token->validuntil || $token->validuntil > $expiry_threshold) {
+                        $healthy_tokens++;
+                    }
+                }
+                
+                $token_health_score = $active_tokens > 0 ? round(($healthy_tokens / $active_tokens) * 100) : 0;
+                $token_health_text = $token_health_score . '%';
+                $token_health_detail = "({$healthy_tokens}/{$active_tokens} healthy)";
+            }
+        }
+    }
+    
+    // Calculate Total Alerts (NEW METRIC)
+    $total_alerts = 0;
+    if ($DB->get_manager()->table_exists(\local_alx_report_api\constants::TABLE_ALERTS)) {
+        // Count all unresolved alerts
+        $total_alerts = $DB->count_records(\local_alx_report_api\constants::TABLE_ALERTS, ['resolved' => 0]);
+    }
+    
 } catch (Exception $e) {
     error_log('Security data calculation error: ' . $e->getMessage());
     // Keep safe defaults (0 values already set)
+    $token_health_score = 0;
+    $token_health_text = 'N/A';
+    $total_alerts = 0;
 }
 
 ?>
@@ -658,14 +704,17 @@ try {
                 <div class="metric-label">Rate Limit Violations</div>
             </div>
             <div class="metric-card">
-                <div class="metric-icon">🚫</div>
-                <div class="metric-value"><?php echo $failed_auth; ?></div>
-                <div class="metric-label">Failed Auth Attempts</div>
+                <div class="metric-icon">💚</div>
+                <div class="metric-value" style="color: <?php echo $token_health_score >= 80 ? '#10b981' : ($token_health_score >= 50 ? '#f59e0b' : '#ef4444'); ?>;"><?php echo $token_health_text; ?></div>
+                <div class="metric-label">Token Health Score</div>
+                <?php if (!empty($token_health_detail)): ?>
+                <div style="font-size: 11px; color: #6b7280; margin-top: 4px;"><?php echo $token_health_detail; ?></div>
+                <?php endif; ?>
             </div>
             <div class="metric-card">
-                <div class="metric-icon">🛡️</div>
-                <div class="metric-value"><?php echo $rate_limit_violations + $failed_auth === 0 ? 'Secure' : 'Alert'; ?></div>
-                <div class="metric-label">Security Status</div>
+                <div class="metric-icon">🚨</div>
+                <div class="metric-value" style="color: <?php echo $total_alerts === 0 ? '#10b981' : ($total_alerts <= 5 ? '#f59e0b' : '#ef4444'); ?>;"><?php echo $total_alerts; ?></div>
+                <div class="metric-label">Total Alerts</div>
             </div>
         </div>
 
