@@ -97,12 +97,36 @@ if ($DB->get_manager()->table_exists(\local_alx_report_api\constants::TABLE_REPO
 $active_tokens = 0;
 $rate_limit_violations = 0;
 $failed_auth = 0;
-$today_start = time() - 86400; // Last 24 hours
+$today_start = mktime(0, 0, 0); // Today at midnight (consistent with Control Center)
 
 try {
-    // Count ACTIVE tokens only (not expired)
-    $active_tokens = $DB->count_records_select('external_tokens', 
-        'validuntil IS NULL OR validuntil > ?', [time()]);
+    // Count ACTIVE tokens only (not expired) - SAME LOGIC AS CONTROL CENTER
+    if ($DB->get_manager()->table_exists('external_tokens')) {
+        // Check for primary service name first
+        $service_id = $DB->get_field('external_services', 'id', ['shortname' => 'alx_report_api_custom']);
+        if (!$service_id) {
+            // Fallback to legacy service name
+            $service_id = $DB->get_field('external_services', 'id', ['shortname' => 'alx_report_api']);
+        }
+        
+        if ($service_id) {
+            // Use the same method as Control Center - query then filter in PHP
+            $tokens = $DB->get_records_select('external_tokens', 
+                'externalserviceid = ? AND tokentype = ?', 
+                [$service_id, EXTERNAL_TOKEN_PERMANENT], 
+                '', 'id, validuntil');
+            
+            // Filter for valid tokens in PHP (same as Control Center)
+            $current_time = time();
+            foreach ($tokens as $token) {
+                if (!$token->validuntil || $token->validuntil > $current_time) {
+                    $active_tokens++;
+                }
+            }
+        }
+    } else {
+        error_log('ALX Report API Monitoring Dashboard: external_tokens table does not exist');
+    }
     
     // Calculate rate limit violations by checking company-specific limits
     if ($DB->get_manager()->table_exists(\local_alx_report_api\constants::TABLE_LOGS)) {

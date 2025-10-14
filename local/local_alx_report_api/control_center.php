@@ -491,51 +491,33 @@ echo '<div style="position: fixed; top: 0; right: 0; background: #10b981; color:
                     </div>
                     <div class="card-body">
                         <?php
-                        // Calculate rate limit violations using company-specific limits (same logic as Security tab)
+                        // Count actual violation EVENTS from alerts table (not just companies)
                         $violations_today = 0;
                         $users_today = 0;
                         $today_start = mktime(0, 0, 0);
                         $debug_info = [];
                         
                         try {
+                            // Count violation events from alerts table (each violation is logged as an alert)
+                            if ($DB->get_manager()->table_exists(\local_alx_report_api\constants::TABLE_ALERTS)) {
+                                $violations_today = $DB->count_records_select(\local_alx_report_api\constants::TABLE_ALERTS,
+                                    "alert_type = ? AND timecreated >= ?",
+                                    ['rate_limit_exceeded', $today_start]
+                                );
+                                $debug_info[] = "Violations from alerts table: $violations_today";
+                            }
+                            
+                            // Count active users today from logs
                             if ($DB->get_manager()->table_exists(\local_alx_report_api\constants::TABLE_LOGS)) {
                                 // Use standard Moodle field name
                                 $time_field = 'timecreated';
                                 
-                                // Get all companies and check each one's usage against their specific limit
-                                $companies = local_alx_report_api_get_companies();
-                                $debug_info[] = "Found " . count($companies) . " companies";
-                                
-                                foreach ($companies as $company) {
-                                    // Get company-specific rate limit
-                                    $company_settings = local_alx_report_api_get_company_settings($company->id);
-                                    $company_rate_limit = isset($company_settings['rate_limit']) ? 
-                                        $company_settings['rate_limit'] : 
-                                        get_config('local_alx_report_api', 'rate_limit');
-                                    
-                                    if (empty($company_rate_limit)) {
-                                        $company_rate_limit = 100; // Default fallback
-                                    }
-                                    
-                                    // Count today's API calls for this company
-                                    $company_calls_today = $DB->count_records_select(\local_alx_report_api\constants::TABLE_LOGS,
-                                        "{$time_field} >= ? AND company_shortname = ?",
-                                        [$today_start, $company->shortname]
-                                    );
-                                    
-                                    $debug_info[] = "Company: {$company->name} (shortname: {$company->shortname}) - Limit: {$company_rate_limit}, Calls: {$company_calls_today}";
-                                    
-                                    // Check if company exceeded their specific limit
-                                    if ($company_calls_today > $company_rate_limit) {
-                                        $violations_today++;
-                                        $debug_info[] = "  -> VIOLATION DETECTED!";
-                                    }
-                                    
-                                    // Count users with activity today
-                                    if ($company_calls_today > 0) {
-                                        $users_today++;
-                                    }
-                                }
+                                // Count unique users who made API calls today
+                                $sql = "SELECT COUNT(DISTINCT userid) 
+                                        FROM {local_alx_api_logs} 
+                                        WHERE {$time_field} >= ?";
+                                $users_today = $DB->count_records_sql($sql, [$today_start]);
+                                $debug_info[] = "Active users today: $users_today";
                             }
                         } catch (Exception $e) {
                             error_log('Control Center rate limit calculation error: ' . $e->getMessage());
