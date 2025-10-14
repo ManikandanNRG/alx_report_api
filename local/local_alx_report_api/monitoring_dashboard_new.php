@@ -803,13 +803,9 @@ if ($DB->get_manager()->table_exists(\local_alx_report_api\constants::TABLE_LOGS
     $time_field = 'timecreated';
     
     for ($i = 23; $i >= 0; $i--) {
-        // Create clean hourly timestamps (00:00, 01:00, 02:00, etc.)
-        $current_hour = date('H') - $i;
-        if ($current_hour < 0) {
-            $current_hour += 24;
-        }
-        
-        $hour_start = mktime($current_hour, 0, 0);
+        // Calculate timestamp for last 24 hours (not just today)
+        $hour_start = time() - ($i * 3600); // Go back $i hours from now
+        $hour_start = floor($hour_start / 3600) * 3600; // Round down to hour boundary
         $hour_end = $hour_start + 3600;
         
         // Get hourly request counts
@@ -830,7 +826,7 @@ if ($DB->get_manager()->table_exists(\local_alx_report_api\constants::TABLE_LOGS
         }
         
         $hourly_data[] = [
-            'hour' => sprintf('%02d:00', $current_hour),
+            'hour' => date('H:i', $hour_start),
             'timestamp' => $hour_start,
             'incoming' => $hour_total,
             'success' => $hour_success,
@@ -844,14 +840,12 @@ if ($DB->get_manager()->table_exists(\local_alx_report_api\constants::TABLE_LOGS
 } else {
     // No API logs table - initialize empty data
     for ($i = 23; $i >= 0; $i--) {
-        $current_hour = date('H') - $i;
-        if ($current_hour < 0) {
-            $current_hour += 24;
-        }
+        $hour_start = time() - ($i * 3600);
+        $hour_start = floor($hour_start / 3600) * 3600;
         
         $hourly_data[] = [
-            'hour' => sprintf('%02d:00', $current_hour),
-            'timestamp' => mktime($current_hour, 0, 0),
+            'hour' => date('H:i', $hour_start),
+            'timestamp' => $hour_start,
             'incoming' => 0,
             'success' => 0,
             'errors' => 0
@@ -900,14 +894,12 @@ document.addEventListener('DOMContentLoaded', function() {
             type: 'line',
             data: {
                 labels: <?php 
-                    // Generate hourly labels for last 24 hours (not today's hours, but last 24h)
+                    // Generate hourly labels for last 24 hours
                     $hours = [];
                     for ($i = 23; $i >= 0; $i--) {
-                        $current_hour = date('H') - $i;
-                        if ($current_hour < 0) {
-                            $current_hour += 24;
-                        }
-                        $hours[] = sprintf('%02d:00', $current_hour);
+                        $hour_start = time() - ($i * 3600);
+                        $hour_start = floor($hour_start / 3600) * 3600;
+                        $hours[] = date('H:i', $hour_start);
                     }
                     echo json_encode($hours);
                 ?>,
@@ -919,14 +911,10 @@ document.addEventListener('DOMContentLoaded', function() {
                             $sync_created_data = [];
                             
                             if ($DB->get_manager()->table_exists(\local_alx_report_api\constants::TABLE_REPORTING)) {
-                                // Get data for last 24 hours (not just today)
+                                // Get data for last 24 hours
                                 for ($i = 23; $i >= 0; $i--) {
-                                    $current_hour = date('H') - $i;
-                                    if ($current_hour < 0) {
-                                        $current_hour += 24;
-                                    }
-                                    
-                                    $hour_start = mktime($current_hour, 0, 0);
+                                    $hour_start = time() - ($i * 3600);
+                                    $hour_start = floor($hour_start / 3600) * 3600;
                                     $hour_end = $hour_start + 3600;
                                     
                                     $count = $DB->count_records_select(\local_alx_report_api\constants::TABLE_REPORTING,
@@ -957,12 +945,8 @@ document.addEventListener('DOMContentLoaded', function() {
                             if ($DB->get_manager()->table_exists(\local_alx_report_api\constants::TABLE_REPORTING)) {
                                 // Get data for last 24 hours
                                 for ($i = 23; $i >= 0; $i--) {
-                                    $current_hour = date('H') - $i;
-                                    if ($current_hour < 0) {
-                                        $current_hour += 24;
-                                    }
-                                    
-                                    $hour_start = mktime($current_hour, 0, 0);
+                                    $hour_start = time() - ($i * 3600);
+                                    $hour_start = floor($hour_start / 3600) * 3600;
                                     $hour_end = $hour_start + 3600;
                                     
                                     // Count records that were updated (not created) in this hour
