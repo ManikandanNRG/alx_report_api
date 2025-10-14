@@ -201,6 +201,60 @@ function xmldb_local_alx_report_api_upgrade($oldversion) {
         
         } // End of old version table creation block
         
+        // Upgrade to version 2024101301 - Add username field to reporting table
+        if ($oldversion < 2024101301) {
+            error_log("ALX Report API Upgrade: Starting username field addition to version 2024101301");
+            
+            // Add username field to local_alx_api_reporting table
+            $table = new xmldb_table('local_alx_api_reporting');
+            $field = new xmldb_field('username', XMLDB_TYPE_CHAR, '100', null, XMLDB_NOTNULL, null, null, 'email');
+            
+            if (!$dbman->field_exists($table, $field)) {
+                error_log("ALX Report API Upgrade: Adding username field to local_alx_api_reporting table");
+                $dbman->add_field($table, $field);
+                
+                // Populate username field for existing records
+                error_log("ALX Report API Upgrade: Populating username field for existing records");
+                $sql = "UPDATE {local_alx_api_reporting} r 
+                        SET username = (
+                            SELECT u.username 
+                            FROM {user} u 
+                            WHERE u.id = r.userid
+                        )
+                        WHERE r.username IS NULL OR r.username = ''";
+                
+                $DB->execute($sql);
+                error_log("ALX Report API Upgrade: Username field populated successfully");
+            } else {
+                error_log("ALX Report API Upgrade: Username field already exists, skipping");
+            }
+            
+            // Save point reached
+            upgrade_plugin_savepoint(true, 2024101301, 'local', 'alx_report_api');
+            error_log("ALX Report API Upgrade: Username field addition to version 2024101301 completed successfully");
+        }
+        
+        // Upgrade to version 2024101302 - Add index on username field for performance
+        if ($oldversion < 2024101302) {
+            error_log("ALX Report API Upgrade: Starting username index addition to version 2024101302");
+            
+            // Add index on username field in local_alx_api_reporting table
+            $table = new xmldb_table('local_alx_api_reporting');
+            $index = new xmldb_index('username', XMLDB_INDEX_NOTUNIQUE, array('username'));
+            
+            if (!$dbman->index_exists($table, $index)) {
+                error_log("ALX Report API Upgrade: Adding index on username field");
+                $dbman->add_index($table, $index);
+                error_log("ALX Report API Upgrade: Username index added successfully");
+            } else {
+                error_log("ALX Report API Upgrade: Username index already exists, skipping");
+            }
+            
+            // Save point reached
+            upgrade_plugin_savepoint(true, 2024101302, 'local', 'alx_report_api');
+            error_log("ALX Report API Upgrade: Username index addition to version 2024101302 completed successfully");
+        }
+        
         // Upgrade to version 2024100803 - Standardize time field names
         if ($oldversion < 2024100803) {
             error_log("ALX Report API Upgrade: Starting field rename to version 2024100803");

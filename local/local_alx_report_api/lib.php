@@ -379,7 +379,7 @@ function local_alx_report_api_copy_company_settings($from_companyid, $to_company
             'field_firstname' => get_config('local_alx_report_api', 'field_firstname') ?: 1,
             'field_lastname' => get_config('local_alx_report_api', 'field_lastname') ?: 1,
             'field_email' => get_config('local_alx_report_api', 'field_email') ?: 1,
-            'field_courseid' => get_config('local_alx_report_api', 'field_courseid') ?: 1,
+            'field_username' => get_config('local_alx_report_api', 'field_username') ?: 1,
             'field_coursename' => get_config('local_alx_report_api', 'field_coursename') ?: 1,
             'field_timecompleted' => get_config('local_alx_report_api', 'field_timecompleted') ?: 1,
             'field_timecompleted_unix' => get_config('local_alx_report_api', 'field_timecompleted_unix') ?: 1,
@@ -589,6 +589,7 @@ function local_alx_report_api_populate_reporting_table($companyid = 0, $batch_si
                     u.firstname,
                     u.lastname,
                     u.email,
+                    u.username,
                     c.id as courseid,
                     c.fullname as coursename,
                     COALESCE(cc.timecompleted, 
@@ -675,6 +676,7 @@ function local_alx_report_api_populate_reporting_table($companyid = 0, $batch_si
                         $reporting_record->firstname = $record->firstname;
                         $reporting_record->lastname = $record->lastname;
                         $reporting_record->email = $record->email;
+                        $reporting_record->username = $record->username;
                         $reporting_record->coursename = $record->coursename;
                         $reporting_record->timecompleted = $record->timecompleted;
                         $reporting_record->timestarted = $record->timestarted;
@@ -694,6 +696,7 @@ function local_alx_report_api_populate_reporting_table($companyid = 0, $batch_si
                         $existing->firstname = $record->firstname;
                         $existing->lastname = $record->lastname;
                         $existing->email = $record->email;
+                        $existing->username = $record->username;
                         $existing->coursename = $record->coursename;
                         $existing->timecompleted = $record->timecompleted;
                         $existing->timestarted = $record->timestarted;
@@ -776,6 +779,7 @@ function local_alx_report_api_update_reporting_record($userid, $companyid, $cour
                 u.firstname,
                 u.lastname,
                 u.email,
+                u.username,
                 c.id as courseid,
                 c.fullname as coursename,
                 COALESCE(cc.timecompleted, 
@@ -848,6 +852,7 @@ function local_alx_report_api_update_reporting_record($userid, $companyid, $cour
             $existing->firstname = $record->firstname;
             $existing->lastname = $record->lastname;
             $existing->email = $record->email;
+            $existing->username = $record->username;
             $existing->coursename = $record->coursename;
             $existing->timecompleted = $record->timecompleted;
             $existing->timestarted = $record->timestarted;
@@ -867,6 +872,7 @@ function local_alx_report_api_update_reporting_record($userid, $companyid, $cour
             $reporting_record->firstname = $record->firstname;
             $reporting_record->lastname = $record->lastname;
             $reporting_record->email = $record->email;
+            $reporting_record->username = $record->username;
             $reporting_record->coursename = $record->coursename;
             $reporting_record->timecompleted = $record->timecompleted;
             $reporting_record->timestarted = $record->timestarted;

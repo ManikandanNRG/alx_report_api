@@ -57,6 +57,7 @@
         <FIELD NAME="firstname" TYPE="char" LENGTH="100" NOTNULL="true" COMMENT="User first name"/>
         <FIELD NAME="lastname" TYPE="char" LENGTH="100" NOTNULL="true" COMMENT="User last name"/>
         <FIELD NAME="email" TYPE="char" LENGTH="100" NOTNULL="true" COMMENT="User email"/>
+        <FIELD NAME="username" TYPE="char" LENGTH="100" NOTNULL="true" COMMENT="Username"/>
         <FIELD NAME="coursename" TYPE="char" LENGTH="255" NOTNULL="true" COMMENT="Course full name"/>
         <FIELD NAME="timecompleted" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" COMMENT="Course completion timestamp"/>
         <FIELD NAME="timestarted" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" COMMENT="Course start timestamp"/>
@@ -78,6 +79,7 @@
         <INDEX NAME="timecompleted" UNIQUE="false" FIELDS="timecompleted"/>
         <INDEX NAME="status" UNIQUE="false" FIELDS="status"/>
         <INDEX NAME="is_deleted" UNIQUE="false" FIELDS="is_deleted"/>
+        <INDEX NAME="username" UNIQUE="false" FIELDS="username"/>
       </INDEXES>
     </TABLE>
     <TABLE NAME="local_alx_api_sync_status" COMMENT="Sync status tracking for incremental updates">

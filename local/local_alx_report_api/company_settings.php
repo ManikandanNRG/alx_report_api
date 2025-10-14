@@ -48,7 +48,7 @@ if ($action === 'save' && $companyid && confirm_sesskey()) {
     try {
     $field_settings = [
         'field_userid', 'field_firstname', 'field_lastname', 'field_email',
-        'field_courseid', 'field_coursename', 'field_timecompleted', 
+        'field_username', 'field_coursename', 'field_timecompleted', 
         'field_timecompleted_unix', 'field_timestarted', 'field_timestarted_unix',
         'field_percentage', 'field_status'
     ];
@@ -209,7 +209,7 @@ if ($companyid && isset($companies[$companyid])) {
         'field_firstname' => get_string('field_firstname', 'local_alx_report_api'),
         'field_lastname' => get_string('field_lastname', 'local_alx_report_api'),
         'field_email' => get_string('field_email', 'local_alx_report_api'),
-        'field_courseid' => get_string('field_courseid', 'local_alx_report_api'),
+        'field_username' => get_string('field_username', 'local_alx_report_api'),
         'field_coursename' => get_string('field_coursename', 'local_alx_report_api'),
         'field_timecompleted' => get_string('field_timecompleted', 'local_alx_report_api'),
         'field_timecompleted_unix' => get_string('field_timecompleted_unix', 'local_alx_report_api'),

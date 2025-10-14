@@ -25,7 +25,7 @@
 defined('MOODLE_INTERNAL') || die();
 
 $plugin->component = 'local_alx_report_api';
-$plugin->version   = 2024100803; // Standardized time field names across all tables
+$plugin->version   = 2024101302; // Added index on username field for performance optimization
 $plugin->requires = 2022112800; // Moodle 4.2.6
 $plugin->maturity = MATURITY_STABLE;
-$plugin->release = '1.6.0'; // Field naming standardization + error handling improvements 
+$plugin->release = '1.7.1'; // Performance optimization - added index on username field 

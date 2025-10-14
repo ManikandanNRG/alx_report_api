@@ -901,7 +901,7 @@ echo '<div style="position: fixed; top: 0; right: 0; background: #10b981; color:
                     try {
                         $field_settings = [
                             'field_userid', 'field_firstname', 'field_lastname', 'field_email',
-                            'field_courseid', 'field_coursename', 'field_timecompleted', 
+                            'field_username', 'field_coursename', 'field_timecompleted', 
                             'field_timecompleted_unix', 'field_timestarted', 'field_timestarted_unix',
                             'field_percentage', 'field_status'
                         ];
@@ -1066,7 +1066,7 @@ echo '<div style="position: fixed; top: 0; right: 0; background: #10b981; color:
                                         'field_firstname' => 'First Name', 
                                         'field_lastname' => 'Last Name',
                                         'field_email' => 'Email Address',
-                                        'field_courseid' => 'Course ID',
+                                        'field_username' => 'Username',
                                         'field_coursename' => 'Course Name',
                                         'field_timecompleted' => 'Time Completed (Readable)',
                                         'field_timecompleted_unix' => 'Time Completed (Unix)',

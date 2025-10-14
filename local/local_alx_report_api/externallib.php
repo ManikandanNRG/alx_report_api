@@ -523,7 +523,7 @@ class local_alx_report_api_external extends external_api {
                 'firstname' => new external_value(PARAM_TEXT, 'User first name', VALUE_OPTIONAL),
                 'lastname' => new external_value(PARAM_TEXT, 'User last name', VALUE_OPTIONAL),
                 'email' => new external_value(PARAM_EMAIL, 'User email', VALUE_OPTIONAL),
-                'courseid' => new external_value(PARAM_INT, 'Course ID', VALUE_OPTIONAL),
+                'username' => new external_value(PARAM_TEXT, 'Username', VALUE_OPTIONAL),
                 'coursename' => new external_value(PARAM_TEXT, 'Course name', VALUE_OPTIONAL),
                 'timecompleted' => new external_value(PARAM_TEXT, 'Completion date (Y-m-d H:i:s format)', VALUE_OPTIONAL),
                 'timecompleted_unix' => new external_value(PARAM_INT, 'Completion timestamp (Unix format)', VALUE_OPTIONAL),
@@ -657,7 +657,7 @@ class local_alx_report_api_external extends external_api {
 
         // Get company field settings
         $field_settings = [];
-        $field_names = ['userid', 'firstname', 'lastname', 'email', 'courseid', 'coursename', 
+        $field_names = ['userid', 'firstname', 'lastname', 'email', 'username', 'coursename', 
                        'timecompleted', 'timecompleted_unix', 'timestarted', 'timestarted_unix', 
                        'percentage', 'status'];
         
@@ -774,8 +774,8 @@ class local_alx_report_api_external extends external_api {
             if ($field_settings['email']) {
                 $response_item['email'] = $record->email;
             }
-            if ($field_settings['courseid']) {
-                $response_item['courseid'] = (int)$record->courseid;
+            if ($field_settings['username']) {
+                $response_item['username'] = $record->username;
             }
             if ($field_settings['coursename']) {
                 $response_item['coursename'] = $record->coursename;
@@ -871,7 +871,7 @@ class local_alx_report_api_external extends external_api {
         
         // Get company field settings
         $field_settings = [];
-        $field_names = ['userid', 'firstname', 'lastname', 'email', 'courseid', 'coursename', 
+        $field_names = ['userid', 'firstname', 'lastname', 'email', 'username', 'coursename', 
                        'timecompleted', 'timecompleted_unix', 'timestarted', 'timestarted_unix', 
                        'percentage', 'status'];
         
@@ -893,7 +893,7 @@ class local_alx_report_api_external extends external_api {
                 u.firstname,
                 u.lastname,
                 u.email,
-                c.id as courseid,
+                u.username,
                 c.fullname as coursename,
                 COALESCE(cc.timecompleted, 
                     (SELECT MAX(cmc.timemodified) 
@@ -979,8 +979,8 @@ class local_alx_report_api_external extends external_api {
             if ($field_settings['email']) {
                 $response_item['email'] = $record->email;
             }
-            if ($field_settings['courseid']) {
-                $response_item['courseid'] = (int)$record->courseid;
+            if ($field_settings['username']) {
+                $response_item['username'] = $record->username;
             }
             if ($field_settings['coursename']) {
                 $response_item['coursename'] = $record->coursename;
