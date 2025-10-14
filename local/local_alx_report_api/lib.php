@@ -2569,6 +2569,123 @@ function local_alx_report_api_create_alerts_table() {
  * This function should be called periodically (e.g., via cron).
  */
 function local_alx_report_api_check_and_alert() {
+    global $DB, $CFG;
+    
+    // PRIORITY 1: Process existing unresolved alerts from the alerts table
+    // This is the PRIMARY purpose - send emails for alerts that were already created
+    if ($DB->get_manager()->table_exists(\local_alx_report_api\constants::TABLE_ALERTS)) {
+        // Get alert settings
+        $email_alerts_enabled = get_config('local_alx_report_api', 'enable_email_alerts');
+        $alert_threshold = get_config('local_alx_report_api', 'alert_threshold') ?: 'medium';
+        
+        if ($email_alerts_enabled) {
+            // Define severity levels for filtering
+            $severity_levels = [
+                'low' => ['low', 'medium', 'high', 'critical'],
+                'medium' => ['medium', 'high', 'critical'],
+                'high' => ['high', 'critical'],
+                'critical' => ['critical']
+            ];
+            
+            $allowed_severities = $severity_levels[$alert_threshold] ?? ['medium', 'high', 'critical'];
+            
+            // Get unresolved alerts that match severity threshold
+            list($insql, $params) = $DB->get_in_or_equal($allowed_severities, SQL_PARAMS_NAMED);
+            $sql = "SELECT * FROM {" . \local_alx_report_api\constants::TABLE_ALERTS . "} 
+                    WHERE resolved = 0 
+                    AND severity $insql 
+                    ORDER BY timecreated ASC";
+            
+            $unresolved_alerts = $DB->get_records_sql($sql, $params);
+            
+            if (!empty($unresolved_alerts)) {
+                mtrace("Found " . count($unresolved_alerts) . " unresolved alerts to process");
+                
+                // Get recipients from settings
+                $alert_emails = get_config('local_alx_report_api', 'alert_emails');
+                if (empty($alert_emails)) {
+                    mtrace("No alert recipients configured in settings");
+                    return;
+                }
+                
+                $recipients = array_map('trim', explode(',', $alert_emails));
+                $cooldown_minutes = get_config('local_alx_report_api', 'alert_cooldown') ?: 60;
+                
+                foreach ($unresolved_alerts as $alert) {
+                    // Check cooldown - see if same alert type was sent recently
+                    $cooldown_check_sql = "SELECT MAX(timecreated) as last_sent 
+                                          FROM {" . \local_alx_report_api\constants::TABLE_ALERTS . "} 
+                                          WHERE alert_type = ? 
+                                          AND severity = ? 
+                                          AND resolved = 1 
+                                          AND timecreated > ?";
+                    
+                    $cooldown_time = time() - ($cooldown_minutes * 60);
+                    $recent_alert = $DB->get_record_sql($cooldown_check_sql, 
+                        [$alert->alert_type, $alert->severity, $cooldown_time]);
+                    
+                    if ($recent_alert && $recent_alert->last_sent) {
+                        mtrace("Alert {$alert->alert_type} is in cooldown period, skipping");
+                        continue;
+                    }
+                    
+                    // Send email to each recipient
+                    $sent_count = 0;
+                    foreach ($recipients as $recipient_email) {
+                        if (!empty($recipient_email) && validate_email($recipient_email)) {
+                            // Create a fake user object for email_to_user
+                            $recipient = new stdClass();
+                            $recipient->email = $recipient_email;
+                            $recipient->firstname = '';
+                            $recipient->lastname = '';
+                            $recipient->maildisplay = true;
+                            $recipient->mailformat = 1;
+                            $recipient->id = -1;
+                            $recipient->deleted = 0;
+                            $recipient->suspended = 0;
+                            
+                            // Format email
+                            $subject = "[ALX Report API] {$alert->severity} Alert: {$alert->alert_type}";
+                            
+                            $message = "Alert Details:\n\n";
+                            $message .= "Type: {$alert->alert_type}\n";
+                            $message .= "Severity: " . strtoupper($alert->severity) . "\n";
+                            $message .= "Message: {$alert->message}\n";
+                            $message .= "Hostname: {$alert->hostname}\n";
+                            $message .= "Time: " . date('Y-m-d H:i:s', $alert->timecreated) . "\n\n";
+                            $message .= "View details in Control Center:\n";
+                            $message .= $CFG->wwwroot . "/local/alx_report_api/control_center.php?tab=security\n";
+                            
+                            // Send email
+                            $from = core_user::get_noreply_user();
+                            $success = email_to_user($recipient, $from, $subject, $message);
+                            
+                            if ($success) {
+                                $sent_count++;
+                                mtrace("Sent alert email to {$recipient_email} for {$alert->alert_type}");
+                            } else {
+                                mtrace("Failed to send email to {$recipient_email}");
+                            }
+                        }
+                    }
+                    
+                    if ($sent_count > 0) {
+                        // Mark alert as resolved after sending
+                        $alert->resolved = 1;
+                        $alert->timeresolved = time();
+                        $DB->update_record(\local_alx_report_api\constants::TABLE_ALERTS, $alert);
+                        mtrace("Marked alert ID {$alert->id} as resolved");
+                    }
+                }
+            } else {
+                mtrace("No unresolved alerts found");
+            }
+        } else {
+            mtrace("Email alerts are disabled in settings");
+        }
+    }
+    
+    // PRIORITY 2: Check for NEW violations and create alerts if needed
     // Check rate limit violations
     $rate_monitoring = local_alx_report_api_get_rate_limit_monitoring();
     
