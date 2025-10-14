@@ -930,7 +930,7 @@ if ($is_cli) {
         echo "Usage: php populate_reporting_table.php [options]\n\n";
         echo "Options:\n";
         echo "  --companyid=ID    Populate data for specific company ID (default: all companies)\n";
-        echo "  --batch-size=N    Number of records to process per batch (default: 1000)\n";
+        echo "  --batch-size=N    Number of records to process per batch. Processes ALL records in batches (default: 1000)\n";
         echo "  --help           Show this help message\n\n";
         echo "Examples:\n";
         echo "  php populate_reporting_table.php\n";
@@ -1094,7 +1094,7 @@ echo '</div>';
 echo '<div style="margin-top: 20px;">';
 echo '<label for="batch_size" style="display: block; margin-bottom: 8px; font-weight: 600; color: #495057;">Batch Size:</label>';
 echo '<input type="number" name="batch_size" id="batch_size" value="1000" min="100" max="5000" style="width: 100%; padding: 10px 15px; border: 2px solid #e9ecef; border-radius: 8px; font-size: 15px;">';
-echo '<small style="color: #64748b; font-size: 13px;">Number of records to process per batch. Larger batches are faster but use more memory.</small>';
+echo '<small style="color: #64748b; font-size: 13px;">Number of records to process per batch. The system will process <strong>ALL records</strong> in batches of this size to avoid memory issues. Larger batches are faster but use more memory. <em>Example: 3,313 records with batch size 1000 = 4 batches (1000+1000+1000+313)</em></small>';
 echo '</div>';
 
 echo '<div style="display: flex; align-items: center; gap: 8px; margin-top: 20px;">';
