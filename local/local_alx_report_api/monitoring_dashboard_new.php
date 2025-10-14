@@ -63,7 +63,7 @@ $cache_hit_rate = 0;
 $total_records = 0;
 
 if ($DB->get_manager()->table_exists(\local_alx_report_api\constants::TABLE_LOGS)) {
-    $today_start = mktime(0, 0, 0);
+    $today_start = time() - 86400; // Last 24 hours
     // Use standard Moodle field name
     $time_field = 'timecreated';
     
@@ -73,13 +73,13 @@ if ($DB->get_manager()->table_exists(\local_alx_report_api\constants::TABLE_LOGS
     $api_calls_today = $DB->count_records_select(\local_alx_report_api\constants::TABLE_LOGS, "{$time_field} >= ?", [$today_start]);
     
     if (isset($table_info['response_time_ms'])) {
-        $avg_result = $DB->get_record_sql("SELECT AVG(response_time_ms) as avg_time FROM {local_alx_api_logs} WHERE {$time_field} >= ?", [$today_start]);
+        $avg_result = $DB->get_record_sql("SELECT AVG(response_time_ms) as avg_time FROM {local_alx_api_logs} WHERE {$time_field} >= ? AND response_time_ms IS NOT NULL AND response_time_ms > 0", [$today_start]);
         $avg_response_time = $avg_result ? round($avg_result->avg_time / 1000, 2) : 0;
     }
     
     if (isset($table_info['error_message'])) {
-        $success_count = $DB->count_records_select(\local_alx_report_api\constants::TABLE_LOGS, "{$time_field} >= ? AND error_message IS NULL", [$today_start]);
-        $success_rate = $api_calls_today > 0 ? round(($success_count / $api_calls_today) * 100, 1) : 100;
+        $error_count = $DB->count_records_select(\local_alx_report_api\constants::TABLE_LOGS, "{$time_field} >= ? AND error_message IS NOT NULL AND error_message != ?", [$today_start, '']);
+        $success_rate = $api_calls_today > 0 ? round((($api_calls_today - $error_count) / $api_calls_today) * 100, 1) : 100;
     }
 }
 
@@ -97,7 +97,7 @@ if ($DB->get_manager()->table_exists(\local_alx_report_api\constants::TABLE_REPO
 $active_tokens = 0;
 $rate_limit_violations = 0;
 $failed_auth = 0;
-$today_start = mktime(0, 0, 0);
+$today_start = time() - 86400; // Last 24 hours
 
 try {
     // Count ACTIVE tokens only (not expired)
@@ -215,12 +215,12 @@ try {
             <div class="metric-card">
                 <div class="metric-icon">➕</div>
                 <div class="metric-value"><?php 
-                    // Get records created today
+                    // Get records created in last 24 hours
                     $records_created = 0;
                     if ($DB->get_manager()->table_exists(\local_alx_report_api\constants::TABLE_REPORTING)) {
-                        $today_start = mktime(0, 0, 0);
+                        $last_24h = time() - 86400;
                         $records_created = $DB->count_records_select(\local_alx_report_api\constants::TABLE_REPORTING, 
-                            'timecreated >= ?', [$today_start]);
+                            'timecreated >= ?', [$last_24h]);
                     }
                     echo number_format($records_created);
                 ?></div>
@@ -229,13 +229,13 @@ try {
             <div class="metric-card">
                 <div class="metric-icon">🔄</div>
                 <div class="metric-value"><?php 
-                    // Get records updated today (where timemodified is different from timecreated)
+                    // Get records updated in last 24 hours (where timemodified is different from timecreated)
                     $records_updated = 0;
                     if ($DB->get_manager()->table_exists(\local_alx_report_api\constants::TABLE_REPORTING)) {
-                        $today_start = mktime(0, 0, 0);
-                        // Count records where timemodified is today AND timemodified != timecreated
+                        $last_24h = time() - 86400;
+                        // Count records where timemodified is in last 24h AND timemodified != timecreated
                         $records_updated = $DB->count_records_select(\local_alx_report_api\constants::TABLE_REPORTING, 
-                            'timemodified >= ? AND timemodified != timecreated', [$today_start]);
+                            'timemodified >= ? AND timemodified != timecreated', [$last_24h]);
                     }
                     echo number_format($records_updated);
                 ?></div>
@@ -269,8 +269,8 @@ try {
                     <tr>
                         <th>Company Name</th>
                         <th>Total Records</th>
-                        <th>Created Today</th>
-                        <th>Updated Today</th>
+                        <th>Created (24h)</th>
+                        <th>Updated (24h)</th>
                         <th>Last Sync</th>
                         <th>Status</th>
                     </tr>
@@ -291,7 +291,7 @@ try {
                                 
                                 if ($DB->get_manager()->table_exists(\local_alx_report_api\constants::TABLE_REPORTING)) {
                                     $table_info = $DB->get_columns(\local_alx_report_api\constants::TABLE_REPORTING);
-                                    $today_start = mktime(0, 0, 0);
+                                    $last_24h = time() - 86400; // Last 24 hours
                                     
                                     // Check if required fields exist
                                     if (isset($table_info['companyid'])) {
@@ -304,14 +304,14 @@ try {
                                                 ['companyid' => $company->id]);
                                         }
                                         
-                                        // Created today
+                                        // Created in last 24h
                                         $created_today = $DB->count_records_select(\local_alx_report_api\constants::TABLE_REPORTING, 
-                                            'companyid = ? AND timecreated >= ?', [$company->id, $today_start]);
+                                            'companyid = ? AND timecreated >= ?', [$company->id, $last_24h]);
                                         
-                                        // Updated today (where timemodified is different from timecreated)
+                                        // Updated in last 24h (where timemodified is different from timecreated)
                                         $updated_today = $DB->count_records_select(\local_alx_report_api\constants::TABLE_REPORTING, 
                                             'companyid = ? AND timemodified >= ? AND timemodified != timecreated', 
-                                            [$company->id, $today_start]);
+                                            [$company->id, $last_24h]);
                                         
                                         // Last sync time for this company - try multiple fields
                                         if (isset($table_info['last_updated'])) {
@@ -416,7 +416,7 @@ try {
                         <th>Company Name</th>
                         <th>Response Mode</th>
                         <th>Max Req/Day</th>
-                        <th>No of Req (Today)</th>
+                        <th>No of Req (24h)</th>
                         <th>Response Time</th>
                         <th>Data Source</th>
                         <th>Success Rate</th>
@@ -434,7 +434,7 @@ try {
                         foreach ($companies as $company):
                         try { 
                         // Get company performance data
-                        $today_start = mktime(0, 0, 0);
+                        $last_24h = time() - 86400; // Last 24 hours
                         $company_calls = 0;
                         $company_response_time = '0.0s';
                         $last_request_time = 'Never';
@@ -447,16 +447,16 @@ try {
                             // Get table structure to check for optional fields
                             $table_info = $DB->get_columns(\local_alx_report_api\constants::TABLE_LOGS);
                             
-                            // Get calls today for this company
+                            // Get calls in last 24h for this company
                             $company_calls = $DB->count_records_select(\local_alx_report_api\constants::TABLE_LOGS, 
-                                "{$time_field} >= ? AND company_shortname = ?", [$today_start, $company->shortname]);
+                                "{$time_field} >= ? AND company_shortname = ?", [$last_24h, $company->shortname]);
                             
                             // Get average response time
                             if (isset($table_info['response_time_ms'])) {
                                 $avg_result = $DB->get_record_sql(
                                     "SELECT AVG(response_time_ms) as avg_time FROM {local_alx_api_logs} 
                                      WHERE {$time_field} >= ? AND company_shortname = ? AND response_time_ms > 0", 
-                                    [$today_start, $company->shortname]
+                                    [$last_24h, $company->shortname]
                                 );
                                 if ($avg_result && $avg_result->avg_time && $avg_result->avg_time > 0) {
                                     $company_response_time = round($avg_result->avg_time / 1000, 2) . 's';
@@ -486,7 +486,7 @@ try {
                             if (isset($table_info['error_message'])) {
                                 $error_count = $DB->count_records_select(\local_alx_report_api\constants::TABLE_LOGS,
                                     "{$time_field} >= ? AND company_shortname = ? AND error_message IS NOT NULL",
-                                    [$today_start, $company->shortname]
+                                    [$last_24h, $company->shortname]
                                 );
                             }
                         }
