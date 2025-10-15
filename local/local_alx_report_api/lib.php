@@ -987,10 +987,26 @@ function local_alx_report_api_sync_recent_changes($companyid = 0, $hours_back = 
                     FROM {course_completions} cc
                     JOIN {company_users} cu ON cu.userid = cc.userid
                     WHERE cc.timecompleted >= :cutoff_time 
-                    AND cu.companyid = :companyid";
+                    AND cu.companyid = :companyid
+                    AND (
+                        NOT EXISTS (
+                            SELECT 1 FROM {local_alx_api_reporting} r
+                            WHERE r.userid = cc.userid 
+                            AND r.courseid = cc.course
+                            AND r.companyid = cu.companyid
+                        )
+                        OR EXISTS (
+                            SELECT 1 FROM {local_alx_api_reporting} r
+                            WHERE r.userid = cc.userid 
+                            AND r.courseid = cc.course
+                            AND r.companyid = cu.companyid
+                            AND r.last_updated < :cutoff_time2
+                        )
+                    )";
                 
                 $completion_changes = $DB->get_records_sql($completion_sql, [
                     'cutoff_time' => $cutoff_time,
+                    'cutoff_time2' => $cutoff_time,
                     'companyid' => $company->id
                 ]);
                 
@@ -1007,10 +1023,26 @@ function local_alx_report_api_sync_recent_changes($companyid = 0, $hours_back = 
                     JOIN {course_modules} cm ON cm.id = cmc.coursemoduleid
                     JOIN {company_users} cu ON cu.userid = cmc.userid
                     WHERE cmc.timemodified >= :cutoff_time 
-                    AND cu.companyid = :companyid";
+                    AND cu.companyid = :companyid
+                    AND (
+                        NOT EXISTS (
+                            SELECT 1 FROM {local_alx_api_reporting} r
+                            WHERE r.userid = cmc.userid 
+                            AND r.courseid = cm.course
+                            AND r.companyid = cu.companyid
+                        )
+                        OR EXISTS (
+                            SELECT 1 FROM {local_alx_api_reporting} r
+                            WHERE r.userid = cmc.userid 
+                            AND r.courseid = cm.course
+                            AND r.companyid = cu.companyid
+                            AND r.last_updated < :cutoff_time2
+                        )
+                    )";
                 
                 $module_changes = $DB->get_records_sql($module_sql, [
                     'cutoff_time' => $cutoff_time,
+                    'cutoff_time2' => $cutoff_time,
                     'companyid' => $company->id
                 ]);
                 
@@ -1027,10 +1059,26 @@ function local_alx_report_api_sync_recent_changes($companyid = 0, $hours_back = 
                     JOIN {enrol} e ON e.id = ue.enrolid
                     JOIN {company_users} cu ON cu.userid = ue.userid
                     WHERE ue.timemodified >= :cutoff_time 
-                    AND cu.companyid = :companyid";
+                    AND cu.companyid = :companyid
+                    AND (
+                        NOT EXISTS (
+                            SELECT 1 FROM {local_alx_api_reporting} r
+                            WHERE r.userid = ue.userid 
+                            AND r.courseid = e.courseid
+                            AND r.companyid = cu.companyid
+                        )
+                        OR EXISTS (
+                            SELECT 1 FROM {local_alx_api_reporting} r
+                            WHERE r.userid = ue.userid 
+                            AND r.courseid = e.courseid
+                            AND r.companyid = cu.companyid
+                            AND r.last_updated < :cutoff_time2
+                        )
+                    )";
                 
                 $enrollment_changes = $DB->get_records_sql($enrollment_sql, [
                     'cutoff_time' => $cutoff_time,
+                    'cutoff_time2' => $cutoff_time,
                     'companyid' => $company->id
                 ]);
                 
