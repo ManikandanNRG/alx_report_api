@@ -944,6 +944,155 @@ function local_alx_report_api_sync_user_data($userid, $companyid) {
 }
 
 /**
+ * Sync only recent changes to the reporting table (incremental sync).
+ * This is much faster than full population as it only processes changed records.
+ *
+ * @param int $companyid Company ID (0 for all companies)
+ * @param int $hours_back Number of hours to look back for changes
+ * @return array Statistics about the sync operation
+ */
+function local_alx_report_api_sync_recent_changes($companyid = 0, $hours_back = 1) {
+    global $DB;
+    
+    $start_time = time();
+    $cutoff_time = $start_time - ($hours_back * 3600);
+    
+    $stats = [
+        'success' => true,
+        'total_processed' => 0,
+        'records_created' => 0,
+        'records_updated' => 0,
+        'companies_processed' => 0,
+        'errors' => []
+    ];
+    
+    try {
+        // Get companies to process
+        if ($companyid > 0) {
+            $companies = [$DB->get_record('company', ['id' => $companyid])];
+        } else {
+            $companies = $DB->get_records('company', null, 'id ASC');
+        }
+        
+        foreach ($companies as $company) {
+            if (!$company) continue;
+            
+            $stats['companies_processed']++;
+            $company_changes = [];
+            
+            // 1. Find users with recent course completion changes
+            try {
+                $completion_sql = "
+                    SELECT DISTINCT cc.userid, cc.course as courseid
+                    FROM {course_completions} cc
+                    JOIN {company_users} cu ON cu.userid = cc.userid
+                    WHERE cc.timecompleted >= :cutoff_time 
+                    AND cu.companyid = :companyid";
+                
+                $completion_changes = $DB->get_records_sql($completion_sql, [
+                    'cutoff_time' => $cutoff_time,
+                    'companyid' => $company->id
+                ]);
+                
+                $company_changes = array_merge($company_changes, $completion_changes);
+            } catch (Exception $e) {
+                $stats['errors'][] = "Company {$company->id} completion query error: " . $e->getMessage();
+            }
+            
+            // 2. Find users with recent module completion changes
+            try {
+                $module_sql = "
+                    SELECT DISTINCT cmc.userid, cm.course as courseid
+                    FROM {course_modules_completion} cmc
+                    JOIN {course_modules} cm ON cm.id = cmc.coursemoduleid
+                    JOIN {company_users} cu ON cu.userid = cmc.userid
+                    WHERE cmc.timemodified >= :cutoff_time 
+                    AND cu.companyid = :companyid";
+                
+                $module_changes = $DB->get_records_sql($module_sql, [
+                    'cutoff_time' => $cutoff_time,
+                    'companyid' => $company->id
+                ]);
+                
+                $company_changes = array_merge($company_changes, $module_changes);
+            } catch (Exception $e) {
+                $stats['errors'][] = "Company {$company->id} module query error: " . $e->getMessage();
+            }
+            
+            // 3. Find users with recent enrollment changes
+            try {
+                $enrollment_sql = "
+                    SELECT DISTINCT ue.userid, e.courseid
+                    FROM {user_enrolments} ue
+                    JOIN {enrol} e ON e.id = ue.enrolid
+                    JOIN {company_users} cu ON cu.userid = ue.userid
+                    WHERE ue.timemodified >= :cutoff_time 
+                    AND cu.companyid = :companyid";
+                
+                $enrollment_changes = $DB->get_records_sql($enrollment_sql, [
+                    'cutoff_time' => $cutoff_time,
+                    'companyid' => $company->id
+                ]);
+                
+                $company_changes = array_merge($company_changes, $enrollment_changes);
+            } catch (Exception $e) {
+                $stats['errors'][] = "Company {$company->id} enrollment query error: " . $e->getMessage();
+            }
+            
+            // Remove duplicates (same user-course combination)
+            $unique_changes = [];
+            foreach ($company_changes as $change) {
+                $key = "{$change->userid}-{$change->courseid}";
+                if (!isset($unique_changes[$key])) {
+                    $unique_changes[$key] = $change;
+                }
+            }
+            
+            // Update each changed record
+            foreach ($unique_changes as $change) {
+                try {
+                    // Check if record exists before update
+                    $existing = $DB->get_record(\local_alx_report_api\constants::TABLE_REPORTING, [
+                        'userid' => $change->userid,
+                        'courseid' => $change->courseid,
+                        'companyid' => $company->id
+                    ]);
+                    
+                    $result = local_alx_report_api_update_reporting_record(
+                        $change->userid,
+                        $company->id,
+                        $change->courseid
+                    );
+                    
+                    if ($result) {
+                        $stats['total_processed']++;
+                        if ($existing) {
+                            $stats['records_updated']++;
+                        } else {
+                            $stats['records_created']++;
+                        }
+                    }
+                } catch (Exception $e) {
+                    $stats['errors'][] = "Error updating user {$change->userid}, course {$change->courseid}: " . $e->getMessage();
+                }
+            }
+        }
+        
+        $stats['duration_seconds'] = time() - $start_time;
+        
+        if (!empty($stats['errors'])) {
+            $stats['success'] = false;
+        }
+        
+    } catch (Exception $e) {
+        $stats['success'] = false;
+        $stats['errors'][] = 'Critical sync error: ' . $e->getMessage();
+    }
+    
+    return $stats;
+}
+
+/**
  * Get sync status for a company and token combination.
  *
  * @param int $companyid Company ID

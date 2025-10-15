@@ -102,10 +102,10 @@ if ($action && $confirm) {
                     $before_count = $DB->count_records(\local_alx_report_api\constants::TABLE_REPORTING);
                 }
                 
-                // Call sync function (false = no progress output to avoid JS errors)
-                echo "🔄 Calling sync function...\n";
+                // Call INCREMENTAL sync function (only processes recent changes)
+                echo "🔄 Calling incremental sync function for recent changes...\n";
                 flush();
-                $result = local_alx_report_api_populate_reporting_table($companyid, 1000, false);
+                $result = local_alx_report_api_sync_recent_changes($companyid, $hours_back);
                 echo "📊 Sync function returned: " . print_r($result, true) . "\n";
                 flush();
                 
