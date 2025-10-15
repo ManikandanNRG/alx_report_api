@@ -1129,6 +1129,12 @@ function local_alx_report_api_sync_recent_changes($companyid = 0, $hours_back = 
             $stats['success'] = false;
         }
         
+        // Clear cache for this company so API returns fresh data
+        if ($stats['total_processed'] > 0) {
+            $cache_cleared = local_alx_report_api_cache_clear_company($company->id);
+            $stats['cache_cleared'] = $cache_cleared;
+        }
+        
     } catch (Exception $e) {
         $stats['success'] = false;
         $stats['errors'][] = 'Critical sync error: ' . $e->getMessage();
@@ -1359,6 +1365,36 @@ function local_alx_report_api_cache_cleanup($max_age_hours = 24) {
     $cutoff_time = time() - ($max_age_hours * 3600);
     
     return $DB->delete_records_select(\local_alx_report_api\constants::TABLE_CACHE, 'expires_at < ?', [$cutoff_time]);
+}
+
+/**
+ * Clear all cache entries for a specific company.
+ * Used after manual sync or data updates to ensure API returns fresh data.
+ *
+ * @param int $companyid Company ID
+ * @return int Number of cache entries cleared
+ */
+function local_alx_report_api_cache_clear_company($companyid) {
+    global $DB;
+    
+    try {
+        // Check if cache table exists
+        if (!$DB->get_manager()->table_exists(\local_alx_report_api\constants::TABLE_CACHE)) {
+            return 0;
+        }
+        
+        // Validate company ID
+        if (empty($companyid) || $companyid <= 0) {
+            return 0;
+        }
+        
+        // Delete all cache entries for this company
+        return $DB->delete_records(\local_alx_report_api\constants::TABLE_CACHE, ['companyid' => $companyid]);
+        
+    } catch (Exception $e) {
+        error_log('ALX Report API: Error clearing company cache - ' . $e->getMessage());
+        return 0;
+    }
 }
 
 /**
