@@ -1165,10 +1165,14 @@ echo '<div style="position: fixed; top: 0; right: 0; background: #10b981; color:
                                     </div>
                                     
                                     <!-- Cache Enabled -->
-                                    <div id="cache_enabled_field" style="background: #f8f9fa; padding: 20px; border-radius: 8px; border: 2px solid <?php echo (isset($current_settings['cache_enabled']) && $current_settings['cache_enabled']) ? '#28a745' : '#e9ecef'; ?>;">
+                                    <?php 
+                                    // Default to enabled (1) if not set, to match code behavior
+                                    $cache_enabled = isset($current_settings['cache_enabled']) ? $current_settings['cache_enabled'] : 1;
+                                    ?>
+                                    <div id="cache_enabled_field" style="background: #f8f9fa; padding: 20px; border-radius: 8px; border: 2px solid <?php echo $cache_enabled ? '#28a745' : '#e9ecef'; ?>;">
                                         <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; margin: 0;">
                                             <input type="checkbox" name="cache_enabled" id="cache_enabled" value="1" 
-                                                   <?php echo (isset($current_settings['cache_enabled']) && $current_settings['cache_enabled']) ? 'checked' : ''; ?>
+                                                   <?php echo $cache_enabled ? 'checked' : ''; ?>
                                                    style="width: 18px; height: 18px;">
                                             <div>
                                                 <div style="font-weight: 600; color: #495057;">
