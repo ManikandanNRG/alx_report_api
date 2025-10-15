@@ -213,13 +213,17 @@ if ($action && $confirm) {
                 flush();
                 
                 // Get detailed information about orphaned records BEFORE deleting
+                // IMPORTANT: Get email from user table (u.email), NOT from reporting table (r.email)
+                // The reporting table may have hashed emails, but user table has real emails
                 $sql = "SELECT r.id, r.userid, r.courseid, r.companyid,
-                               u.firstname, u.lastname, u.email,
-                               c.fullname as coursename,
+                               COALESCE(u.firstname, r.firstname) as firstname,
+                               COALESCE(u.lastname, r.lastname) as lastname,
+                               COALESCE(u.email, r.email) as email,
+                               COALESCE(c.fullname, r.coursename) as coursename,
                                comp.name as companyname
                         FROM {local_alx_api_reporting} r
                         LEFT JOIN {company_users} cu ON cu.userid = r.userid AND cu.companyid = r.companyid
-                        LEFT JOIN {user} u ON u.id = r.userid
+                        LEFT JOIN {user} u ON u.id = r.userid AND u.deleted = 0
                         LEFT JOIN {course} c ON c.id = r.courseid
                         LEFT JOIN {company} comp ON comp.id = r.companyid
                         WHERE cu.id IS NULL AND r.is_deleted = 0";
