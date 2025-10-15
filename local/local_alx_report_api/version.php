@@ -25,7 +25,7 @@
 defined('MOODLE_INTERNAL') || die();
 
 $plugin->component = 'local_alx_report_api';
-$plugin->version   = 2024101401; // Fixed cache key bug - includes course and field filters
+$plugin->version   = 2024101500; // Major improvements: Email alerts, sync enhancements, cleanup display
 $plugin->requires = 2022112800; // Moodle 4.2.6
 $plugin->maturity = MATURITY_STABLE;
-$plugin->release = '1.7.2'; // Critical bug fix - cache key now includes course and field filters 
+$plugin->release = '1.8.0'; // Email alert fix, incremental sync, duplicate prevention, cleanup enhancement, batch size clarification 

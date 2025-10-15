@@ -203,13 +203,25 @@ if ($action && $confirm) {
                 
             case 'cleanup':
                 echo "=== CLEANUP ORPHANED RECORDS ===\n";
-                echo "Company ID: " . ($companyid > 0 ? $companyid : 'All companies') . "\n";
+                if ($companyid > 0) {
+                    $sync_details['company_info'] = $DB->get_record('company', ['id' => $companyid], 'id, name, shortname');
+                    echo "Company: " . $sync_details['company_info']->name . " (ID: $companyid)\n";
+                } else {
+                    echo "Company: All Companies\n";
+                }
                 echo "Started at: " . date('Y-m-d H:i:s') . "\n\n";
                 flush();
                 
-                $deleted_count = 0;
-                $sql = "SELECT r.id FROM {local_alx_api_reporting} r
+                // Get detailed information about orphaned records BEFORE deleting
+                $sql = "SELECT r.id, r.userid, r.courseid, r.companyid,
+                               u.firstname, u.lastname, u.email,
+                               c.fullname as coursename,
+                               comp.name as companyname
+                        FROM {local_alx_api_reporting} r
                         LEFT JOIN {company_users} cu ON cu.userid = r.userid AND cu.companyid = r.companyid
+                        LEFT JOIN {user} u ON u.id = r.userid
+                        LEFT JOIN {course} c ON c.id = r.courseid
+                        LEFT JOIN {company} comp ON comp.id = r.companyid
                         WHERE cu.id IS NULL AND r.is_deleted = 0";
                 $params = [];
                 if ($companyid > 0) {
@@ -217,16 +229,80 @@ if ($action && $confirm) {
                     $params[] = $companyid;
                 }
                 
+                echo "🔍 Searching for orphaned records...\n";
+                flush();
+                
                 $orphaned = $DB->get_records_sql($sql, $params);
-                foreach ($orphaned as $record) {
-                    $DB->set_field(\local_alx_report_api\constants::TABLE_REPORTING, 'is_deleted', 1, ['id' => $record->id]);
-                    $deleted_count++;
+                $deleted_count = count($orphaned);
+                
+                if ($deleted_count > 0) {
+                    echo "Found $deleted_count orphaned record(s)\n";
+                    echo "🗑️ Marking records as deleted...\n";
+                    flush();
+                    
+                    // Store details for display
+                    $sync_details['deleted_users'] = [];
+                    $sync_details['deleted_by_company'] = [];
+                    $sync_details['deleted_courses'] = [];
+                    
+                    foreach ($orphaned as $record) {
+                        // Mark as deleted
+                        $DB->set_field(\local_alx_report_api\constants::TABLE_REPORTING, 'is_deleted', 1, ['id' => $record->id]);
+                        
+                        // Track user details
+                        $user_key = $record->userid;
+                        if (!isset($sync_details['deleted_users'][$user_key])) {
+                            $sync_details['deleted_users'][$user_key] = (object)[
+                                'userid' => $record->userid,
+                                'firstname' => $record->firstname ?: 'Unknown',
+                                'lastname' => $record->lastname ?: 'User',
+                                'email' => $record->email ?: 'N/A',
+                                'record_count' => 0
+                            ];
+                        }
+                        $sync_details['deleted_users'][$user_key]->record_count++;
+                        
+                        // Track by company
+                        if (!isset($sync_details['deleted_by_company'][$record->companyid])) {
+                            $sync_details['deleted_by_company'][$record->companyid] = (object)[
+                                'companyid' => $record->companyid,
+                                'companyname' => $record->companyname ?: 'Unknown Company',
+                                'count' => 0
+                            ];
+                        }
+                        $sync_details['deleted_by_company'][$record->companyid]->count++;
+                        
+                        // Track courses
+                        $course_key = $record->courseid;
+                        if (!isset($sync_details['deleted_courses'][$course_key])) {
+                            $sync_details['deleted_courses'][$course_key] = (object)[
+                                'courseid' => $record->courseid,
+                                'fullname' => $record->coursename ?: 'Unknown Course',
+                                'record_count' => 0
+                            ];
+                        }
+                        $sync_details['deleted_courses'][$course_key]->record_count++;
+                    }
+                    
+                    echo "✅ Successfully marked $deleted_count record(s) as deleted\n";
+                } else {
+                    echo "✅ No orphaned records found - database is clean!\n";
                 }
                 
-                echo "\n✅ Cleanup completed!\n";
                 echo "\n=== SUMMARY ===\n";
                 echo "Orphaned records marked deleted: $deleted_count\n";
-                $result = ['deleted' => $deleted_count];
+                if (!empty($sync_details['deleted_by_company'])) {
+                    echo "\nBy Company:\n";
+                    foreach ($sync_details['deleted_by_company'] as $comp) {
+                        echo "  - {$comp->companyname}: {$comp->count} record(s)\n";
+                    }
+                }
+                
+                $result = [
+                    'success' => true,
+                    'deleted' => $deleted_count,
+                    'total_processed' => $deleted_count
+                ];
                 break;
                 
             default:
@@ -248,7 +324,96 @@ if ($action && $confirm) {
     echo '</div>'; // Close progress-box
     
     // Display detailed results
-    if ($action !== 'cleanup') {
+    if ($action === 'cleanup') {
+        // Cleanup-specific results display
+        echo '<div class="results-grid">';
+        
+        // Company Information Card
+        if ($sync_details['company_info']) {
+            echo '<div class="result-card">';
+            echo '<h3><i class="fas fa-building"></i> Company Information</h3>';
+            echo '<div class="stat-row"><span class="stat-label">Company Name:</span><span class="stat-value">' . htmlspecialchars($sync_details['company_info']->name) . '</span></div>';
+            echo '<div class="stat-row"><span class="stat-label">Company ID:</span><span class="stat-value">' . $companyid . '</span></div>';
+            echo '</div>';
+        }
+        
+        // Cleanup Statistics Card
+        echo '<div class="result-card">';
+        echo '<h3><i class="fas fa-trash-alt"></i> Cleanup Statistics</h3>';
+        echo '<div class="stat-row"><span class="stat-label">Orphaned Records Found:</span><span class="stat-value" style="color: #ef4444;">' . $result['deleted'] . '</span></div>';
+        echo '<div class="stat-row"><span class="stat-label">Records Marked Deleted:</span><span class="stat-value" style="color: #10b981;">' . $result['deleted'] . '</span></div>';
+        echo '<div class="stat-row"><span class="stat-label">Duration:</span><span class="stat-value">' . $duration . ' seconds</span></div>';
+        echo '</div>';
+        
+        echo '</div>'; // Close results-grid
+        
+        // Deleted Records by Company
+        if (!empty($sync_details['deleted_by_company'])) {
+            echo '<h2 style="margin: 30px 0 20px 0; color: #2d3748; font-size: 24px; font-weight: 600;"><i class="fas fa-building"></i> Deleted Records by Company</h2>';
+            echo '<div class="data-table">';
+            echo '<table>';
+            echo '<thead><tr><th>Company Name</th><th>Records Deleted</th><th>Status</th></tr></thead>';
+            echo '<tbody>';
+            foreach ($sync_details['deleted_by_company'] as $comp) {
+                echo '<tr>';
+                echo '<td>' . htmlspecialchars($comp->companyname) . '</td>';
+                echo '<td>' . $comp->count . '</td>';
+                echo '<td><span class="badge badge-danger">✓ Cleaned</span></td>';
+                echo '</tr>';
+            }
+            echo '</tbody></table></div>';
+        }
+        
+        // Affected Courses
+        if (!empty($sync_details['deleted_courses'])) {
+            echo '<h2 style="margin: 30px 0 20px 0; color: #2d3748; font-size: 24px; font-weight: 600;"><i class="fas fa-book"></i> Affected Courses</h2>';
+            echo '<div class="data-table">';
+            echo '<table>';
+            echo '<thead><tr><th>Course Name</th><th>Records Deleted</th><th>Status</th></tr></thead>';
+            echo '<tbody>';
+            foreach ($sync_details['deleted_courses'] as $course) {
+                echo '<tr>';
+                echo '<td>' . htmlspecialchars($course->fullname) . '</td>';
+                echo '<td>' . $course->record_count . '</td>';
+                echo '<td><span class="badge badge-danger">✓ Cleaned</span></td>';
+                echo '</tr>';
+            }
+            echo '</tbody></table></div>';
+        }
+        
+        // Affected Users
+        if (!empty($sync_details['deleted_users'])) {
+            $deleted_users_array = array_values($sync_details['deleted_users']);
+            $total_users = count($deleted_users_array);
+            
+            echo '<h2 style="margin: 30px 0 20px 0; color: #2d3748; font-size: 24px; font-weight: 600;"><i class="fas fa-users"></i> Affected Users (' . $total_users . ')</h2>';
+            echo '<div class="data-table">';
+            echo '<table>';
+            echo '<thead><tr><th>User Name</th><th>Email</th><th>Records Deleted</th><th>Status</th></tr></thead>';
+            echo '<tbody>';
+            
+            foreach ($deleted_users_array as $user) {
+                echo '<tr>';
+                echo '<td>' . htmlspecialchars($user->firstname . ' ' . $user->lastname) . '</td>';
+                echo '<td>' . htmlspecialchars($user->email) . '</td>';
+                echo '<td>' . $user->record_count . '</td>';
+                echo '<td><span class="badge badge-danger">✓ Removed</span></td>';
+                echo '</tr>';
+            }
+            
+            echo '</tbody></table></div>';
+        }
+        
+        // No orphaned records message
+        if ($result['deleted'] == 0) {
+            echo '<div style="background: white; padding: 40px; text-align: center; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-top: 30px;">';
+            echo '<div style="font-size: 48px; margin-bottom: 20px;">✨</div>';
+            echo '<h3 style="color: #10b981; margin-bottom: 10px;">Database is Clean!</h3>';
+            echo '<p style="color: #64748b; margin: 0;">No orphaned records were found. Your reporting table is in good shape.</p>';
+            echo '</div>';
+        }
+        
+    } else if ($action !== 'cleanup') {
         echo '<div class="results-grid">';
         
         // Company Information Card
