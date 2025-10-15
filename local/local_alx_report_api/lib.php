@@ -1000,13 +1000,12 @@ function local_alx_report_api_sync_recent_changes($companyid = 0, $hours_back = 
                             WHERE r.userid = cc.userid 
                             AND r.courseid = cc.course
                             AND r.companyid = cu.companyid
-                            AND r.last_updated < :cutoff_time2
+                            AND cc.timecompleted > r.last_updated
                         )
                     )";
                 
                 $completion_changes = $DB->get_records_sql($completion_sql, [
                     'cutoff_time' => $cutoff_time,
-                    'cutoff_time2' => $cutoff_time,
                     'companyid' => $company->id
                 ]);
                 
@@ -1036,13 +1035,12 @@ function local_alx_report_api_sync_recent_changes($companyid = 0, $hours_back = 
                             WHERE r.userid = cmc.userid 
                             AND r.courseid = cm.course
                             AND r.companyid = cu.companyid
-                            AND r.last_updated < :cutoff_time2
+                            AND cmc.timemodified > r.last_updated
                         )
                     )";
                 
                 $module_changes = $DB->get_records_sql($module_sql, [
                     'cutoff_time' => $cutoff_time,
-                    'cutoff_time2' => $cutoff_time,
                     'companyid' => $company->id
                 ]);
                 
@@ -1072,13 +1070,12 @@ function local_alx_report_api_sync_recent_changes($companyid = 0, $hours_back = 
                             WHERE r.userid = ue.userid 
                             AND r.courseid = e.courseid
                             AND r.companyid = cu.companyid
-                            AND r.last_updated < :cutoff_time2
+                            AND ue.timemodified > r.last_updated
                         )
                     )";
                 
                 $enrollment_changes = $DB->get_records_sql($enrollment_sql, [
                     'cutoff_time' => $cutoff_time,
-                    'cutoff_time2' => $cutoff_time,
                     'companyid' => $company->id
                 ]);
                 
