@@ -1129,10 +1129,18 @@ function local_alx_report_api_sync_recent_changes($companyid = 0, $hours_back = 
             $stats['success'] = false;
         }
         
-        // Clear cache for this company so API returns fresh data
+        // Clear cache ONLY if caching is enabled for this company
         if ($stats['total_processed'] > 0) {
-            $cache_cleared = local_alx_report_api_cache_clear_company($company->id);
-            $stats['cache_cleared'] = $cache_cleared;
+            // Check if caching is enabled (default: enabled for backward compatibility)
+            $cache_enabled = local_alx_report_api_get_company_setting($company->id, 'enable_cache', 1);
+            
+            if ($cache_enabled) {
+                $cache_cleared = local_alx_report_api_cache_clear_company($company->id);
+                $stats['cache_cleared'] = $cache_cleared;
+            } else {
+                $stats['cache_cleared'] = 0;
+                $stats['cache_status'] = 'disabled';
+            }
         }
         
     } catch (Exception $e) {

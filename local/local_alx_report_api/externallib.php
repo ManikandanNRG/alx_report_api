@@ -634,13 +634,21 @@ class local_alx_report_api_external extends external_api {
         self::debug_log("Cache key: $cache_key");
         self::debug_log("Cache key components - Courses: [" . implode(',', $courses_for_hash) . "], Fields: [" . implode(',', array_keys($enabled_fields)) . "]");
         
-        // Check cache for ALL sync modes (universal caching)
-        $cached_data = local_alx_report_api_cache_get($cache_key, $companyid);
-        if ($cached_data !== false) {
-            self::debug_log("Cache hit - returning cached data for sync mode: {$sync_mode}");
-            return $cached_data;
+        // Check if caching is enabled for this company (default: enabled for backward compatibility)
+        $cache_enabled = local_alx_report_api_get_company_setting($companyid, 'enable_cache', 1);
+        self::debug_log("Cache enabled for company {$companyid}: " . ($cache_enabled ? 'YES' : 'NO'));
+        
+        // Only check cache if caching is enabled for this company
+        if ($cache_enabled) {
+            $cached_data = local_alx_report_api_cache_get($cache_key, $companyid);
+            if ($cached_data !== false) {
+                self::debug_log("Cache hit - returning cached data for sync mode: {$sync_mode}");
+                return $cached_data;
+            }
+            self::debug_log("Cache miss - will fetch fresh data");
+        } else {
+            self::debug_log("Cache disabled - skipping cache check, will query database directly");
         }
-        self::debug_log("Cache miss - will fetch fresh data");
         
         // Handle empty enabled courses (this logic now runs AFTER cache check)
         // Note: enabled_courses and field_settings are already loaded above for cache key
@@ -824,14 +832,19 @@ class local_alx_report_api_external extends external_api {
             local_alx_report_api_update_sync_status($companyid, $token, count($result), 'success');
         }
         
-        // Universal cache storage for ALL sync modes
-        // Get TTL from company settings or use default (60 minutes)
-        $cache_ttl_minutes = local_alx_report_api_get_company_setting($companyid, 'cache_ttl_minutes', 60);
-        $cache_ttl = $cache_ttl_minutes * 60; // Convert to seconds
-        
-        // Cache all results (including empty) for all sync modes
-        local_alx_report_api_cache_set($cache_key, $companyid, $result, $cache_ttl);
-        self::debug_log("Cached result for sync mode: {$sync_mode}, TTL: {$cache_ttl} seconds");
+        // Only cache results if caching is enabled for this company
+        // Note: $cache_enabled was already retrieved earlier in this function
+        if ($cache_enabled) {
+            // Get TTL from company settings or use default (60 minutes)
+            $cache_ttl_minutes = local_alx_report_api_get_company_setting($companyid, 'cache_ttl_minutes', 60);
+            $cache_ttl = $cache_ttl_minutes * 60; // Convert to seconds
+            
+            // Cache all results (including empty) for all sync modes
+            local_alx_report_api_cache_set($cache_key, $companyid, $result, $cache_ttl);
+            self::debug_log("Cached result for sync mode: {$sync_mode}, TTL: {$cache_ttl} seconds");
+        } else {
+            self::debug_log("Cache disabled - skipping cache storage");
+        }
         
         // Handle empty results - must return empty array for Moodle external API compliance
         if (empty($result)) {
