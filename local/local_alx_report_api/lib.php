@@ -762,11 +762,12 @@ function local_alx_report_api_populate_reporting_table($companyid = 0, $batch_si
 
 /**
  * Update a single record in the reporting table.
+ * Fetches fresh data from Moodle database and updates/creates reporting table record.
  *
  * @param int $userid User ID
  * @param int $companyid Company ID
  * @param int $courseid Course ID
- * @return bool True on success
+ * @return array Array with 'created' and 'updated' boolean flags
  */
 function local_alx_report_api_update_reporting_record($userid, $companyid, $courseid) {
     global $DB;
@@ -835,7 +836,8 @@ function local_alx_report_api_update_reporting_record($userid, $companyid, $cour
         
         if (!$record) {
             // User not found or not enrolled, mark as deleted
-            return local_alx_report_api_soft_delete_reporting_record($userid, $companyid, $courseid);
+            local_alx_report_api_soft_delete_reporting_record($userid, $companyid, $courseid);
+            return ['created' => false, 'updated' => false, 'deleted' => true];
         }
         
         // Check if reporting record exists
@@ -848,7 +850,7 @@ function local_alx_report_api_update_reporting_record($userid, $companyid, $cour
         $current_time = time();
         
         if ($existing) {
-            // Update existing record
+            // Update existing record with fresh data
             $existing->firstname = $record->firstname;
             $existing->lastname = $record->lastname;
             $existing->email = $record->email;
@@ -862,7 +864,8 @@ function local_alx_report_api_update_reporting_record($userid, $companyid, $cour
             $existing->is_deleted = 0;
             $existing->timemodified = $current_time;
             
-            return $DB->update_record(\local_alx_report_api\constants::TABLE_REPORTING, $existing);
+            $success = $DB->update_record(\local_alx_report_api\constants::TABLE_REPORTING, $existing);
+            return ['created' => false, 'updated' => $success];
         } else {
             // Insert new record
             $reporting_record = new stdClass();
@@ -883,12 +886,13 @@ function local_alx_report_api_update_reporting_record($userid, $companyid, $cour
             $reporting_record->timecreated = $current_time;
             $reporting_record->timemodified = $current_time;
             
-            return $DB->insert_record(\local_alx_report_api\constants::TABLE_REPORTING, $reporting_record);
+            $success = $DB->insert_record(\local_alx_report_api\constants::TABLE_REPORTING, $reporting_record);
+            return ['created' => (bool)$success, 'updated' => false];
         }
         
     } catch (Exception $e) {
         debugging('Error updating reporting record: ' . $e->getMessage(), DEBUG_DEVELOPER);
-        return false;
+        return ['created' => false, 'updated' => false, 'error' => $e->getMessage()];
     }
 }
 
@@ -1084,6 +1088,29 @@ function local_alx_report_api_sync_recent_changes($companyid = 0, $hours_back = 
                 $stats['errors'][] = "Company {$company->id} enrollment query error: " . $e->getMessage();
             }
             
+            // 4. Find users with recent profile changes (firstname, lastname, email, username)
+            try {
+                $user_profile_sql = "
+                    SELECT DISTINCT u.id as userid, r.courseid
+                    FROM {user} u
+                    JOIN {company_users} cu ON cu.userid = u.id
+                    JOIN {local_alx_api_reporting} r ON r.userid = u.id AND r.companyid = cu.companyid
+                    WHERE u.timemodified >= :cutoff_time
+                    AND cu.companyid = :companyid
+                    AND u.deleted = 0
+                    AND u.suspended = 0
+                    AND u.timemodified > r.last_updated";
+                
+                $user_profile_changes = $DB->get_records_sql($user_profile_sql, [
+                    'cutoff_time' => $cutoff_time,
+                    'companyid' => $company->id
+                ]);
+                
+                $company_changes = array_merge($company_changes, $user_profile_changes);
+            } catch (Exception $e) {
+                $stats['errors'][] = "Company {$company->id} user profile query error: " . $e->getMessage();
+            }
+            
             // Remove duplicates (same user-course combination)
             $unique_changes = [];
             foreach ($company_changes as $change) {
@@ -1096,25 +1123,18 @@ function local_alx_report_api_sync_recent_changes($companyid = 0, $hours_back = 
             // Update each changed record
             foreach ($unique_changes as $change) {
                 try {
-                    // Check if record exists before update
-                    $existing = $DB->get_record(\local_alx_report_api\constants::TABLE_REPORTING, [
-                        'userid' => $change->userid,
-                        'courseid' => $change->courseid,
-                        'companyid' => $company->id
-                    ]);
-                    
                     $result = local_alx_report_api_update_reporting_record(
                         $change->userid,
                         $company->id,
                         $change->courseid
                     );
                     
-                    if ($result) {
+                    if ($result['created'] || $result['updated']) {
                         $stats['total_processed']++;
-                        if ($existing) {
-                            $stats['records_updated']++;
-                        } else {
+                        if ($result['created']) {
                             $stats['records_created']++;
+                        } else if ($result['updated']) {
+                            $stats['records_updated']++;
                         }
                     }
                 } catch (Exception $e) {
