@@ -263,9 +263,27 @@ class sync_reporting_data_task extends \core\task\scheduled_task {
         } catch (\Exception $e) {
             $stats['errors'][] = "Error querying enrollments: " . $e->getMessage();
         }
+        
+        // Find users with recent profile changes (firstname, lastname, email, username)
+        $user_profile_changes = [];
+        try {
+            $user_profile_sql = "
+                SELECT DISTINCT u.id as userid, r.courseid
+                FROM {user} u
+                JOIN {company_users} cu ON cu.userid = u.id
+                JOIN {local_alx_api_reporting} r ON r.userid = u.id AND r.companyid = cu.companyid
+                WHERE u.timemodified >= :cutoff_time
+                AND cu.companyid = :companyid
+                AND u.deleted = 0
+                AND u.suspended = 0
+                AND u.timemodified > r.last_updated";
+            $user_profile_changes = $DB->get_records_sql($user_profile_sql, $params);
+        } catch (\Exception $e) {
+            $stats['errors'][] = "Error querying user profile changes: " . $e->getMessage();
+        }
             
         // Combine all changes and get unique users/courses to update
-        $all_changes = array_merge($completion_changes, $module_changes, $enrollment_changes);
+        $all_changes = array_merge($completion_changes, $module_changes, $enrollment_changes, $user_profile_changes);
         
         if (empty($all_changes)) {
             return $stats;
