@@ -360,7 +360,7 @@
 
 /* Cache Management Styles */
 .cache-stats-content {
-    display: none !important; /* Force hide by default */
+    display: none; /* Hidden by default, shown by JavaScript */
 }
 
 .company-selector {
