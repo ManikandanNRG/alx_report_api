@@ -152,12 +152,8 @@ if ($cleanup_action === 'clear' && $cleanup_confirm) {
     exit;
 }
 
-// Debug: Log all parameters
-error_log("CACHE CLEAR PARAMS: action=$action, confirm=$confirm, companyid=" . optional_param('companyid', 0, PARAM_INT));
-
-// Handle cache clear action (using existing function) - accept both clear_cache and clearcache
-if (($action === 'clear_cache' || $action === 'clearcache') && $confirm) {
-    error_log("CACHE CLEAR: Handler triggered!");
+// Handle cache clear action (using existing function)
+if ($action === 'clearcache' && $confirm) {
     require_sesskey();
     $cache_companyid = required_param('companyid', PARAM_INT);
     
@@ -1322,7 +1318,7 @@ if (!empty($companies)) {
         // Clear cache form (only if entries exist)
         if ($cache_count > 0) {
             echo '<form method="post" action="' . $CFG->wwwroot . '/local/alx_report_api/populate_reporting_table.php" id="clear-cache-form" onsubmit="return confirm(\'Are you sure you want to clear cache for ' . htmlspecialchars($company->name) . '? This will force fresh data to be loaded on the next API call.\');">';
-            echo '<input type="hidden" name="action" value="clear_cache">';
+            echo '<input type="hidden" name="action" value="clearcache">';
             echo '<input type="hidden" name="companyid" value="' . $selected_cache_company . '">';
             echo '<input type="hidden" name="confirm" value="1">';
             echo '<input type="hidden" name="sesskey" value="' . sesskey() . '">';
