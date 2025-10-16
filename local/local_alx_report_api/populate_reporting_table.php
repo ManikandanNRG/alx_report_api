@@ -146,6 +146,25 @@ if ($cleanup_action === 'clear' && $cleanup_confirm) {
     exit;
 }
 
+// Handle cache clear action (using existing function)
+if ($action === 'clear_cache' && $confirm) {
+    require_sesskey();
+    $cache_companyid = required_param('companyid', PARAM_INT);
+    
+    if ($cache_companyid > 0) {
+        $company = $DB->get_record('company', ['id' => $cache_companyid], 'name');
+        // Use existing function - it already works!
+        $cleared = local_alx_report_api_cache_clear_company($cache_companyid);
+        
+        redirect(
+            new moodle_url('/local/alx_report_api/populate_reporting_table.php'),
+            "Cache cleared successfully for {$company->name}! {$cleared} entries removed.",
+            null,
+            \core\output\notification::NOTIFY_SUCCESS
+        );
+    }
+}
+
 if ($action === 'populate' && $confirm) {
     if (!$is_cli) {
         echo $OUTPUT->header();
@@ -1162,6 +1181,121 @@ if ($total_reporting_records > 0) {
     echo '</button>';
     
     echo '</form>';
+    echo '</div>';
+    echo '</div>';
+}
+
+// Cache Management Section
+if (!empty($companies)) {
+    $selected_cache_company = optional_param('cache_company', 0, PARAM_INT);
+    
+    echo '<div class="dashboard-card" style="margin-top: 30px;">';
+    echo '<div class="card-header" style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);">';
+    echo '<h3 class="card-title"><i class="fas fa-database"></i> 💾 Cache Management</h3>';
+    echo '<p class="card-subtitle">View cache statistics and manually clear cache for a company</p>';
+    echo '</div>';
+    echo '<div class="card-body">';
+    
+    // Company selector form
+    echo '<form method="get" action="' . $CFG->wwwroot . '/local/alx_report_api/populate_reporting_table.php" style="margin-bottom: 20px;">';
+    echo '<div style="margin-bottom: 15px;">';
+    echo '<label style="display: block; font-weight: 600; color: #2d3748; margin-bottom: 8px;">Select Company:</label>';
+    echo '<select name="cache_company" id="cache_company" onchange="this.form.submit()" style="width: 100%; padding: 10px 15px; border: 2px solid #e9ecef; border-radius: 8px; font-size: 15px; background: white;">';
+    echo '<option value="0">Select a company...</option>';
+    foreach ($companies as $company) {
+        $selected = ($company->id == $selected_cache_company) ? 'selected' : '';
+        echo '<option value="' . $company->id . '" ' . $selected . '>' . htmlspecialchars($company->name) . '</option>';
+    }
+    echo '</select>';
+    echo '</div>';
+    echo '</form>';
+    
+    // Show cache stats if company selected (using simple direct queries)
+    if ($selected_cache_company > 0) {
+        $company = $DB->get_record('company', ['id' => $selected_cache_company], 'name');
+        
+        // Simple direct queries (no complex functions)
+        $cache_count = $DB->count_records(\local_alx_report_api\constants::TABLE_CACHE, ['companyid' => $selected_cache_company]);
+        $cache_enabled = local_alx_report_api_get_company_setting($selected_cache_company, 'enable_cache', 1);
+        
+        $last_update = null;
+        $expires_at = null;
+        $is_expired = true;
+        
+        if ($cache_count > 0) {
+            $sql = "SELECT MAX(timecreated) as last_update FROM {" . \local_alx_report_api\constants::TABLE_CACHE . "} WHERE companyid = ?";
+            $last_update = $DB->get_field_sql($sql, [$selected_cache_company]);
+            if ($last_update) {
+                $expires_at = $last_update + 3600; // Default 1 hour TTL
+                $is_expired = (time() > $expires_at);
+            }
+        }
+        
+        echo '<div style="background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; padding: 20px; margin-bottom: 20px;">';
+        echo '<h4 style="margin: 0 0 15px 0; color: #2d3748; font-size: 16px;">📈 Cache Statistics for ' . htmlspecialchars($company->name) . '</h4>';
+        
+        echo '<table style="width: 100%; border-collapse: collapse;">';
+        echo '<tr style="border-bottom: 1px solid #e2e8f0;">';
+        echo '<td style="padding: 10px 0; font-weight: 600; color: #4a5568;">Total Cache Entries:</td>';
+        echo '<td style="padding: 10px 0; text-align: right; font-weight: 700; color: #2d3748;">' . number_format($cache_count) . '</td>';
+        echo '</tr>';
+        
+        if ($last_update) {
+            echo '<tr style="border-bottom: 1px solid #e2e8f0;">';
+            echo '<td style="padding: 10px 0; font-weight: 600; color: #4a5568;">Last Cache Update:</td>';
+            echo '<td style="padding: 10px 0; text-align: right; color: #2d3748;">' . date('Y-m-d H:i:s', $last_update) . '</td>';
+            echo '</tr>';
+            
+            echo '<tr style="border-bottom: 1px solid #e2e8f0;">';
+            echo '<td style="padding: 10px 0; font-weight: 600; color: #4a5568;">Cache Expires At:</td>';
+            echo '<td style="padding: 10px 0; text-align: right; color: #2d3748;">';
+            echo date('Y-m-d H:i:s', $expires_at);
+            if ($is_expired) {
+                echo ' <span style="display: inline-block; padding: 2px 8px; background: #fee2e2; color: #dc2626; border-radius: 4px; font-size: 12px; font-weight: 600; margin-left: 8px;">Expired</span>';
+            } else {
+                $minutes_left = round(($expires_at - time()) / 60);
+                echo ' <span style="display: inline-block; padding: 2px 8px; background: #d1fae5; color: #065f46; border-radius: 4px; font-size: 12px; font-weight: 600; margin-left: 8px;">Active (in ' . $minutes_left . ' min)</span>';
+            }
+            echo '</td>';
+            echo '</tr>';
+        } else {
+            echo '<tr style="border-bottom: 1px solid #e2e8f0;">';
+            echo '<td colspan="2" style="padding: 10px 0; color: #64748b; font-style: italic;">No cache entries found</td>';
+            echo '</tr>';
+        }
+        
+        echo '<tr>';
+        echo '<td style="padding: 10px 0; font-weight: 600; color: #4a5568;">Cache Status:</td>';
+        echo '<td style="padding: 10px 0; text-align: right;">';
+        if ($cache_enabled) {
+            echo '<span style="display: inline-block; padding: 4px 12px; background: #d1fae5; color: #065f46; border-radius: 12px; font-size: 13px; font-weight: 600;">✅ Enabled</span>';
+        } else {
+            echo '<span style="display: inline-block; padding: 4px 12px; background: #fef3c7; color: #92400e; border-radius: 12px; font-size: 13px; font-weight: 600;">⚠️ Disabled</span>';
+        }
+        echo '</td>';
+        echo '</tr>';
+        echo '</table>';
+        
+        echo '</div>';
+        
+        // Clear cache form (only if entries exist)
+        if ($cache_count > 0) {
+            echo '<form method="post" action="' . $CFG->wwwroot . '/local/alx_report_api/populate_reporting_table.php" onsubmit="return confirm(\'Are you sure you want to clear cache for ' . htmlspecialchars($company->name) . '? This will force fresh data to be loaded on the next API call.\');">';
+            echo '<input type="hidden" name="action" value="clear_cache">';
+            echo '<input type="hidden" name="companyid" value="' . $selected_cache_company . '">';
+            echo '<input type="hidden" name="confirm" value="1">';
+            echo '<input type="hidden" name="sesskey" value="' . sesskey() . '">';
+            echo '<button type="submit" class="btn-populate btn-danger">';
+            echo '<i class="fas fa-trash"></i> Clear Cache Now';
+            echo '</button>';
+            echo '</form>';
+        } else {
+            echo '<p style="color: #64748b; font-style: italic; margin: 0;">No cache entries to clear.</p>';
+        }
+    } else {
+        echo '<p style="color: #64748b; font-style: italic; margin: 0;">Select a company to view cache statistics.</p>';
+    }
+    
     echo '</div>';
     echo '</div>';
 }
