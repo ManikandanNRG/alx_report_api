@@ -25,7 +25,7 @@
 defined('MOODLE_INTERNAL') || die();
 
 $plugin->component = 'local_alx_report_api';
-$plugin->version   = 2024101600; // User profile sync detection fix
+$plugin->version   = 2024101603; // Cache Management UI implementation
 $plugin->requires = 2022112800; // Moodle 4.2.6
 $plugin->maturity = MATURITY_STABLE;
-$plugin->release = '1.8.1'; // User profile changes detection (firstname, lastname, email, username) in manual and auto sync 
+$plugin->release = '1.8.3'; // Cache Management UI - View and clear cache per company 
