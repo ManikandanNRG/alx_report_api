@@ -6,7 +6,9 @@
  * Extracted from inline styles for better organization and performance.
  */
 
-* { font-family: "Inter", sans-serif; }
+* {
+    font-family: "Inter", sans-serif;
+}
 
 .populate-container {
     max-width: 1400px;
@@ -29,7 +31,7 @@
 .dashboard-card {
     background: white;
     border-radius: 12px;
-    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
     overflow: hidden;
     margin-bottom: 20px;
     width: 100%;
@@ -320,6 +322,7 @@
         opacity: 0;
         transform: translateY(-10px);
     }
+
     to {
         opacity: 1;
         transform: translateY(0);
@@ -333,4 +336,60 @@
 
 .cache-success-message p {
     margin: 0;
+}
+
+/* Company selector styling for cache management */
+.company-selector {
+    background: #f8f9fa;
+    padding: 20px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+}
+
+.form-inline {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    flex-wrap: wrap;
+}
+
+/* Fix footer overlap */
+#cache-management {
+    margin-bottom: 100px;
+}
+
+/* Cache Management Styles */
+.cache-stats-content {
+    display: none !important; /* Force hide by default */
+}
+
+.company-selector {
+    background: #f8f9fa;
+    padding: 20px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+}
+
+.company-selector label {
+    display: block;
+    font-weight: 600;
+    color: #495057;
+    margin-bottom: 12px;
+}
+
+.company-selector select {
+    width: 100%;
+    max-width: 400px;
+    padding: 10px 15px;
+    border: 2px solid #e9ecef;
+    border-radius: 8px;
+    font-size: 15px;
+    background: white;
+    transition: all 0.3s;
+}
+
+.company-selector select:focus {
+    border-color: #28a745;
+    box-shadow: 0 0 0 0.2rem rgba(40, 167, 69, 0.25);
+    outline: none;
 }
