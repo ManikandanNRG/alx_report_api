@@ -172,11 +172,8 @@ if ($action === 'clearcache' && $confirm) {
         // Log to Moodle error log for debugging
         error_log("CACHE CLEAR DEBUG: Company $cache_companyid - Before: $count_before, Cleared: $cleared, After: $count_after");
         
-        // Redirect to clean URL with only success message parameters
-        $redirect_url = new moodle_url('/local/alx_report_api/populate_reporting_table.php', [
-            'cache_cleared' => $cleared,
-            'cache_company_name' => urlencode($company->name)
-        ]);
+        // Redirect to clean URL (no parameters) with session-based notification
+        $redirect_url = new moodle_url('/local/alx_report_api/populate_reporting_table.php');
         
         redirect(
             $redirect_url,
@@ -1211,25 +1208,12 @@ if ($total_reporting_records > 0) {
 // CACHE MANAGEMENT SECTION - NO URL CHANGES, JAVASCRIPT ONLY
 // ============================================================================
 
-// Get success message parameters (only after cache clear)
-$cache_cleared = optional_param('cache_cleared', 0, PARAM_INT);
-$cache_company_name = optional_param('cache_company_name', '', PARAM_TEXT);
-
 echo '<div class="dashboard-card" style="margin-top: 30px;">';
 echo '<div class="card-header" style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);">';
 echo '<h3 class="card-title"><i class="fas fa-memory"></i> 💾 Cache Management</h3>';
 echo '<p class="card-subtitle">View cache statistics and manually clear cache for a company</p>';
 echo '</div>';
 echo '<div class="card-body">';
-
-// Show success message if cache was cleared
-if ($cache_cleared > 0 && !empty($cache_company_name)) {
-    echo '<div class="alert alert-success" style="background: #d4edda; border: 1px solid #c3e6cb; color: #155724; padding: 15px 20px; border-radius: 8px; margin-bottom: 20px;">';
-    echo '<strong><i class="fas fa-check-circle"></i> Cache Cleared Successfully!</strong><br>';
-    echo 'Cleared <strong>' . $cache_cleared . '</strong> cache entries for <strong>' . htmlspecialchars(urldecode($cache_company_name)) . '</strong>.<br>';
-    echo '<small>Fresh data will be loaded on the next API call.</small>';
-    echo '</div>';
-}
 
 // Company selector - NO URL CHANGE, JavaScript only
 echo '<div class="company-selector" style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px;">';
