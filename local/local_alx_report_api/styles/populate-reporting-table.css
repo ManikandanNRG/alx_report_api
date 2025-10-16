@@ -277,3 +277,60 @@
     background: linear-gradient(to right, transparent, #dee2e6, transparent);
     margin: 12px 0;
 }
+
+/* Cache Management Section */
+#cache-management {
+    scroll-margin-top: 20px;
+    transition: box-shadow 0.3s ease;
+}
+
+.cache-company-select {
+    width: 100%;
+    padding: 10px 15px;
+    border: 2px solid #e9ecef;
+    border-radius: 8px;
+    font-size: 15px;
+    background: white;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.cache-company-select:hover {
+    border-color: #3b82f6;
+}
+
+.cache-company-select:focus {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.cache-success-message {
+    background: #d1fae5;
+    border: 1px solid #10b981;
+    border-radius: 8px;
+    padding: 15px;
+    margin-bottom: 20px;
+    color: #065f46;
+    animation: slideIn 0.3s ease;
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.cache-success-message h4 {
+    margin: 0 0 5px 0;
+    color: #065f46;
+}
+
+.cache-success-message p {
+    margin: 0;
+}

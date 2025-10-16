@@ -37,6 +37,11 @@ require_once(__DIR__ . '/lib.php');
 require_login();
 require_capability('moodle/site:config', context_system::instance());
 
+// Prevent browser caching
+header('Cache-Control: no-cache, no-store, must-revalidate');
+header('Pragma: no-cache');
+header('Expires: 0');
+
 // Set up page
 $PAGE->set_url('/local/alx_report_api/populate_reporting_table.php');
 $PAGE->set_context(context_system::instance());
@@ -50,6 +55,7 @@ $is_cli = (php_sapi_name() === 'cli');
 $action = optional_param('action', '', PARAM_ALPHA);
 $companyid = optional_param('companyid', 0, PARAM_INT);
 $company_ids = optional_param_array('company_ids', [], PARAM_INT);
+$confirm = optional_param('confirm', 0, PARAM_INT);
 $company_all = optional_param('company_all', 0, PARAM_INT);
 $batch_size = optional_param('batch_size', 1000, PARAM_INT);
 $confirm = optional_param('confirm', 0, PARAM_INT);
@@ -146,19 +152,42 @@ if ($cleanup_action === 'clear' && $cleanup_confirm) {
     exit;
 }
 
-// Handle cache clear action (using existing function)
-if ($action === 'clear_cache' && $confirm) {
+// Debug: Log all parameters
+error_log("CACHE CLEAR PARAMS: action=$action, confirm=$confirm, companyid=" . optional_param('companyid', 0, PARAM_INT));
+
+// Handle cache clear action (using existing function) - accept both clear_cache and clearcache
+if (($action === 'clear_cache' || $action === 'clearcache') && $confirm) {
+    error_log("CACHE CLEAR: Handler triggered!");
     require_sesskey();
     $cache_companyid = required_param('companyid', PARAM_INT);
     
     if ($cache_companyid > 0) {
         $company = $DB->get_record('company', ['id' => $cache_companyid], 'name');
-        // Use existing function - it already works!
+        
+        // Count before clear
+        $count_before = $DB->count_records(\local_alx_report_api\constants::TABLE_CACHE, ['companyid' => $cache_companyid]);
+        
+        // Clear cache
         $cleared = local_alx_report_api_cache_clear_company($cache_companyid);
         
+        // Count after clear
+        $count_after = $DB->count_records(\local_alx_report_api\constants::TABLE_CACHE, ['companyid' => $cache_companyid]);
+        
+        // Log to Moodle error log for debugging
+        error_log("CACHE CLEAR DEBUG: Company $cache_companyid - Before: $count_before, Cleared: $cleared, After: $count_after");
+        
+        // Redirect back to cache management section with cache-busting parameter
+        $redirect_url = new moodle_url('/local/alx_report_api/populate_reporting_table.php', [
+            'cache_company' => $cache_companyid,
+            'cache_cleared' => $cleared,
+            'cache_company_name' => urlencode($company->name),
+            'scroll_to' => 'cache-management',
+            '_' => time() // Cache-busting parameter
+        ]);
+        
         redirect(
-            new moodle_url('/local/alx_report_api/populate_reporting_table.php'),
-            "Cache cleared successfully for {$company->name}! {$cleared} entries removed.",
+            $redirect_url,
+            "✅ Cache cleared successfully for {$company->name}! Removed {$cleared} entries.",
             null,
             \core\output\notification::NOTIFY_SUCCESS
         );
@@ -1188,19 +1217,31 @@ if ($total_reporting_records > 0) {
 // Cache Management Section
 if (!empty($companies)) {
     $selected_cache_company = optional_param('cache_company', 0, PARAM_INT);
+    $cache_cleared = optional_param('cache_cleared', 0, PARAM_INT);
+    $cache_company_name = optional_param('cache_company_name', '', PARAM_TEXT);
     
-    echo '<div class="dashboard-card" style="margin-top: 30px;">';
+    echo '<div id="cache-management" class="dashboard-card" style="margin-top: 30px;">';
     echo '<div class="card-header" style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);">';
     echo '<h3 class="card-title"><i class="fas fa-database"></i> 💾 Cache Management</h3>';
     echo '<p class="card-subtitle">View cache statistics and manually clear cache for a company</p>';
     echo '</div>';
     echo '<div class="card-body">';
     
+    // Show success message if cache was cleared
+    if ($cache_cleared > 0 && !empty($cache_company_name)) {
+        echo '<div style="background: #d1fae5; border: 1px solid #10b981; border-radius: 8px; padding: 15px; margin-bottom: 20px; color: #065f46;">';
+        echo '<h4 style="margin: 0 0 5px 0; color: #065f46;"><i class="fas fa-check-circle"></i> Cache Cleared Successfully!</h4>';
+        echo '<p style="margin: 0;">Cleared <strong>' . $cache_cleared . '</strong> cache entries for <strong>' . htmlspecialchars(urldecode($cache_company_name)) . '</strong>.</p>';
+        echo '<p style="margin: 5px 0 0 0; font-size: 13px;">Fresh data will be loaded on the next API call.</p>';
+        echo '</div>';
+    }
+    
     // Company selector form
-    echo '<form method="get" action="' . $CFG->wwwroot . '/local/alx_report_api/populate_reporting_table.php" style="margin-bottom: 20px;">';
+    echo '<form method="get" action="' . $CFG->wwwroot . '/local/alx_report_api/populate_reporting_table.php" id="cache-company-form" style="margin-bottom: 20px;">';
+    echo '<input type="hidden" name="scroll_to" value="cache-management">';
     echo '<div style="margin-bottom: 15px;">';
     echo '<label style="display: block; font-weight: 600; color: #2d3748; margin-bottom: 8px;">Select Company:</label>';
-    echo '<select name="cache_company" id="cache_company" onchange="this.form.submit()" style="width: 100%; padding: 10px 15px; border: 2px solid #e9ecef; border-radius: 8px; font-size: 15px; background: white;">';
+    echo '<select name="cache_company" id="cache_company" onchange="submitCacheForm()" class="cache-company-select">';
     echo '<option value="0">Select a company...</option>';
     foreach ($companies as $company) {
         $selected = ($company->id == $selected_cache_company) ? 'selected' : '';
@@ -1280,17 +1321,19 @@ if (!empty($companies)) {
         
         // Clear cache form (only if entries exist)
         if ($cache_count > 0) {
-            echo '<form method="post" action="' . $CFG->wwwroot . '/local/alx_report_api/populate_reporting_table.php" onsubmit="return confirm(\'Are you sure you want to clear cache for ' . htmlspecialchars($company->name) . '? This will force fresh data to be loaded on the next API call.\');">';
+            echo '<form method="post" action="' . $CFG->wwwroot . '/local/alx_report_api/populate_reporting_table.php" id="clear-cache-form" onsubmit="return confirm(\'Are you sure you want to clear cache for ' . htmlspecialchars($company->name) . '? This will force fresh data to be loaded on the next API call.\');">';
             echo '<input type="hidden" name="action" value="clear_cache">';
             echo '<input type="hidden" name="companyid" value="' . $selected_cache_company . '">';
             echo '<input type="hidden" name="confirm" value="1">';
             echo '<input type="hidden" name="sesskey" value="' . sesskey() . '">';
-            echo '<button type="submit" class="btn-populate btn-danger">';
+            echo '<button type="submit" class="btn-populate btn-danger" style="width: 100%;">';
             echo '<i class="fas fa-trash"></i> Clear Cache Now';
             echo '</button>';
             echo '</form>';
         } else {
-            echo '<p style="color: #64748b; font-style: italic; margin: 0;">No cache entries to clear.</p>';
+            echo '<div style="background: #f0fdf4; border: 1px solid #86efac; border-radius: 8px; padding: 15px; text-align: center;">';
+            echo '<p style="color: #166534; margin: 0; font-weight: 600;"><i class="fas fa-check-circle"></i> No cache entries - Cache is empty</p>';
+            echo '</div>';
         }
     } else {
         echo '<p style="color: #64748b; font-style: italic; margin: 0;">Select a company to view cache statistics.</p>';
@@ -1298,6 +1341,38 @@ if (!empty($companies)) {
     
     echo '</div>';
     echo '</div>';
+    
+    // JavaScript for cache management
+    $scroll_to = optional_param('scroll_to', '', PARAM_ALPHA);
+    echo '<script>';
+    echo 'function submitCacheForm() {';
+    echo '    document.getElementById("cache-company-form").submit();';
+    echo '}';
+    echo '';
+    echo 'document.addEventListener("DOMContentLoaded", function() {';
+    
+    // Check if we need to scroll to cache section
+    if ($scroll_to === 'cache-management' || $selected_cache_company > 0 || $cache_cleared > 0) {
+        echo '    const cacheSection = document.getElementById("cache-management");';
+        echo '    if (cacheSection) {';
+        echo '        setTimeout(function() {';
+        echo '            const yOffset = -20;';
+        echo '            const y = cacheSection.getBoundingClientRect().top + window.pageYOffset + yOffset;';
+        echo '            window.scrollTo({top: y, behavior: "smooth"});';
+        echo '        }, 300);';
+        
+        // Add highlight effect
+        $highlight_color = ($cache_cleared > 0) ? 'rgba(16, 185, 129, 0.3)' : 'rgba(59, 130, 246, 0.3)';
+        echo '        cacheSection.style.transition = "box-shadow 0.3s ease";';
+        echo '        cacheSection.style.boxShadow = "0 0 20px ' . $highlight_color . '";';
+        echo '        setTimeout(function() {';
+        echo '            cacheSection.style.boxShadow = "0 2px 4px rgba(0,0,0,0.1)";';
+        echo '        }, 2000);';
+        echo '    }';
+    }
+    
+    echo '});';
+    echo '</script>';
 }
 
 // Statistics by company - Intelligence Dashboard Style
