@@ -966,6 +966,7 @@ function local_alx_report_api_sync_recent_changes($companyid = 0, $hours_back = 
         'total_processed' => 0,
         'records_created' => 0,
         'records_updated' => 0,
+        'records_deleted' => 0,
         'companies_processed' => 0,
         'errors' => []
     ];
@@ -1136,10 +1137,67 @@ function local_alx_report_api_sync_recent_changes($companyid = 0, $hours_back = 
                         } else if ($result['updated']) {
                             $stats['records_updated']++;
                         }
+                    } else if (isset($result['deleted']) && $result['deleted']) {
+                        $stats['total_processed']++;
+                        $stats['records_deleted']++;
                     }
                 } catch (Exception $e) {
                     $stats['errors'][] = "Error updating user {$change->userid}, course {$change->courseid}: " . $e->getMessage();
                 }
+            }
+            
+            // 5. Detect and mark deleted/suspended users and unenrolled courses
+            try {
+                $deletion_sql = "
+                    SELECT DISTINCT r.userid, r.courseid
+                    FROM {local_alx_api_reporting} r
+                    WHERE r.companyid = :companyid
+                    AND r.is_deleted = 0
+                    AND (
+                        -- User is deleted or suspended
+                        EXISTS (
+                            SELECT 1 FROM {user} u
+                            WHERE u.id = r.userid
+                            AND (u.deleted = 1 OR u.suspended = 1)
+                        )
+                        -- OR user no longer in company
+                        OR NOT EXISTS (
+                            SELECT 1 FROM {company_users} cu
+                            WHERE cu.userid = r.userid
+                            AND cu.companyid = :companyid2
+                        )
+                        -- OR user no longer enrolled in course
+                        OR NOT EXISTS (
+                            SELECT 1 FROM {user_enrolments} ue
+                            JOIN {enrol} e ON e.id = ue.enrolid
+                            WHERE ue.userid = r.userid
+                            AND e.courseid = r.courseid
+                        )
+                        -- OR course is hidden
+                        OR EXISTS (
+                            SELECT 1 FROM {course} c
+                            WHERE c.id = r.courseid
+                            AND c.visible = 0
+                        )
+                    )";
+                
+                $records_to_delete = $DB->get_records_sql($deletion_sql, [
+                    'companyid' => $company->id,
+                    'companyid2' => $company->id
+                ]);
+                
+                foreach ($records_to_delete as $record) {
+                    try {
+                        if (local_alx_report_api_soft_delete_reporting_record($record->userid, $company->id, $record->courseid)) {
+                            $stats['total_processed']++;
+                            $stats['records_deleted']++;
+                        }
+                    } catch (Exception $e) {
+                        $stats['errors'][] = "Error deleting user {$record->userid}, course {$record->courseid}: " . $e->getMessage();
+                    }
+                }
+            } catch (Exception $e) {
+                $stats['errors'][] = "Company {$company->id} deletion detection error: " . $e->getMessage();
             }
         }
         
