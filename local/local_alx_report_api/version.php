@@ -25,7 +25,7 @@
 defined('MOODLE_INTERNAL') || die();
 
 $plugin->component = 'local_alx_report_api';
-$plugin->version   = 2024101703; // Cache Management UI implementation
+$plugin->version   = 2024101704; // Version 1.9.0 release
 $plugin->requires = 2022112800; // Moodle 4.2.6
 $plugin->maturity = MATURITY_STABLE;
-$plugin->release = '1.8.4'; // directory reorganized and pushed to new repo 
+$plugin->release = '1.9.0'; // Main branch established with latest code 
