@@ -71,16 +71,16 @@
 
 ---
 
-#### **BUG #4: Manual Sync Only One Course Per User** ⏳ **PENDING**
-- **Status:** ⏳ **NOT STARTED**
+#### **BUG #4: Manual Sync Only One Course Per User** ✅ **COMPLETED**
+- **Status:** ✅ **FIXED & VERIFIED**
 - **Severity:** CRITICAL
 - **Reported By:** Tester
-- **Root Cause:** Duplicate removal logic only keeps first course per user
-- **Location:** `lib.php` sync_recent_changes function lines 1100-1110
-- **Fix Required:** Change deduplication logic to accumulate all courses per user
-- **Files to Change:** `local/local_alx_report_api/lib.php`
+- **Root Cause:** `$DB->get_records_sql()` uses first column as array key, overwriting multiple courses for same user
+- **Location:** `lib.php` sync_recent_changes function - 4 SQL queries
+- **Fix Applied:** Added `CONCAT(userid, '-', courseid) as id` as first column to create unique composite keys
+- **Files Changed:** `local/local_alx_report_api/lib.php` (lines 983, 1017, 1052, 1087)
 - **Expected Result:** All courses synced for users with multiple enrollments
-- **Verification Status:** ⏳ Not started
+- **Verification Status:** ✅ **CONFIRMED WORKING** (User verified)
 
 ---
 
@@ -157,10 +157,10 @@
 ## 📊 SUMMARY STATISTICS
 
 - **Total Bugs Identified:** 9
-- **Completed & Verified:** 3 (33%)
+- **Completed & Verified:** 4 (44%)
 - **Completed (Awaiting Verification):** 1 (11%)
 - **In Progress:** 0 (0%)
-- **Pending:** 5 (56%)
+- **Pending:** 4 (44%)
 
 ### **By Severity:**
 - **CRITICAL:** 3 bugs (BUG #4, #6, and #1 ✅)
@@ -175,9 +175,10 @@
 
 ## 🎯 NEXT STEPS
 
-1. **High Priority:** Fix BUG #4, #5 (Tester critical issues)
-2. **Medium Priority:** Fix BUG #6, #7, #9 (Data accuracy)
-3. **Low Priority:** Fix BUG #8 (Optimization)
+1. **High Priority:** Fix BUG #5 (Non-editing teachers in API)
+2. **Critical Priority:** Fix BUG #6 (Wrong completion status)
+3. **Medium Priority:** Fix BUG #7, #9 (Data accuracy)
+4. **Low Priority:** Fix BUG #8 (Optimization)
 
 ---
 
@@ -193,4 +194,4 @@
 ---
 
 **Last Updated:** October 18, 2025  
-**Next Bug to Fix:** BUG #4 - Manual Sync Only One Course Per User (CRITICAL)
+**Next Bug to Fix:** BUG #5 - Non-Editing Teachers Included in API (HIGH)

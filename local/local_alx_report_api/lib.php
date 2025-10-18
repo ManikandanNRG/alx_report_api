@@ -628,6 +628,9 @@ function local_alx_report_api_populate_reporting_table($companyid = 0, $batch_si
                 JOIN {enrol} e ON e.id = ue.enrolid
                 JOIN {course} c ON c.id = e.courseid
                 LEFT JOIN {course_completions} cc ON cc.userid = u.id AND cc.course = c.id
+                JOIN {role_assignments} ra ON ra.userid = u.id
+                JOIN {context} ctx ON ctx.id = ra.contextid AND ctx.contextlevel = 50 AND ctx.instanceid = c.id
+                JOIN {role} r ON r.id = ra.roleid AND r.shortname = 'student'
                 WHERE cu.companyid = :companyid
                     AND u.deleted = 0
                     AND u.suspended = 0
@@ -819,6 +822,9 @@ function local_alx_report_api_update_reporting_record($userid, $companyid, $cour
             LEFT JOIN {enrol} e ON e.id = ue.enrolid AND e.courseid = :courseid
             JOIN {course} c ON c.id = :courseid2
             LEFT JOIN {course_completions} cc ON cc.userid = u.id AND cc.course = c.id
+            JOIN {role_assignments} ra ON ra.userid = u.id
+            JOIN {context} ctx ON ctx.id = ra.contextid AND ctx.contextlevel = 50 AND ctx.instanceid = c.id
+            JOIN {role} r ON r.id = ra.roleid AND r.shortname = 'student'
             WHERE u.id = :userid
                 AND cu.companyid = :companyid
                 AND u.deleted = 0
@@ -983,6 +989,9 @@ function local_alx_report_api_sync_recent_changes($companyid = 0, $hours_back = 
                     SELECT DISTINCT CONCAT(cc.userid, '-', cc.course) as id, cc.userid, cc.course as courseid
                     FROM {course_completions} cc
                     JOIN {company_users} cu ON cu.userid = cc.userid
+                    JOIN {role_assignments} ra ON ra.userid = cc.userid
+                    JOIN {context} ctx ON ctx.id = ra.contextid AND ctx.contextlevel = 50 AND ctx.instanceid = cc.course
+                    JOIN {role} r ON r.id = ra.roleid AND r.shortname = 'student'
                     WHERE cc.timecompleted >= :cutoff_time 
                     AND cu.companyid = :companyid
                     AND (
@@ -1018,6 +1027,9 @@ function local_alx_report_api_sync_recent_changes($companyid = 0, $hours_back = 
                     FROM {course_modules_completion} cmc
                     JOIN {course_modules} cm ON cm.id = cmc.coursemoduleid
                     JOIN {company_users} cu ON cu.userid = cmc.userid
+                    JOIN {role_assignments} ra ON ra.userid = cmc.userid
+                    JOIN {context} ctx ON ctx.id = ra.contextid AND ctx.contextlevel = 50 AND ctx.instanceid = cm.course
+                    JOIN {role} r ON r.id = ra.roleid AND r.shortname = 'student'
                     WHERE cmc.timemodified >= :cutoff_time 
                     AND cu.companyid = :companyid
                     AND (
@@ -1053,6 +1065,9 @@ function local_alx_report_api_sync_recent_changes($companyid = 0, $hours_back = 
                     FROM {user_enrolments} ue
                     JOIN {enrol} e ON e.id = ue.enrolid
                     JOIN {company_users} cu ON cu.userid = ue.userid
+                    JOIN {role_assignments} ra ON ra.userid = ue.userid
+                    JOIN {context} ctx ON ctx.id = ra.contextid AND ctx.contextlevel = 50 AND ctx.instanceid = e.courseid
+                    JOIN {role} r ON r.id = ra.roleid AND r.shortname = 'student'
                     WHERE ue.timemodified >= :cutoff_time 
                     AND cu.companyid = :companyid
                     AND (
@@ -1088,6 +1103,9 @@ function local_alx_report_api_sync_recent_changes($companyid = 0, $hours_back = 
                     FROM {user} u
                     JOIN {company_users} cu ON cu.userid = u.id
                     JOIN {local_alx_api_reporting} r ON r.userid = u.id AND r.companyid = cu.companyid
+                    JOIN {role_assignments} ra ON ra.userid = u.id
+                    JOIN {context} ctx ON ctx.id = ra.contextid AND ctx.contextlevel = 50 AND ctx.instanceid = r.courseid
+                    JOIN {role} r2 ON r2.id = ra.roleid AND r2.shortname = 'student'
                     WHERE u.timemodified >= :cutoff_time
                     AND cu.companyid = :companyid
                     AND u.deleted = 0
