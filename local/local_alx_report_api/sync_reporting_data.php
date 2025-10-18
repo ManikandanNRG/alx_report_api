@@ -41,8 +41,32 @@ $companyid = optional_param('companyid', 0, PARAM_INT);
 $hours_back = optional_param('hours_back', 1, PARAM_INT);
 $confirm = optional_param('confirm', 0, PARAM_INT);
 
-// Process sync action
-if ($action && $confirm) {
+// Generate unique token for this sync request
+$sync_token = optional_param('sync_token', '', PARAM_ALPHANUMEXT);
+
+// Process sync action - only on POST and with valid token to prevent refresh from re-running
+if ($action && $confirm && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    // Check if this token was already processed
+    if (!empty($sync_token) && isset($_SESSION['processed_sync_tokens'][$sync_token])) {
+        // This sync was already processed, redirect to form
+        redirect(new moodle_url('/local/alx_report_api/sync_reporting_data.php'));
+        exit;
+    }
+    
+    // Mark this token as processed
+    if (!isset($_SESSION['processed_sync_tokens'])) {
+        $_SESSION['processed_sync_tokens'] = [];
+    }
+    if (!empty($sync_token)) {
+        $_SESSION['processed_sync_tokens'][$sync_token] = time();
+        
+        // Clean old tokens (older than 1 hour)
+        foreach ($_SESSION['processed_sync_tokens'] as $token => $timestamp) {
+            if (time() - $timestamp > 3600) {
+                unset($_SESSION['processed_sync_tokens'][$token]);
+            }
+        }
+    }
     echo $OUTPUT->header();
     
     // Modern UI styling
@@ -704,6 +728,7 @@ echo '</div>';
 echo '<div class="card-body">';
 echo '<form method="post">';
 echo '<input type="hidden" name="action" value="sync_changes">';
+echo '<input type="hidden" name="sync_token" value="' . md5(uniqid(rand(), true)) . '">';
 echo '<div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px;">';
 echo '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 15px;">';
 echo '<div>';
@@ -739,6 +764,7 @@ echo '</div>';
 echo '<div class="card-body">';
 echo '<form method="post">';
 echo '<input type="hidden" name="action" value="sync_full">';
+echo '<input type="hidden" name="sync_token" value="' . md5(uniqid(rand(), true)) . '">';
 echo '<div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px;">';
 echo '<div style="margin-bottom: 15px;">';
 echo '<label style="display: block; margin-bottom: 8px; font-weight: 600; color: #495057;">Company (Required):</label>';
@@ -768,6 +794,7 @@ echo '</div>';
 echo '<div class="card-body">';
 echo '<form method="post">';
 echo '<input type="hidden" name="action" value="cleanup">';
+echo '<input type="hidden" name="sync_token" value="' . md5(uniqid(rand(), true)) . '">';
 echo '<div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px;">';
 echo '<div style="margin-bottom: 15px;">';
 echo '<label style="display: block; margin-bottom: 8px; font-weight: 600; color: #495057;">Company:</label>';

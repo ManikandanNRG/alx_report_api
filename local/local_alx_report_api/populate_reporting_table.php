@@ -62,13 +62,36 @@ $confirm = optional_param('confirm', 0, PARAM_INT);
 $cleanup_action = optional_param('cleanup_action', '', PARAM_ALPHA);
 $cleanup_companyid = optional_param('cleanup_companyid', 0, PARAM_INT);
 $cleanup_confirm = optional_param('cleanup_confirm', 0, PARAM_INT);
+$populate_token = optional_param('populate_token', '', PARAM_ALPHANUMEXT);
+$cleanup_token = optional_param('cleanup_token', '', PARAM_ALPHANUMEXT);
 
 // Pagination parameters for results display
 $results_page = optional_param('results_page', 1, PARAM_INT);
 $results_perpage = 50; // Show 50 companies per page
 
-// Process company selection
-if ($action === 'populate' && $confirm) {
+// Process company selection - only on POST to prevent refresh from re-running
+if ($action === 'populate' && $confirm && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    // Check if this token was already processed
+    if (!empty($populate_token) && isset($_SESSION['processed_populate_tokens'][$populate_token])) {
+        // This populate was already processed, redirect to form
+        redirect(new moodle_url('/local/alx_report_api/populate_reporting_table.php'));
+        exit;
+    }
+    
+    // Mark this token as processed
+    if (!isset($_SESSION['processed_populate_tokens'])) {
+        $_SESSION['processed_populate_tokens'] = [];
+    }
+    if (!empty($populate_token)) {
+        $_SESSION['processed_populate_tokens'][$populate_token] = time();
+        
+        // Clean old tokens (older than 1 hour)
+        foreach ($_SESSION['processed_populate_tokens'] as $token => $timestamp) {
+            if (time() - $timestamp > 3600) {
+                unset($_SESSION['processed_populate_tokens'][$token]);
+            }
+        }
+    }
     // Determine which companies to process
     $companies_to_process = [];
     if ($company_all || empty($company_ids)) {
@@ -80,8 +103,29 @@ if ($action === 'populate' && $confirm) {
     }
 }
 
-// Handle cleanup action
-if ($cleanup_action === 'clear' && $cleanup_confirm) {
+// Handle cleanup action - only on POST to prevent refresh from re-running
+if ($cleanup_action === 'clear' && $cleanup_confirm && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    // Check if this token was already processed
+    if (!empty($cleanup_token) && isset($_SESSION['processed_cleanup_tokens'][$cleanup_token])) {
+        // This cleanup was already processed, redirect to form
+        redirect(new moodle_url('/local/alx_report_api/populate_reporting_table.php'));
+        exit;
+    }
+    
+    // Mark this token as processed
+    if (!isset($_SESSION['processed_cleanup_tokens'])) {
+        $_SESSION['processed_cleanup_tokens'] = [];
+    }
+    if (!empty($cleanup_token)) {
+        $_SESSION['processed_cleanup_tokens'][$cleanup_token] = time();
+        
+        // Clean old tokens (older than 1 hour)
+        foreach ($_SESSION['processed_cleanup_tokens'] as $token => $timestamp) {
+            if (time() - $timestamp > 3600) {
+                unset($_SESSION['processed_cleanup_tokens'][$token]);
+            }
+        }
+    }
     if (!$is_cli) {
         echo $OUTPUT->header();
         echo $OUTPUT->heading('Clearing Reporting Table Data...');
@@ -1084,6 +1128,7 @@ echo '<div class="card-body">';
 
 echo '<form method="post" id="populate-form">';
 echo '<input type="hidden" name="action" value="populate">';
+echo '<input type="hidden" name="populate_token" value="' . md5(uniqid(rand(), true)) . '">';
 
 echo '<div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px;">';
 echo '<label for="company-dropdown" style="display: block; margin-bottom: 12px; font-weight: 600; color: #495057;">Companies to Populate:</label>';
@@ -1175,6 +1220,7 @@ if ($total_reporting_records > 0) {
     
     echo '<form method="post" id="cleanup-form">';
     echo '<input type="hidden" name="cleanup_action" value="clear">';
+    echo '<input type="hidden" name="cleanup_token" value="' . md5(uniqid(rand(), true)) . '">';
     
     echo '<div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px;">';
     echo '<label for="cleanup_companyid" style="display: block; margin-bottom: 8px; font-weight: 600; color: #495057;">Company to Clear:</label>';
