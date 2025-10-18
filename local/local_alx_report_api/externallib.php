@@ -826,11 +826,8 @@ class local_alx_report_api_external extends external_api {
             $result[] = $response_item;
         }
 
-        // Update sync status (skip if disabled mode)
-        $company_sync_mode = local_alx_report_api_get_company_setting($companyid, 'sync_mode', 0);
-        if ($company_sync_mode !== 3) { // Don't update sync status if disabled mode
-            local_alx_report_api_update_sync_status($companyid, $token, count($result), 'success');
-        }
+        // Note: Sync status is now only updated by cron tasks, not API calls
+        // This ensures control center shows actual sync times, not API access times
         
         // Only cache results if caching is enabled for this company
         // Note: $cache_enabled was already retrieved earlier in this function

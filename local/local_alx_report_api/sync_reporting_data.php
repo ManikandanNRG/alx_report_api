@@ -131,19 +131,21 @@ if ($action && $confirm) {
                 $course_sql .= " GROUP BY c.id, c.fullname ORDER BY record_count DESC LIMIT 10";
                 $sync_details['affected_courses'] = $DB->get_records_sql($course_sql, $course_params);
                 
-                // Get all affected users
-                $all_users_sql = "SELECT u.id, u.firstname, u.lastname, u.email, 
+                // Get all affected users - use reporting table email (same as API)
+                $all_users_sql = "SELECT r.userid as id, 
+                                        MAX(r.firstname) as firstname, 
+                                        MAX(r.lastname) as lastname, 
+                                        MAX(r.email) as email, 
                                         COUNT(r.id) as course_count,
                                         MIN(r.timecreated) as first_created
                                 FROM {local_alx_api_reporting} r
-                                JOIN {user} u ON u.id = r.userid
                                 WHERE r.last_updated >= ?";
                 $all_users_params = [$start_time];
                 if ($companyid > 0) {
                     $all_users_sql .= " AND r.companyid = ?";
                     $all_users_params[] = $companyid;
                 }
-                $all_users_sql .= " GROUP BY u.id, u.firstname, u.lastname, u.email ORDER BY course_count DESC";
+                $all_users_sql .= " GROUP BY r.userid ORDER BY course_count DESC";
                 $sync_details['affected_users'] = $DB->get_records_sql($all_users_sql, $all_users_params);
                 
                 $sync_details['created_records'] = max(0, $after_count - $before_count);
@@ -177,14 +179,16 @@ if ($action && $confirm) {
                                   GROUP BY c.id, c.fullname ORDER BY record_count DESC LIMIT 10";
                     $sync_details['affected_courses'] = $DB->get_records_sql($course_sql, [$companyid, $start_time]);
                     
-                    // Get all affected users
-                    $all_users_sql = "SELECT u.id, u.firstname, u.lastname, u.email, 
+                    // Get all affected users - use reporting table email (same as API)
+                    $all_users_sql = "SELECT r.userid as id, 
+                                            MAX(r.firstname) as firstname, 
+                                            MAX(r.lastname) as lastname, 
+                                            MAX(r.email) as email, 
                                             COUNT(r.id) as course_count,
                                             MIN(r.timecreated) as first_created
                                     FROM {local_alx_api_reporting} r
-                                    JOIN {user} u ON u.id = r.userid
                                     WHERE r.companyid = ? AND r.last_updated >= ?
-                                    GROUP BY u.id, u.firstname, u.lastname, u.email ORDER BY course_count DESC";
+                                    GROUP BY r.userid ORDER BY course_count DESC";
                     $sync_details['affected_users'] = $DB->get_records_sql($all_users_sql, [$companyid, $start_time]);
                     
                     $sync_details['created_records'] = max(0, $after_count - $before_count);
@@ -218,7 +222,7 @@ if ($action && $confirm) {
                 $sql = "SELECT r.id, r.userid, r.courseid, r.companyid,
                                COALESCE(u.firstname, r.firstname) as firstname,
                                COALESCE(u.lastname, r.lastname) as lastname,
-                               COALESCE(u.email, r.email) as email,
+                               CASE WHEN u.email IS NOT NULL THEN u.email ELSE 'User Deleted' END as email,
                                COALESCE(c.fullname, r.coursename) as coursename,
                                comp.name as companyname
                         FROM {local_alx_api_reporting} r
