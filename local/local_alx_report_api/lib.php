@@ -897,7 +897,7 @@ function local_alx_report_api_update_reporting_record($userid, $companyid, $cour
 }
 
 /**
- * Soft delete a reporting record (mark as deleted instead of removing).
+ * Hard delete a reporting record (physically remove from database).
  *
  * @param int $userid User ID
  * @param int $companyid Company ID
@@ -907,20 +907,12 @@ function local_alx_report_api_update_reporting_record($userid, $companyid, $cour
 function local_alx_report_api_soft_delete_reporting_record($userid, $companyid, $courseid) {
     global $DB;
     
-    $existing = $DB->get_record(\local_alx_report_api\constants::TABLE_REPORTING, [
+    // Hard delete - physically remove the record from database
+    return $DB->delete_records(\local_alx_report_api\constants::TABLE_REPORTING, [
         'userid' => $userid,
         'courseid' => $courseid,
         'companyid' => $companyid
     ]);
-    
-    if ($existing) {
-        $existing->is_deleted = 1;
-        $existing->last_updated = time();
-        $existing->timemodified = time();
-        return $DB->update_record(\local_alx_report_api\constants::TABLE_REPORTING, $existing);
-    }
-    
-    return true; // Already doesn't exist
 }
 
 /**

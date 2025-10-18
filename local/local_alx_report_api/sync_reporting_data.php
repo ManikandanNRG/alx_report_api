@@ -245,7 +245,7 @@ if ($action && $confirm) {
                 
                 if ($deleted_count > 0) {
                     echo "Found $deleted_count orphaned record(s)\n";
-                    echo "🗑️ Marking records as deleted...\n";
+                    echo "🗑️ Permanently deleting records...\n";
                     flush();
                     
                     // Store details for display
@@ -254,8 +254,8 @@ if ($action && $confirm) {
                     $sync_details['deleted_courses'] = [];
                     
                     foreach ($orphaned as $record) {
-                        // Mark as deleted
-                        $DB->set_field(\local_alx_report_api\constants::TABLE_REPORTING, 'is_deleted', 1, ['id' => $record->id]);
+                        // Hard delete - physically remove the record
+                        $DB->delete_records(\local_alx_report_api\constants::TABLE_REPORTING, ['id' => $record->id]);
                         
                         // Track user details
                         $user_key = $record->userid;
