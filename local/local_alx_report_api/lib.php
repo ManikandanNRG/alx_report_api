@@ -980,7 +980,7 @@ function local_alx_report_api_sync_recent_changes($companyid = 0, $hours_back = 
             // 1. Find users with recent course completion changes
             try {
                 $completion_sql = "
-                    SELECT DISTINCT cc.userid, cc.course as courseid
+                    SELECT DISTINCT CONCAT(cc.userid, '-', cc.course) as id, cc.userid, cc.course as courseid
                     FROM {course_completions} cc
                     JOIN {company_users} cu ON cu.userid = cc.userid
                     WHERE cc.timecompleted >= :cutoff_time 
@@ -1014,7 +1014,7 @@ function local_alx_report_api_sync_recent_changes($companyid = 0, $hours_back = 
             // 2. Find users with recent module completion changes
             try {
                 $module_sql = "
-                    SELECT DISTINCT cmc.userid, cm.course as courseid
+                    SELECT DISTINCT CONCAT(cmc.userid, '-', cm.course) as id, cmc.userid, cm.course as courseid
                     FROM {course_modules_completion} cmc
                     JOIN {course_modules} cm ON cm.id = cmc.coursemoduleid
                     JOIN {company_users} cu ON cu.userid = cmc.userid
@@ -1049,7 +1049,7 @@ function local_alx_report_api_sync_recent_changes($companyid = 0, $hours_back = 
             // 3. Find users with recent enrollment changes
             try {
                 $enrollment_sql = "
-                    SELECT DISTINCT ue.userid, e.courseid
+                    SELECT DISTINCT CONCAT(ue.userid, '-', e.courseid) as id, ue.userid, e.courseid
                     FROM {user_enrolments} ue
                     JOIN {enrol} e ON e.id = ue.enrolid
                     JOIN {company_users} cu ON cu.userid = ue.userid
@@ -1084,7 +1084,7 @@ function local_alx_report_api_sync_recent_changes($companyid = 0, $hours_back = 
             // 4. Find users with recent profile changes (firstname, lastname, email, username)
             try {
                 $user_profile_sql = "
-                    SELECT DISTINCT u.id as userid, r.courseid
+                    SELECT DISTINCT CONCAT(u.id, '-', r.courseid) as id, u.id as userid, r.courseid
                     FROM {user} u
                     JOIN {company_users} cu ON cu.userid = u.id
                     JOIN {local_alx_api_reporting} r ON r.userid = u.id AND r.companyid = cu.companyid
