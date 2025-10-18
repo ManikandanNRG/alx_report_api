@@ -941,11 +941,6 @@ class local_alx_report_api_external extends external_api {
                     WHEN EXISTS(
                         SELECT 1 FROM {course_modules_completion} cmc
                         JOIN {course_modules} cm ON cm.id = cmc.coursemoduleid
-                        WHERE cm.course = c.id AND cmc.userid = u.id AND cmc.completionstate = 1
-                    ) THEN 'completed'
-                    WHEN EXISTS(
-                        SELECT 1 FROM {course_modules_completion} cmc
-                        JOIN {course_modules} cm ON cm.id = cmc.coursemoduleid
                         WHERE cm.course = c.id AND cmc.userid = u.id AND cmc.completionstate > 0
                     ) THEN 'in_progress'
                     WHEN ue.id IS NOT NULL THEN 'not_started'

@@ -84,16 +84,16 @@
 
 ---
 
-#### **BUG #5: Non-Editing Teachers Included in API** ⏳ **PENDING**
-- **Status:** ⏳ **NOT STARTED**
+#### **BUG #5: Non-Editing Teachers Included in API** ✅ **COMPLETED**
+- **Status:** ✅ **FIXED & VERIFIED**
 - **Severity:** HIGH
 - **Reported By:** Tester
 - **Root Cause:** No role filtering in SQL queries
 - **Location:** All populate/sync SQL queries in `lib.php`
-- **Fix Required:** Add role-based filtering to exclude non-editing teachers
-- **Files to Change:** `local/local_alx_report_api/lib.php`
+- **Fix Applied:** Added role filtering to 6 queries across 3 functions to include only 'student' role
+- **Files Changed:** `local/local_alx_report_api/lib.php` (lines 631-633, 825-827, 992-994, 1030-1032, 1068-1070, 1106-1108)
 - **Expected Result:** Only students appear in API/reports
-- **Verification Status:** ⏳ Not started
+- **Verification Status:** ✅ **CONFIRMED WORKING** (User verified)
 
 ---
 
@@ -157,10 +157,10 @@
 ## 📊 SUMMARY STATISTICS
 
 - **Total Bugs Identified:** 9
-- **Completed & Verified:** 4 (44%)
+- **Completed & Verified:** 5 (56%)
 - **Completed (Awaiting Verification):** 1 (11%)
 - **In Progress:** 0 (0%)
-- **Pending:** 4 (44%)
+- **Pending:** 3 (33%)
 
 ### **By Severity:**
 - **CRITICAL:** 3 bugs (BUG #4, #6, and #1 ✅)
@@ -194,4 +194,4 @@
 ---
 
 **Last Updated:** October 18, 2025  
-**Next Bug to Fix:** BUG #5 - Non-Editing Teachers Included in API (HIGH)
+**Next Bug to Fix:** BUG #6 - Wrong Completion Status (CRITICAL)

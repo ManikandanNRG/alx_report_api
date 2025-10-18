@@ -612,11 +612,6 @@ function local_alx_report_api_populate_reporting_table($companyid = 0, $batch_si
                         WHEN EXISTS(
                             SELECT 1 FROM {course_modules_completion} cmc
                             JOIN {course_modules} cm ON cm.id = cmc.coursemoduleid
-                            WHERE cm.course = c.id AND cmc.userid = u.id AND cmc.completionstate = 1
-                        ) THEN 'completed'
-                        WHEN EXISTS(
-                            SELECT 1 FROM {course_modules_completion} cmc
-                            JOIN {course_modules} cm ON cm.id = cmc.coursemoduleid
                             WHERE cm.course = c.id AND cmc.userid = u.id AND cmc.completionstate > 0
                         ) THEN 'in_progress'
                         WHEN ue.id IS NOT NULL THEN 'not_started'
@@ -803,11 +798,6 @@ function local_alx_report_api_update_reporting_record($userid, $companyid, $cour
                     END, 0.0) as percentage,
                 CASE 
                     WHEN cc.timecompleted > 0 THEN 'completed'
-                    WHEN EXISTS(
-                        SELECT 1 FROM {course_modules_completion} cmc
-                        JOIN {course_modules} cm ON cm.id = cmc.coursemoduleid
-                        WHERE cm.course = c.id AND cmc.userid = u.id AND cmc.completionstate = 1
-                    ) THEN 'completed'
                     WHEN EXISTS(
                         SELECT 1 FROM {course_modules_completion} cmc
                         JOIN {course_modules} cm ON cm.id = cmc.coursemoduleid
