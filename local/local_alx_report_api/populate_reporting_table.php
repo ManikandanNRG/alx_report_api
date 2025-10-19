@@ -37,6 +37,11 @@ require_once(__DIR__ . '/lib.php');
 require_login();
 require_capability('moodle/site:config', context_system::instance());
 
+// Prevent browser caching
+header('Cache-Control: no-cache, no-store, must-revalidate');
+header('Pragma: no-cache');
+header('Expires: 0');
+
 // Set up page
 $PAGE->set_url('/local/alx_report_api/populate_reporting_table.php');
 $PAGE->set_context(context_system::instance());
@@ -50,19 +55,43 @@ $is_cli = (php_sapi_name() === 'cli');
 $action = optional_param('action', '', PARAM_ALPHA);
 $companyid = optional_param('companyid', 0, PARAM_INT);
 $company_ids = optional_param_array('company_ids', [], PARAM_INT);
+$confirm = optional_param('confirm', 0, PARAM_INT);
 $company_all = optional_param('company_all', 0, PARAM_INT);
 $batch_size = optional_param('batch_size', 1000, PARAM_INT);
 $confirm = optional_param('confirm', 0, PARAM_INT);
 $cleanup_action = optional_param('cleanup_action', '', PARAM_ALPHA);
 $cleanup_companyid = optional_param('cleanup_companyid', 0, PARAM_INT);
 $cleanup_confirm = optional_param('cleanup_confirm', 0, PARAM_INT);
+$populate_token = optional_param('populate_token', '', PARAM_ALPHANUMEXT);
+$cleanup_token = optional_param('cleanup_token', '', PARAM_ALPHANUMEXT);
 
 // Pagination parameters for results display
 $results_page = optional_param('results_page', 1, PARAM_INT);
 $results_perpage = 50; // Show 50 companies per page
 
-// Process company selection
-if ($action === 'populate' && $confirm) {
+// Process company selection - only on POST to prevent refresh from re-running
+if ($action === 'populate' && $confirm && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    // Check if this token was already processed
+    if (!empty($populate_token) && isset($_SESSION['processed_populate_tokens'][$populate_token])) {
+        // This populate was already processed, redirect to form
+        redirect(new moodle_url('/local/alx_report_api/populate_reporting_table.php'));
+        exit;
+    }
+    
+    // Mark this token as processed
+    if (!isset($_SESSION['processed_populate_tokens'])) {
+        $_SESSION['processed_populate_tokens'] = [];
+    }
+    if (!empty($populate_token)) {
+        $_SESSION['processed_populate_tokens'][$populate_token] = time();
+        
+        // Clean old tokens (older than 1 hour)
+        foreach ($_SESSION['processed_populate_tokens'] as $token => $timestamp) {
+            if (time() - $timestamp > 3600) {
+                unset($_SESSION['processed_populate_tokens'][$token]);
+            }
+        }
+    }
     // Determine which companies to process
     $companies_to_process = [];
     if ($company_all || empty($company_ids)) {
@@ -74,8 +103,29 @@ if ($action === 'populate' && $confirm) {
     }
 }
 
-// Handle cleanup action
-if ($cleanup_action === 'clear' && $cleanup_confirm) {
+// Handle cleanup action - only on POST to prevent refresh from re-running
+if ($cleanup_action === 'clear' && $cleanup_confirm && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    // Check if this token was already processed
+    if (!empty($cleanup_token) && isset($_SESSION['processed_cleanup_tokens'][$cleanup_token])) {
+        // This cleanup was already processed, redirect to form
+        redirect(new moodle_url('/local/alx_report_api/populate_reporting_table.php'));
+        exit;
+    }
+    
+    // Mark this token as processed
+    if (!isset($_SESSION['processed_cleanup_tokens'])) {
+        $_SESSION['processed_cleanup_tokens'] = [];
+    }
+    if (!empty($cleanup_token)) {
+        $_SESSION['processed_cleanup_tokens'][$cleanup_token] = time();
+        
+        // Clean old tokens (older than 1 hour)
+        foreach ($_SESSION['processed_cleanup_tokens'] as $token => $timestamp) {
+            if (time() - $timestamp > 3600) {
+                unset($_SESSION['processed_cleanup_tokens'][$token]);
+            }
+        }
+    }
     if (!$is_cli) {
         echo $OUTPUT->header();
         echo $OUTPUT->heading('Clearing Reporting Table Data...');
@@ -93,21 +143,21 @@ if ($cleanup_action === 'clear' && $cleanup_confirm) {
     try {
         if ($cleanup_companyid > 0) {
             // Clear specific company
-            $deleted_count = $DB->count_records('local_alx_api_reporting', ['companyid' => $cleanup_companyid]);
-            $DB->delete_records('local_alx_api_reporting', ['companyid' => $cleanup_companyid]);
+            $deleted_count = $DB->count_records(\local_alx_report_api\constants::TABLE_REPORTING, ['companyid' => $cleanup_companyid]);
+            $DB->delete_records(\local_alx_report_api\constants::TABLE_REPORTING, ['companyid' => $cleanup_companyid]);
             
             // Also clear related sync status and cache
-            $DB->delete_records('local_alx_api_sync_status', ['companyid' => $cleanup_companyid]);
-            $DB->delete_records('local_alx_api_cache', ['companyid' => $cleanup_companyid]);
+            $DB->delete_records(\local_alx_report_api\constants::TABLE_SYNC_STATUS, ['companyid' => $cleanup_companyid]);
+            $DB->delete_records(\local_alx_report_api\constants::TABLE_CACHE, ['companyid' => $cleanup_companyid]);
             
             $company_name = $DB->get_field('company', 'name', ['id' => $cleanup_companyid]);
             echo "Cleared $deleted_count records for company: $company_name\n";
         } else {
             // Clear all data
-            $deleted_count = $DB->count_records('local_alx_api_reporting');
-            $DB->delete_records('local_alx_api_reporting');
-            $DB->delete_records('local_alx_api_sync_status');
-            $DB->delete_records('local_alx_api_cache');
+            $deleted_count = $DB->count_records(\local_alx_report_api\constants::TABLE_REPORTING);
+            $DB->delete_records(\local_alx_report_api\constants::TABLE_REPORTING);
+            $DB->delete_records(\local_alx_report_api\constants::TABLE_SYNC_STATUS);
+            $DB->delete_records(\local_alx_report_api\constants::TABLE_CACHE);
             
             echo "Cleared $deleted_count records for all companies\n";
         }
@@ -144,6 +194,38 @@ if ($cleanup_action === 'clear' && $cleanup_confirm) {
     }
     
     exit;
+}
+
+// Handle cache clear action (using existing function)
+if ($action === 'clearcache' && $confirm) {
+    require_sesskey();
+    $cache_companyid = required_param('companyid', PARAM_INT);
+    
+    if ($cache_companyid > 0) {
+        $company = $DB->get_record('company', ['id' => $cache_companyid], 'name');
+        
+        // Count before clear
+        $count_before = $DB->count_records(\local_alx_report_api\constants::TABLE_CACHE, ['companyid' => $cache_companyid]);
+        
+        // Clear cache
+        $cleared = local_alx_report_api_cache_clear_company($cache_companyid);
+        
+        // Count after clear
+        $count_after = $DB->count_records(\local_alx_report_api\constants::TABLE_CACHE, ['companyid' => $cache_companyid]);
+        
+        // Log to Moodle error log for debugging
+        error_log("CACHE CLEAR DEBUG: Company $cache_companyid - Before: $count_before, Cleared: $cleared, After: $count_after");
+        
+        // Redirect to clean URL (no parameters) with session-based notification
+        $redirect_url = new moodle_url('/local/alx_report_api/populate_reporting_table.php');
+        
+        redirect(
+            $redirect_url,
+            "✅ Cache cleared successfully for {$company->name}! Removed {$cleared} entries.",
+            null,
+            \core\output\notification::NOTIFY_SUCCESS
+        );
+    }
 }
 
 if ($action === 'populate' && $confirm) {
@@ -606,8 +688,8 @@ if ($action === 'populate' && $confirm) {
                                 COUNT(DISTINCT r.userid) as total_users,
                                 COUNT(DISTINCT r.courseid) as active_courses,
                                 COUNT(r.id) as total_records,
-                                SUM(CASE WHEN r.created_at >= :starttime1 THEN 1 ELSE 0 END) as records_created,
-                                SUM(CASE WHEN r.updated_at >= :starttime2 AND r.created_at < :starttime3 THEN 1 ELSE 0 END) as records_updated
+                                SUM(CASE WHEN r.timecreated >= :starttime1 THEN 1 ELSE 0 END) as records_created,
+                                SUM(CASE WHEN r.timemodified >= :starttime2 AND r.timecreated < :starttime3 THEN 1 ELSE 0 END) as records_updated
                               FROM {company} c
                               LEFT JOIN {local_alx_api_reporting} r ON r.companyid = c.id
                               " . $where_clause . "
@@ -759,8 +841,8 @@ if ($action === 'populate' && $confirm) {
                                     c.id,
                                     c.fullname,
                                     COUNT(r.id) as total_changes,
-                                    SUM(CASE WHEN r.created_at >= :coursetime1 THEN 1 ELSE 0 END) as records_created,
-                                    SUM(CASE WHEN r.updated_at >= :coursetime2 AND r.created_at < :coursetime3 THEN 1 ELSE 0 END) as records_updated
+                                    SUM(CASE WHEN r.timecreated >= :coursetime1 THEN 1 ELSE 0 END) as records_created,
+                                    SUM(CASE WHEN r.timemodified >= :coursetime2 AND r.timecreated < :coursetime3 THEN 1 ELSE 0 END) as records_updated
                                 FROM {local_alx_api_reporting} r
                                 JOIN {course} c ON c.id = r.courseid
                                 $course_where
@@ -831,10 +913,10 @@ if ($action === 'populate' && $confirm) {
                                 u.lastname,
                                 u.email,
                                 COUNT(DISTINCT r.courseid) as courses_synced,
-                                SUM(CASE WHEN r.created_at >= :usertime1 THEN 1 ELSE 0 END) as records_created,
-                                SUM(CASE WHEN r.updated_at >= :usertime2 AND r.created_at < :usertime3 THEN 1 ELSE 0 END) as records_updated,
+                                SUM(CASE WHEN r.timecreated >= :usertime1 THEN 1 ELSE 0 END) as records_created,
+                                SUM(CASE WHEN r.timemodified >= :usertime2 AND r.timecreated < :usertime3 THEN 1 ELSE 0 END) as records_updated,
                                 CASE 
-                                    WHEN SUM(CASE WHEN r.created_at >= :usertime4 THEN 1 ELSE 0 END) > 0 THEN 'Created'
+                                    WHEN SUM(CASE WHEN r.timecreated >= :usertime4 THEN 1 ELSE 0 END) > 0 THEN 'Created'
                                     ELSE 'Updated'
                                 END as status
                             FROM {user} u
@@ -930,7 +1012,7 @@ if ($is_cli) {
         echo "Usage: php populate_reporting_table.php [options]\n\n";
         echo "Options:\n";
         echo "  --companyid=ID    Populate data for specific company ID (default: all companies)\n";
-        echo "  --batch-size=N    Number of records to process per batch (default: 1000)\n";
+        echo "  --batch-size=N    Number of records to process per batch. Processes ALL records in batches (default: 1000)\n";
         echo "  --help           Show this help message\n\n";
         echo "Examples:\n";
         echo "  php populate_reporting_table.php\n";
@@ -974,78 +1056,10 @@ echo $OUTPUT->header();
 // Modern UI styling
 echo '<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">';
 echo '<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">';
-
-echo '<style>
-* { font-family: "Inter", sans-serif; }
-.populate-container {
-    max-width: 1400px;
-    margin: 20px auto;
-    padding: 0 20px;
-}
-.page-header {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    padding: 40px;
-    border-radius: 12px;
-    margin-bottom: 30px;
-    box-shadow: 0 10px 30px rgba(102, 126, 234, 0.3);
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-.dashboard-card {
-    background: white;
-    border-radius: 12px;
-    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-    overflow: hidden;
-    margin-bottom: 20px;
-    width: 100%;
-}
-.card-header {
-    padding: 20px 24px;
-    border-bottom: 1px solid #e2e8f0;
-    background: linear-gradient(to right, #f8f9fa, #ffffff);
-}
-.card-title {
-    margin: 0 0 8px 0;
-    color: #2d3748;
-    font-size: 20px;
-    font-weight: 600;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-.card-subtitle {
-    margin: 0;
-    color: #64748b;
-    font-size: 14px;
-    font-weight: 400;
-}
-.card-body {
-    padding: 24px;
-}
-.btn-populate {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    padding: 12px 24px;
-    border: none;
-    border-radius: 8px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.3s;
-    font-size: 15px;
-}
-.btn-populate:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 16px rgba(102, 126, 234, 0.4);
-}
-.btn-danger {
-    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
-}
-</style>';
+echo '<link rel="stylesheet" href="' . new moodle_url('/local/alx_report_api/styles/populate-reporting-table.css') . '">';
 
 // Check if reporting table exists
-if (!$DB->get_manager()->table_exists('local_alx_api_reporting')) {
+if (!$DB->get_manager()->table_exists(\local_alx_report_api\constants::TABLE_REPORTING)) {
     echo '<div class="populate-container">';
     echo '<div class="alert alert-danger">Reporting table does not exist. Please upgrade the plugin first.</div>';
     echo '</div>';
@@ -1054,7 +1068,7 @@ if (!$DB->get_manager()->table_exists('local_alx_api_reporting')) {
 }
 
 // Get current statistics
-$total_reporting_records = $DB->count_records('local_alx_api_reporting');
+$total_reporting_records = $DB->count_records(\local_alx_report_api\constants::TABLE_REPORTING);
 $companies = local_alx_report_api_get_companies();
 
 echo '<div class="populate-container">';
@@ -1093,7 +1107,7 @@ echo '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(
 echo '<div><strong style="color: #64748b;">Companies Available:</strong><br><span style="font-size: 24px; color: #2d3748; font-weight: 600;">' . count($companies) . '</span></div>';
 echo '<div><strong style="color: #64748b;">Reporting Records:</strong><br><span style="font-size: 24px; color: #2d3748; font-weight: 600;">' . number_format($total_reporting_records) . '</span></div>';
 if ($total_reporting_records > 0) {
-    $last_update = $DB->get_field_select('local_alx_api_reporting', 'MAX(last_updated)', '1=1');
+    $last_update = $DB->get_field_select(\local_alx_report_api\constants::TABLE_REPORTING, 'MAX(last_updated)', '1=1');
     echo '<div><strong style="color: #64748b;">Last Update:</strong><br><span style="font-size: 18px; color: #2d3748;">' . ($last_update ? date('Y-m-d H:i:s', $last_update) : 'Never') . '</span></div>';
     echo '<div><strong style="color: #64748b;">Status:</strong><br><span style="display: inline-block; padding: 6px 12px; background: #d1fae5; color: #065f46; border-radius: 12px; font-size: 14px; font-weight: 600; margin-top: 8px;">✓ Data Available</span></div>';
 } else {
@@ -1114,6 +1128,7 @@ echo '<div class="card-body">';
 
 echo '<form method="post" id="populate-form">';
 echo '<input type="hidden" name="action" value="populate">';
+echo '<input type="hidden" name="populate_token" value="' . md5(uniqid(rand(), true)) . '">';
 
 echo '<div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px;">';
 echo '<label for="company-dropdown" style="display: block; margin-bottom: 12px; font-weight: 600; color: #495057;">Companies to Populate:</label>';
@@ -1138,7 +1153,7 @@ echo '<div class="custom-divider"></div>';
 
 // Individual company checkboxes
 foreach ($companies as $company) {
-    $existing_records = $DB->count_records('local_alx_api_reporting', ['companyid' => $company->id]);
+    $existing_records = $DB->count_records(\local_alx_report_api\constants::TABLE_REPORTING, ['companyid' => $company->id]);
     echo '<div class="company-item" id="item-' . $company->id . '">';
     echo '<div class="form-check">';
     echo '<input type="checkbox" name="company_ids[]" value="' . $company->id . '" id="company_' . $company->id . '" class="form-check-input company-checkbox" onchange="updateDropdownText(); updateItemStyle(' . $company->id . ')">';
@@ -1162,7 +1177,7 @@ echo '</div>';
 echo '<div style="margin-top: 20px;">';
 echo '<label for="batch_size" style="display: block; margin-bottom: 8px; font-weight: 600; color: #495057;">Batch Size:</label>';
 echo '<input type="number" name="batch_size" id="batch_size" value="1000" min="100" max="5000" style="width: 100%; padding: 10px 15px; border: 2px solid #e9ecef; border-radius: 8px; font-size: 15px;">';
-echo '<small style="color: #64748b; font-size: 13px;">Number of records to process per batch. Larger batches are faster but use more memory.</small>';
+echo '<small style="color: #64748b; font-size: 13px;">Number of records to process per batch. The system will process <strong>ALL records</strong> in batches of this size to avoid memory issues. Larger batches are faster but use more memory. <em>Example: 3,313 records with batch size 1000 = 4 batches (1000+1000+1000+313)</em></small>';
 echo '</div>';
 
 echo '<div style="display: flex; align-items: center; gap: 8px; margin-top: 20px;">';
@@ -1205,13 +1220,14 @@ if ($total_reporting_records > 0) {
     
     echo '<form method="post" id="cleanup-form">';
     echo '<input type="hidden" name="cleanup_action" value="clear">';
+    echo '<input type="hidden" name="cleanup_token" value="' . md5(uniqid(rand(), true)) . '">';
     
     echo '<div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px;">';
     echo '<label for="cleanup_companyid" style="display: block; margin-bottom: 8px; font-weight: 600; color: #495057;">Company to Clear:</label>';
     echo '<select name="cleanup_companyid" id="cleanup_companyid" style="width: 100%; padding: 10px 15px; border: 2px solid #e9ecef; border-radius: 8px; font-size: 15px; background: white;">';
     echo '<option value="0">⚠️ All Companies (Clear Everything)</option>';
     foreach ($companies as $company) {
-        $company_records = $DB->count_records('local_alx_api_reporting', ['companyid' => $company->id]);
+        $company_records = $DB->count_records(\local_alx_report_api\constants::TABLE_REPORTING, ['companyid' => $company->id]);
         echo '<option value="' . $company->id . '">' . htmlspecialchars($company->name) . ' (' . number_format($company_records) . ' records)</option>';
     }
     echo '</select>';
@@ -1233,6 +1249,152 @@ if ($total_reporting_records > 0) {
     echo '</div>';
     echo '</div>';
 }
+
+// ============================================================================
+// CACHE MANAGEMENT SECTION - NO URL CHANGES, JAVASCRIPT ONLY
+// ============================================================================
+
+echo '<div class="dashboard-card" style="margin-top: 30px;">';
+echo '<div class="card-header" style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);">';
+echo '<h3 class="card-title"><i class="fas fa-memory"></i> 💾 Cache Management</h3>';
+echo '<p class="card-subtitle">View cache statistics and manually clear cache for a company</p>';
+echo '</div>';
+echo '<div class="card-body">';
+
+// Company selector - NO URL CHANGE, JavaScript only
+echo '<div class="company-selector" style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px;">';
+echo '<label for="cache_company_select" style="display: block; font-weight: 600; color: #495057; margin-bottom: 12px;">Select Company:</label>';
+echo '<select id="cache_company_select" name="cache_company" onchange="showCacheStats(this.value)" style="width: 100%; max-width: 400px; padding: 10px 15px; border: 2px solid #e9ecef; border-radius: 8px; font-size: 15px; background: white;">';
+echo '<option value="0">-- Select a company --</option>';
+foreach ($companies as $company) {
+    echo '<option value="' . $company->id . '">' . htmlspecialchars($company->name) . '</option>';
+}
+echo '</select>';
+echo '</div>';
+
+// Pre-render cache stats for ALL companies (hidden, shown by JavaScript)
+foreach ($companies as $company) {
+    $cache_companyid = $company->id;
+    
+    // Get cache statistics
+    $cache_count = $DB->count_records(\local_alx_report_api\constants::TABLE_CACHE, ['companyid' => $cache_companyid]);
+    $cache_enabled = local_alx_report_api_get_company_setting($cache_companyid, 'enable_cache', 1);
+    
+    $last_update = null;
+    $expires_at = null;
+    $is_expired = true;
+    $minutes_left = 0;
+    
+    if ($cache_count > 0) {
+        $sql = "SELECT MAX(timecreated) as last_update FROM {" . \local_alx_report_api\constants::TABLE_CACHE . "} WHERE companyid = ?";
+        $last_update = $DB->get_field_sql($sql, [$cache_companyid]);
+        if ($last_update) {
+            $expires_at = $last_update + 3600; // Default 1 hour TTL
+            $is_expired = (time() > $expires_at);
+            if (!$is_expired) {
+                $minutes_left = round(($expires_at - time()) / 60);
+            }
+        }
+    }
+    
+    // Hidden div for each company (shown by JavaScript)
+    echo '<div id="cache-stats-' . $cache_companyid . '" class="cache-stats-content" style="display: none;">';
+    
+    // Display cache statistics
+    echo '<div style="background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; padding: 20px; margin-bottom: 20px;">';
+    echo '<h4 style="margin: 0 0 15px 0; color: #2d3748; font-size: 16px;">📈 Cache Statistics for ' . htmlspecialchars($company->name) . '</h4>';
+    
+    echo '<table style="width: 100%; border-collapse: collapse;">';
+    echo '<tr style="border-bottom: 1px solid #e2e8f0;">';
+    echo '<td style="padding: 10px 0; font-weight: 600; color: #4a5568;">Total Cache Entries:</td>';
+    echo '<td style="padding: 10px 0; text-align: right; font-weight: 700; color: #2d3748;">' . number_format($cache_count) . '</td>';
+    echo '</tr>';
+    
+    if ($last_update) {
+        echo '<tr style="border-bottom: 1px solid #e2e8f0;">';
+        echo '<td style="padding: 10px 0; font-weight: 600; color: #4a5568;">Last Cache Update:</td>';
+        echo '<td style="padding: 10px 0; text-align: right; color: #2d3748;">' . date('Y-m-d H:i:s', $last_update) . '</td>';
+        echo '</tr>';
+        
+        echo '<tr style="border-bottom: 1px solid #e2e8f0;">';
+        echo '<td style="padding: 10px 0; font-weight: 600; color: #4a5568;">Cache Expires At:</td>';
+        echo '<td style="padding: 10px 0; text-align: right; color: #2d3748;">';
+        echo date('Y-m-d H:i:s', $expires_at);
+        if ($is_expired) {
+            echo ' <span style="display: inline-block; padding: 2px 8px; background: #fee2e2; color: #dc2626; border-radius: 4px; font-size: 12px; font-weight: 600; margin-left: 8px;">Expired</span>';
+        } else {
+            echo ' <span style="display: inline-block; padding: 2px 8px; background: #d1fae5; color: #065f46; border-radius: 4px; font-size: 12px; font-weight: 600; margin-left: 8px;">Active (in ' . $minutes_left . ' min)</span>';
+        }
+        echo '</td>';
+        echo '</tr>';
+    } else {
+        echo '<tr style="border-bottom: 1px solid #e2e8f0;">';
+        echo '<td colspan="2" style="padding: 10px 0; color: #64748b; font-style: italic;">No cache entries found</td>';
+        echo '</tr>';
+    }
+    
+    echo '<tr>';
+    echo '<td style="padding: 10px 0; font-weight: 600; color: #4a5568;">Cache Status:</td>';
+    echo '<td style="padding: 10px 0; text-align: right;">';
+    if ($cache_enabled) {
+        echo '<span style="display: inline-block; padding: 4px 12px; background: #d1fae5; color: #065f46; border-radius: 12px; font-size: 13px; font-weight: 600;">✅ Enabled</span>';
+    } else {
+        echo '<span style="display: inline-block; padding: 4px 12px; background: #fef3c7; color: #92400e; border-radius: 12px; font-size: 13px; font-weight: 600;">⚠️ Disabled</span>';
+    }
+    echo '</td>';
+    echo '</tr>';
+    echo '</table>';
+    
+    echo '</div>';
+    
+    // Clear cache button
+    if ($cache_count > 0) {
+        echo '<form method="post" action="' . $CFG->wwwroot . '/local/alx_report_api/populate_reporting_table.php" onsubmit="return confirm(\'Are you sure you want to clear cache for ' . htmlspecialchars($company->name) . '? This will force fresh data to be loaded on the next API call.\');">';
+        echo '<input type="hidden" name="action" value="clearcache">';
+        echo '<input type="hidden" name="companyid" value="' . $cache_companyid . '">';
+        echo '<input type="hidden" name="confirm" value="1">';
+        echo '<input type="hidden" name="sesskey" value="' . sesskey() . '">';
+        echo '<button type="submit" class="btn-populate btn-danger" style="width: 100%;">';
+        echo '<i class="fas fa-trash"></i> Clear Cache Now';
+        echo '</button>';
+        echo '</form>';
+    } else {
+        echo '<div style="background: #f0fdf4; border: 1px solid #86efac; border-radius: 8px; padding: 15px; text-align: center;">';
+        echo '<p style="color: #166534; margin: 0; font-weight: 600;"><i class="fas fa-check-circle"></i> No cache entries - Cache is empty</p>';
+        echo '</div>';
+    }
+    
+    echo '</div>'; // Close cache-stats-X div
+}
+
+echo '</div>'; // Close card-body
+echo '</div>'; // Close dashboard-card
+
+// JavaScript to show/hide cache stats WITHOUT page reload or URL change
+?>
+<script>
+function showCacheStats(companyId) {
+    console.log('showCacheStats called with companyId:', companyId);
+    // Hide all cache stats
+    var allStats = document.querySelectorAll('.cache-stats-content');
+    console.log('Found cache stats elements:', allStats.length);
+    allStats.forEach(function(el) {
+        el.style.display = 'none';
+    });
+    // Show selected company stats
+    if (companyId > 0) {
+        var statsEl = document.getElementById('cache-stats-' + companyId);
+        console.log('Looking for element: cache-stats-' + companyId, statsEl);
+        if (statsEl) {
+            statsEl.style.display = 'block';
+            console.log('Showing cache stats for company', companyId);
+        } else {
+            console.error('Cache stats element not found for company', companyId);
+        }
+    }
+}
+</script>
+<?php
 
 // Statistics by company - Intelligence Dashboard Style
 if (!empty($companies) && $total_reporting_records > 0) {
@@ -1310,202 +1472,6 @@ if (!empty($companies) && $total_reporting_records > 0) {
 }
 
 // JavaScript for form handling
-echo '<style>
-/* Custom dropdown styling */
-.company-dropdown-container {
-    position: relative;
-}
-
-.company-dropdown-toggle {
-    width: 100%;
-    min-height: 50px;
-    padding: 12px 16px;
-    border: 2px solid #dee2e6;
-    border-radius: 8px;
-    background-color: #ffffff;
-    color: #495057;
-    font-size: 16px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    cursor: pointer;
-    transition: all 0.3s ease;
-}
-
-.company-dropdown-toggle:hover {
-    border-color: #007bff;
-    box-shadow: 0 0 0 0.1rem rgba(0, 123, 255, 0.15);
-}
-
-.company-dropdown-toggle:focus {
-    border-color: #007bff;
-    box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
-    outline: none;
-}
-
-.company-dropdown-menu {
-    position: absolute;
-    top: 100%;
-    left: 0;
-    right: 0;
-    z-index: 1000;
-    min-width: 100%;
-    max-height: 350px;
-    overflow-y: auto;
-    padding: 16px;
-    margin-top: 4px;
-    background-color: #ffffff;
-    border: 2px solid #007bff;
-    border-radius: 12px;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
-    display: none;
-}
-
-.company-dropdown-menu.show {
-    display: block;
-}
-
-/* Check All styling */
-.check-all-item {
-    padding: 12px 16px;
-    margin: -8px -8px 8px -8px;
-    background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
-    border-radius: 8px;
-    margin-bottom: 16px;
-}
-
-.check-all-item .form-check-label {
-    color: #ffffff;
-    font-weight: 600;
-    font-size: 15px;
-    margin-bottom: 0;
-    cursor: pointer;
-}
-
-.check-all-item .form-check-input {
-    width: 18px;
-    height: 18px;
-    margin-right: 12px;
-}
-
-/* Individual company items */
-.company-item {
-    padding: 10px 12px;
-    margin: 4px 0;
-    border-radius: 8px;
-    transition: all 0.2s ease;
-    cursor: pointer;
-}
-
-.company-item:hover {
-    background-color: #f8f9fa;
-    border-left: 4px solid #007bff;
-    padding-left: 16px;
-    transform: translateX(4px);
-}
-
-.company-item.selected {
-    background-color: #e3f2fd;
-    border-left: 4px solid #2196f3;
-    padding-left: 16px;
-}
-
-.company-item .form-check-label {
-    width: 100%;
-    margin-bottom: 0;
-    cursor: pointer;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    color: #495057;
-    font-size: 14px;
-    font-weight: 500;
-}
-
-.company-item:hover .form-check-label {
-    color: #007bff;
-}
-
-.company-item .form-check-input {
-    width: 16px;
-    height: 16px;
-    margin-right: 12px;
-    margin-top: 0;
-}
-
-/* Badge styling */
-.company-badge {
-    font-size: 11px;
-    padding: 4px 8px;
-    border-radius: 12px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-}
-
-.badge-has-data {
-    background-color: #28a745;
-    color: white;
-}
-
-.badge-no-data {
-    background-color: #6c757d;
-    color: white;
-}
-
-/* Dropdown arrow */
-.dropdown-arrow {
-    transition: transform 0.3s ease;
-    color: #6c757d;
-    font-size: 14px;
-}
-
-.dropdown-arrow.rotated {
-    transform: rotate(180deg);
-}
-
-/* Selection text styling */
-.selection-text {
-    color: #495057;
-    font-weight: 500;
-}
-
-.selection-text.has-selection {
-    color: #007bff;
-    font-weight: 600;
-}
-
-.selection-text.all-selected {
-    color: #28a745;
-    font-weight: 700;
-}
-
-/* Scrollbar styling */
-.company-dropdown-menu::-webkit-scrollbar {
-    width: 8px;
-}
-
-.company-dropdown-menu::-webkit-scrollbar-track {
-    background: #f1f1f1;
-    border-radius: 4px;
-}
-
-.company-dropdown-menu::-webkit-scrollbar-thumb {
-    background: #007bff;
-    border-radius: 4px;
-}
-
-.company-dropdown-menu::-webkit-scrollbar-thumb:hover {
-    background: #0056b3;
-}
-
-/* Divider */
-.custom-divider {
-    height: 1px;
-    background: linear-gradient(to right, transparent, #dee2e6, transparent);
-    margin: 12px 0;
-}
-</style>';
 
 echo '<script>
 // Toggle dropdown visibility
@@ -1697,3 +1663,4 @@ if (cleanupForm) {
 
 echo '</div>'; // Close populate-container
 echo $OUTPUT->footer(); 
+// =======

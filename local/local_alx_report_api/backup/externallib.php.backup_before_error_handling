@@ -176,16 +176,8 @@ class local_alx_report_api_external extends external_api {
     private static function check_rate_limit($userid) {
         global $DB, $CFG;
         
-        try {
-            // Validate user ID
-            if (empty($userid) || $userid <= 0) {
-                error_log('ALX Report API: Invalid user ID provided to check_rate_limit');
-                // Don't throw exception - just skip rate limiting for invalid users
-                return;
-            }
-            
-            // Get user's company ID
-            $companyid = self::get_user_company($userid);
+        // Get user's company ID
+        $companyid = self::get_user_company($userid);
         
         // Get company-specific rate limit or global default
         $company_rate_limit = null;
@@ -205,12 +197,13 @@ class local_alx_report_api_external extends external_api {
         
         // Count requests from this user today
         $request_count = 0;
-        if ($DB->get_manager()->table_exists(\local_alx_report_api\constants::TABLE_LOGS)) {
-            // Use standard Moodle field name
-            $time_field = 'timecreated';
+        if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
+            // Determine which time field to use
+            $table_info = $DB->get_columns('local_alx_api_logs');
+            $time_field = isset($table_info['timeaccessed']) ? 'timeaccessed' : 'timecreated';
             
             $request_count = $DB->count_records_select(
-                \local_alx_report_api\constants::TABLE_LOGS, 
+                'local_alx_api_logs', 
                 "userid = ? AND {$time_field} >= ?", 
                 [$userid, $today_start]
             );
@@ -233,7 +226,7 @@ class local_alx_report_api_external extends external_api {
                 }
                 
                 // Log to API logs table
-                if ($DB->get_manager()->table_exists(\local_alx_report_api\constants::TABLE_LOGS)) {
+                if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
                     $log = new stdClass();
                     $log->userid = $userid;
                     $log->company_shortname = $company_shortname;
@@ -241,15 +234,15 @@ class local_alx_report_api_external extends external_api {
                     $log->record_count = 0;
                     $log->error_message = "Rate limit exceeded: {$request_count}/{$rate_limit} requests";
                     $log->response_time_ms = 0;
-                    $log->timecreated = time();
+                    $log->timeaccessed = time();
                     $log->ip_address = $_SERVER['REMOTE_ADDR'] ?? '';
                     $log->user_agent = $_SERVER['HTTP_USER_AGENT'] ?? '';
                     
-                    $DB->insert_record(\local_alx_report_api\constants::TABLE_LOGS, $log);
+                    $DB->insert_record('local_alx_api_logs', $log);
                 }
                 
                 // Also create an alert for the Security tab
-                if ($DB->get_manager()->table_exists(\local_alx_report_api\constants::TABLE_ALERTS)) {
+                if ($DB->get_manager()->table_exists('local_alx_api_alerts')) {
                     $user = $DB->get_record('user', ['id' => $userid], 'username, firstname, lastname');
                     $username = $user ? fullname($user) : 'Unknown';
                     
@@ -262,22 +255,12 @@ class local_alx_report_api_external extends external_api {
                     $alert->resolved = 0;
                     $alert->timecreated = time();
                     
-                    $DB->insert_record(\local_alx_report_api\constants::TABLE_ALERTS, $alert);
+                    $DB->insert_record('local_alx_api_alerts', $alert);
                 }
             }
             
             throw new moodle_exception('ratelimitexceeded', 'local_alx_report_api', '', null, 
                 "Daily rate limit exceeded. You have made {$request_count} requests today. Limit is {$rate_limit} requests per day. Try again tomorrow.");
-        }
-        
-        } catch (moodle_exception $e) {
-            // Re-throw rate limit exceptions (these are expected)
-            throw $e;
-            
-        } catch (Exception $e) {
-            // Log unexpected errors but don't block API access
-            error_log('ALX Report API: Error checking rate limit - ' . $e->getMessage());
-            // Don't throw - allow API call to proceed if rate limiting fails
         }
     }
 
@@ -328,7 +311,7 @@ class local_alx_report_api_external extends external_api {
     private static function log_security_event($userid, $companyid, $event_type, $status, $details = '') {
         global $DB;
         
-        if (!$DB->get_manager()->table_exists(\local_alx_report_api\constants::TABLE_LOGS)) {
+        if (!$DB->get_manager()->table_exists('local_alx_api_logs')) {
             return;
         }
         
@@ -346,7 +329,7 @@ class local_alx_report_api_external extends external_api {
         $log->response_data = '';
         $log->timecreated = time();
         
-        $DB->insert_record(\local_alx_report_api\constants::TABLE_LOGS, $log);
+        $DB->insert_record('local_alx_api_logs', $log);
     }
 
     /**
@@ -400,52 +383,40 @@ class local_alx_report_api_external extends external_api {
                 'offset' => $offset
             ]);
 
-            // 2. Validate limit is at least 1 (prevent zero or negative limits)
-            if ($params['limit'] < 1) {
-                throw new moodle_exception('invalidlimit', 'local_alx_report_api', '', null, 
-                    "Limit must be at least 1. Received: {$params['limit']}");
-            }
-
-            // 3. Validate limit against configured maximum
+            // 2. Validate limit against configured maximum
             $max_records = get_config('local_alx_report_api', 'max_records') ?: 1000;
             if ($params['limit'] > $max_records) {
                 throw new moodle_exception('limittoolarge', 'local_alx_report_api', '', $max_records, 
                     "Requested limit ({$params['limit']}) exceeds maximum allowed ({$max_records}) records per request.");
             }
 
-            // 4. Validate offset is non-negative (prevent negative offsets)
-            if ($params['offset'] < 0) {
-                throw new moodle_exception('invalidoffset', 'local_alx_report_api', '', null, 
-                    "Offset must be non-negative. Received: {$params['offset']}");
-            }
-
-            // 5. Get current authenticated user
+            // 3. Get current authenticated user
             if (!$USER || !$USER->id || $USER->id <= 0) {
                 throw new moodle_exception('invaliduser', 'local_alx_report_api', '', null, 
                     'User must be authenticated to access this service');
             }
 
-            // 6. Check rate limiting (global daily limit)
+            // 4. Check rate limiting (global daily limit)
             self::check_rate_limit($USER->id);
 
-            // 7. Check GET method restriction (if enabled in settings)
+            // 5. Check GET method restriction (if enabled in settings)
             $allow_get_method = get_config('local_alx_report_api', 'allow_get_method');
             if (!$allow_get_method && $_SERVER['REQUEST_METHOD'] === 'GET') {
                 throw new moodle_exception('invalidrequestmethod', 'local_alx_report_api', '', null, 
                     'GET method is disabled. Only POST method is allowed for security reasons. Enable GET method in plugin settings for development/testing.');
             }
 
-            // 8. Check rate limiting again (duplicate line removed in original, keeping consistent)
+            // 6. Check rate limiting again (duplicate line removed in original, keeping consistent)
             self::check_rate_limit($USER->id);
 
-            // 9. Get company association for the authenticated user
+            // 7. Get company association for the authenticated user
             $companyid = self::get_user_company($USER->id);
             if (!$companyid) {
                 throw new moodle_exception('nocompanyassociation', 'local_alx_report_api', '', null, 
                     'User is not associated with any company');
             }
 
-            // 10. Get company shortname for logging
+            // 8. Get company shortname for logging
             $company_shortname = 'unknown';
             if ($DB->get_manager()->table_exists('company')) {
                 $company = $DB->get_record('company', ['id' => $companyid], 'shortname');
@@ -454,10 +425,10 @@ class local_alx_report_api_external extends external_api {
                 }
             }
 
-            // 11. Get course progress data
+            // 9. Get course progress data
             $progressdata = self::get_company_course_progress($companyid, $params['limit'], $params['offset']);
             
-            // 12. Count returned records
+            // 10. Count returned records
             $record_count = count($progressdata);
 
             return $progressdata;
@@ -523,7 +494,7 @@ class local_alx_report_api_external extends external_api {
                 'firstname' => new external_value(PARAM_TEXT, 'User first name', VALUE_OPTIONAL),
                 'lastname' => new external_value(PARAM_TEXT, 'User last name', VALUE_OPTIONAL),
                 'email' => new external_value(PARAM_EMAIL, 'User email', VALUE_OPTIONAL),
-                'username' => new external_value(PARAM_TEXT, 'Username', VALUE_OPTIONAL),
+                'courseid' => new external_value(PARAM_INT, 'Course ID', VALUE_OPTIONAL),
                 'coursename' => new external_value(PARAM_TEXT, 'Course name', VALUE_OPTIONAL),
                 'timecompleted' => new external_value(PARAM_TEXT, 'Completion date (Y-m-d H:i:s format)', VALUE_OPTIONAL),
                 'timecompleted_unix' => new external_value(PARAM_INT, 'Completion timestamp (Unix format)', VALUE_OPTIONAL),
@@ -544,26 +515,15 @@ class local_alx_report_api_external extends external_api {
     private static function get_user_company($userid) {
         global $DB;
 
-        try {
-            // Validate user ID
-            if (empty($userid) || $userid <= 0) {
-                error_log('ALX Report API: Invalid user ID provided to get_user_company');
-                return false;
-            }
-
-            // Check if IOMAD is installed and get company association
-            if (!$DB->get_manager()->table_exists('company_users')) {
-                error_log('ALX Report API: company_users table does not exist. IOMAD may not be installed.');
-                return false;
-            }
-            
+        // Check if IOMAD is installed and get company association.
+        if ($DB->get_manager()->table_exists('company_users')) {
             $company = $DB->get_record('company_users', ['userid' => $userid], 'companyid');
             return $company ? $company->companyid : false;
-            
-        } catch (Exception $e) {
-            error_log('ALX Report API: Error getting user company - ' . $e->getMessage());
-            return false;
         }
+
+        // Fallback: If IOMAD is not available, you might need to implement
+        // your own company association logic here.
+        return false;
     }
 
     /**
@@ -577,23 +537,9 @@ class local_alx_report_api_external extends external_api {
     private static function get_company_course_progress($companyid, $limit, $offset) {
         global $DB;
 
-        try {
-            // Validate inputs
-            if (empty($companyid) || $companyid <= 0) {
-                self::debug_log("ERROR: Invalid company ID: $companyid");
-                throw new moodle_exception('invalidcompanyid', 'local_alx_report_api', '', null, 
-                    'Invalid company ID provided');
-            }
-            
-            if ($limit < 0 || $offset < 0) {
-                self::debug_log("ERROR: Invalid limit ($limit) or offset ($offset)");
-                throw new moodle_exception('invalidparameters', 'local_alx_report_api', '', null, 
-                    'Limit and offset must be non-negative');
-            }
-
-            // Debug logging
-            self::debug_log("=== API Request Start (Combined Approach) ===");
-            self::debug_log("Company ID: $companyid, Limit: $limit, Offset: $offset");
+        // Debug logging
+        self::debug_log("=== API Request Start (Combined Approach) ===");
+        self::debug_log("Company ID: $companyid, Limit: $limit, Offset: $offset");
 
         // Get the API token for sync tracking
         $token = self::get_authorization_token();
@@ -603,55 +549,20 @@ class local_alx_report_api_external extends external_api {
         $sync_mode = local_alx_report_api_determine_sync_mode($companyid, $token);
         self::debug_log("Sync mode determined: $sync_mode");
         
-        // Get enabled courses for this company (MOVED BEFORE CACHE CHECK)
+        // Check cache for ALL sync modes (universal caching)
+        $cache_key = "api_response_{$companyid}_{$limit}_{$offset}_{$sync_mode}";
+        $cached_data = local_alx_report_api_cache_get($cache_key, $companyid);
+        if ($cached_data !== false) {
+            self::debug_log("Cache hit - returning cached data for sync mode: {$sync_mode}");
+            return $cached_data;
+        }
+        self::debug_log("Cache miss - will fetch fresh data");
+
+        // Get enabled courses for this company
         $enabled_courses = local_alx_report_api_get_enabled_courses($companyid);
         self::debug_log("Enabled courses for company $companyid: " . implode(',', $enabled_courses));
         
-        // Get company field settings (MOVED BEFORE CACHE CHECK)
-        $field_settings = [];
-        $field_names = ['userid', 'firstname', 'lastname', 'email', 'username', 'coursename', 
-                       'timecompleted', 'timecompleted_unix', 'timestarted', 'timestarted_unix', 
-                       'percentage', 'status'];
-        
-        foreach ($field_names as $field) {
-            $field_settings[$field] = local_alx_report_api_get_company_setting($companyid, 'field_' . $field, 1);
-        }
-        self::debug_log("Field settings for company $companyid: " . json_encode($field_settings));
-        
-        // Generate cache key that includes courses and fields (FIX FOR CACHE BUG)
-        // Sort courses for consistent hash
-        $courses_for_hash = $enabled_courses;
-        sort($courses_for_hash);
-        $courses_hash = empty($courses_for_hash) ? 'nocourses' : md5(implode(',', $courses_for_hash));
-        
-        // Generate fields hash (only include enabled fields)
-        $enabled_fields = array_filter($field_settings, function($v) { return $v == 1; });
-        ksort($enabled_fields);
-        $fields_hash = md5(implode(',', array_keys($enabled_fields)));
-        
-        // Build complete cache key with all parameters that affect response
-        $cache_key = "api_response_{$companyid}_{$limit}_{$offset}_{$sync_mode}_{$courses_hash}_{$fields_hash}";
-        self::debug_log("Cache key: $cache_key");
-        self::debug_log("Cache key components - Courses: [" . implode(',', $courses_for_hash) . "], Fields: [" . implode(',', array_keys($enabled_fields)) . "]");
-        
-        // Check if caching is enabled for this company (default: enabled for backward compatibility)
-        $cache_enabled = local_alx_report_api_get_company_setting($companyid, 'enable_cache', 1);
-        self::debug_log("Cache enabled for company {$companyid}: " . ($cache_enabled ? 'YES' : 'NO'));
-        
-        // Only check cache if caching is enabled for this company
-        if ($cache_enabled) {
-            $cached_data = local_alx_report_api_cache_get($cache_key, $companyid);
-            if ($cached_data !== false) {
-                self::debug_log("Cache hit - returning cached data for sync mode: {$sync_mode}");
-                return $cached_data;
-            }
-            self::debug_log("Cache miss - will fetch fresh data");
-        } else {
-            self::debug_log("Cache disabled - skipping cache check, will query database directly");
-        }
-        
-        // Handle empty enabled courses (this logic now runs AFTER cache check)
-        // Note: enabled_courses and field_settings are already loaded above for cache key
+        // If no courses are enabled, check if any settings exist for this company
         if (empty($enabled_courses)) {
             $existing_settings = local_alx_report_api_get_company_settings($companyid);
             $has_course_settings = false;
@@ -689,6 +600,17 @@ class local_alx_report_api_external extends external_api {
                 }
             }
         }
+
+        // Get company field settings
+        $field_settings = [];
+        $field_names = ['userid', 'firstname', 'lastname', 'email', 'courseid', 'coursename', 
+                       'timecompleted', 'timecompleted_unix', 'timestarted', 'timestarted_unix', 
+                       'percentage', 'status'];
+        
+        foreach ($field_names as $field) {
+            $field_settings[$field] = local_alx_report_api_get_company_setting($companyid, 'field_' . $field, 1);
+        }
+        self::debug_log("Field settings for company $companyid: " . json_encode($field_settings));
 
         // Build query based on sync mode
         $records = [];
@@ -755,7 +677,7 @@ class local_alx_report_api_external extends external_api {
             if (empty($records)) {
                 self::debug_log("No records found - checking if reporting table is populated");
                 
-                $total_records = $DB->count_records(\local_alx_report_api\constants::TABLE_REPORTING, [
+                $total_records = $DB->count_records('local_alx_api_reporting', [
                     'companyid' => $companyid,
                     'is_deleted' => 0
                 ]);
@@ -798,8 +720,8 @@ class local_alx_report_api_external extends external_api {
             if ($field_settings['email']) {
                 $response_item['email'] = $record->email;
             }
-            if ($field_settings['username']) {
-                $response_item['username'] = $record->username;
+            if ($field_settings['courseid']) {
+                $response_item['courseid'] = (int)$record->courseid;
             }
             if ($field_settings['coursename']) {
                 $response_item['coursename'] = $record->coursename;
@@ -826,22 +748,20 @@ class local_alx_report_api_external extends external_api {
             $result[] = $response_item;
         }
 
-        // Note: Sync status is now only updated by cron tasks, not API calls
-        // This ensures control center shows actual sync times, not API access times
-        
-        // Only cache results if caching is enabled for this company
-        // Note: $cache_enabled was already retrieved earlier in this function
-        if ($cache_enabled) {
-            // Get TTL from company settings or use default (60 minutes)
-            $cache_ttl_minutes = local_alx_report_api_get_company_setting($companyid, 'cache_ttl_minutes', 60);
-            $cache_ttl = $cache_ttl_minutes * 60; // Convert to seconds
-            
-            // Cache all results (including empty) for all sync modes
-            local_alx_report_api_cache_set($cache_key, $companyid, $result, $cache_ttl);
-            self::debug_log("Cached result for sync mode: {$sync_mode}, TTL: {$cache_ttl} seconds");
-        } else {
-            self::debug_log("Cache disabled - skipping cache storage");
+        // Update sync status (skip if disabled mode)
+        $company_sync_mode = local_alx_report_api_get_company_setting($companyid, 'sync_mode', 0);
+        if ($company_sync_mode !== 3) { // Don't update sync status if disabled mode
+            local_alx_report_api_update_sync_status($companyid, $token, count($result), 'success');
         }
+        
+        // Universal cache storage for ALL sync modes
+        // Get TTL from company settings or use default (60 minutes)
+        $cache_ttl_minutes = local_alx_report_api_get_company_setting($companyid, 'cache_ttl_minutes', 60);
+        $cache_ttl = $cache_ttl_minutes * 60; // Convert to seconds
+        
+        // Cache all results (including empty) for all sync modes
+        local_alx_report_api_cache_set($cache_key, $companyid, $result, $cache_ttl);
+        self::debug_log("Cached result for sync mode: {$sync_mode}, TTL: {$cache_ttl} seconds");
         
         // Handle empty results - must return empty array for Moodle external API compliance
         if (empty($result)) {
@@ -853,30 +773,10 @@ class local_alx_report_api_external extends external_api {
             return [];
         }
 
-            self::debug_log("Final result count: " . count($result));
-            self::debug_log("=== API Request End (Combined Approach) ===");
+        self::debug_log("Final result count: " . count($result));
+        self::debug_log("=== API Request End (Combined Approach) ===");
 
-            return $result;
-            
-        } catch (moodle_exception $e) {
-            // Re-throw Moodle exceptions (these are expected errors with user-friendly messages)
-            self::debug_log("ERROR: Moodle exception - " . $e->getMessage());
-            throw $e;
-            
-        } catch (dml_exception $e) {
-            // Database errors
-            self::debug_log("ERROR: Database exception - " . $e->getMessage());
-            error_log('ALX Report API: Database error in get_company_course_progress - ' . $e->getMessage());
-            throw new moodle_exception('databaseerror', 'local_alx_report_api', '', null, 
-                'A database error occurred. Please contact your administrator.');
-                
-        } catch (Exception $e) {
-            // Catch any other unexpected errors
-            self::debug_log("ERROR: Unexpected exception - " . $e->getMessage());
-            error_log('ALX Report API: Unexpected error in get_company_course_progress - ' . $e->getMessage());
-            throw new moodle_exception('unexpectederror', 'local_alx_report_api', '', null, 
-                'An unexpected error occurred. Please contact your administrator.');
-        }
+        return $result;
     }
 
     /**
@@ -897,7 +797,7 @@ class local_alx_report_api_external extends external_api {
         
         // Get company field settings
         $field_settings = [];
-        $field_names = ['userid', 'firstname', 'lastname', 'email', 'username', 'coursename', 
+        $field_names = ['userid', 'firstname', 'lastname', 'email', 'courseid', 'coursename', 
                        'timecompleted', 'timecompleted_unix', 'timestarted', 'timestarted_unix', 
                        'percentage', 'status'];
         
@@ -919,7 +819,7 @@ class local_alx_report_api_external extends external_api {
                 u.firstname,
                 u.lastname,
                 u.email,
-                u.username,
+                c.id as courseid,
                 c.fullname as coursename,
                 COALESCE(cc.timecompleted, 
                     (SELECT MAX(cmc.timemodified) 
@@ -931,27 +831,18 @@ class local_alx_report_api_external extends external_api {
                     CASE 
                         WHEN cc.timecompleted > 0 THEN 100.0
                         ELSE COALESCE(
-                            (SELECT 
-                                CASE 
-                                    WHEN COUNT(cm.id) = 0 THEN 0.0
-                                    ELSE (COUNT(CASE WHEN cmc.completionstate = 1 THEN 1 END) * 100.0 / COUNT(cm.id))
-                                END
-                             FROM {course_modules} cm
-                             LEFT JOIN {course_modules_completion} cmc ON cmc.coursemoduleid = cm.id AND cmc.userid = u.id
-                             WHERE cm.course = c.id AND cm.completion > 0), 0.0)
+                            (SELECT AVG(CASE WHEN cmc.completionstate = 1 THEN 100.0 ELSE 0.0 END)
+                             FROM {course_modules_completion} cmc
+                             JOIN {course_modules} cm ON cm.id = cmc.coursemoduleid
+                             WHERE cm.course = c.id AND cmc.userid = u.id), 0.0)
                     END, 0.0) as percentage,
                 CASE 
                     WHEN cc.timecompleted > 0 THEN 'completed'
-                    WHEN (
-                        SELECT 
-                            CASE 
-                                WHEN COUNT(cm.id) = 0 THEN 0.0
-                                ELSE (COUNT(CASE WHEN cmc.completionstate = 1 THEN 1 END) * 100.0 / COUNT(cm.id))
-                            END
-                        FROM {course_modules} cm
-                        LEFT JOIN {course_modules_completion} cmc ON cmc.coursemoduleid = cm.id AND cmc.userid = u.id
-                        WHERE cm.course = c.id AND cm.completion > 0
-                    ) >= 100.0 THEN 'completed'
+                    WHEN EXISTS(
+                        SELECT 1 FROM {course_modules_completion} cmc
+                        JOIN {course_modules} cm ON cm.id = cmc.coursemoduleid
+                        WHERE cm.course = c.id AND cmc.userid = u.id AND cmc.completionstate = 1
+                    ) THEN 'completed'
                     WHEN EXISTS(
                         SELECT 1 FROM {course_modules_completion} cmc
                         JOIN {course_modules} cm ON cm.id = cmc.coursemoduleid
@@ -1014,8 +905,8 @@ class local_alx_report_api_external extends external_api {
             if ($field_settings['email']) {
                 $response_item['email'] = $record->email;
             }
-            if ($field_settings['username']) {
-                $response_item['username'] = $record->username;
+            if ($field_settings['courseid']) {
+                $response_item['courseid'] = (int)$record->courseid;
             }
             if ($field_settings['coursename']) {
                 $response_item['coursename'] = $record->coursename;
@@ -1090,7 +981,7 @@ class local_alx_report_api_external extends external_api {
             
         } else {
             // Check if reporting table has any data for this company
-            $total_records = $DB->count_records(\local_alx_report_api\constants::TABLE_REPORTING, [
+            $total_records = $DB->count_records('local_alx_api_reporting', [
                 'companyid' => $companyid,
                 'is_deleted' => 0
             ]);

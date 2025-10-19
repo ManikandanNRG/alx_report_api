@@ -28,6 +28,7 @@
 require_once(__DIR__ . '/../../config.php');
 require_once($CFG->libdir . '/adminlib.php');
 require_once(__DIR__ . '/lib.php');
+
 // Require admin login
 admin_externalpage_setup('local_alx_report_api_control_center');
 
@@ -43,72 +44,50 @@ $PAGE->requires->js_amd_inline("
     console.log('Control Center Enhanced Version Loading: " . $cache_buster . "');
 ");
 
-// Get initial data with comprehensive error handling
+// Get initial data with error handling
 $companies = [];
 $total_records = 0;
 $total_companies = 0;
 $api_calls_today = 0;
 $system_health = '✅'; // Default to healthy
-$health_issues = [];
-$load_errors = []; // Track specific loading errors
 
 try {
     // Get companies using the same function as monitoring dashboard
-    try {
-        $companies = local_alx_report_api_get_companies();
-        $total_companies = count($companies);
-        
-        if ($total_companies == 0) {
-            $health_issues[] = 'No companies configured';
-        }
-    } catch (Exception $e) {
-        error_log('ALX Report API Control Center: Error loading companies - ' . $e->getMessage());
-        $load_errors[] = 'Could not load companies';
-        $health_issues[] = 'Company data unavailable';
-    }
+    $companies = local_alx_report_api_get_companies();
+    $total_companies = count($companies);
     
     // Get total records from reporting table (same as monitoring dashboard)
-    try {
-        if ($DB->get_manager()->table_exists(\local_alx_report_api\constants::TABLE_REPORTING)) {
-            $total_records = $DB->count_records(\local_alx_report_api\constants::TABLE_REPORTING, ['is_deleted' => 0]); // Only active records
-            
-            if ($total_records == 0) {
-                $health_issues[] = 'No reporting data';
-            }
-        } else {
-            $health_issues[] = 'Reporting table missing';
-            $load_errors[] = 'Reporting table does not exist';
-        }
-    } catch (Exception $e) {
-        error_log('ALX Report API Control Center: Error loading reporting data - ' . $e->getMessage());
-        $load_errors[] = 'Could not load reporting data';
-        $health_issues[] = 'Reporting data unavailable';
+    if ($DB->get_manager()->table_exists('local_alx_api_reporting')) {
+        $total_records = $DB->count_records('local_alx_api_reporting', ['is_deleted' => 0]); // Only active records
     }
     
     // Get API calls today (check if table exists first)
-    try {
-        if ($DB->get_manager()->table_exists(\local_alx_report_api\constants::TABLE_LOGS)) {
-            $today_start = mktime(0, 0, 0);
-            // Use standard Moodle field name
-            $time_field = 'timecreated';
-            
-            $api_calls_today = $DB->count_records_select(\local_alx_report_api\constants::TABLE_LOGS, "{$time_field} >= ?", [$today_start]);
-        } else {
-            // Logs table missing is not critical - just means no API calls yet
-            error_log('ALX Report API Control Center: local_alx_api_logs table does not exist');
-        }
-    } catch (Exception $e) {
-        error_log('ALX Report API Control Center: Error loading API call stats - ' . $e->getMessage());
-        // Not critical - continue with 0 API calls
+    if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
+        $today_start = mktime(0, 0, 0);
+        // Use timeaccessed (new field) or fall back to timecreated (old field)
+        $table_info = $DB->get_columns('local_alx_api_logs');
+        $time_field = isset($table_info['timeaccessed']) ? 'timeaccessed' : 'timecreated';
+        $api_calls_today = $DB->count_records_select('local_alx_api_logs', "{$time_field} >= ?", [$today_start]);
+    }
+    
+    // Determine system health based on actual conditions
+    $health_issues = [];
+    
+    // Check if reporting table exists and has data
+    if (!$DB->get_manager()->table_exists('local_alx_api_reporting')) {
+        $health_issues[] = 'Reporting table missing';
+    } elseif ($total_records == 0) {
+        $health_issues[] = 'No reporting data';
+    }
+    
+    // Check if companies exist
+    if ($total_companies == 0) {
+        $health_issues[] = 'No companies configured';
     }
     
     // Check if web services are enabled
-    try {
-        if (empty($CFG->enablewebservices)) {
-            $health_issues[] = 'Web services disabled';
-        }
-    } catch (Exception $e) {
-        error_log('ALX Report API Control Center: Error checking web services - ' . $e->getMessage());
+    if (empty($CFG->enablewebservices)) {
+        $health_issues[] = 'Web services disabled';
     }
     
     // Set system health icon based on issues
@@ -121,10 +100,9 @@ try {
     }
     
 } catch (Exception $e) {
-    // Catch-all for any unexpected errors
-    error_log('ALX Report API Control Center: Unexpected error during initialization - ' . $e->getMessage());
+    // Log error but continue with default values
+    error_log('ALX Report API Control Center: ' . $e->getMessage());
     $system_health = '❌';
-    $load_errors[] = 'Unexpected error during page load';
 }
 
 echo $OUTPUT->header();
@@ -138,27 +116,935 @@ echo '<div style="position: fixed; top: 0; right: 0; background: #10b981; color:
 
 ?>
 
-<link rel="stylesheet" href="<?php echo new moodle_url('/local/alx_report_api/styles/control-center.css?v=' . time()); ?>">
+<style>
+/* Add cache-busting comment to force refresh: <?php echo time(); ?> */
+/* Modern Control Center Styling */
+:root {
+    --primary-color: #2563eb;
+    --primary-dark: #1d4ed8;
+    --secondary-color: #64748b;
+    --success-color: #10b981;
+    --warning-color: #f59e0b;
+    --danger-color: #ef4444;
+    --info-color: #06b6d4;
+    --light-bg: #f8fafc;
+    --card-bg: #ffffff;
+    --border-color: #e2e8f0;
+    --text-primary: #1e293b;
+    --text-secondary: #64748b;
+    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+    --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+    --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+    --radius-sm: 0.375rem;
+    --radius-md: 0.5rem;
+    --radius-lg: 0.75rem;
+}
 
-<!-- CSS moved to external file -->
+* {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+.control-center-container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 24px;
+    background: var(--light-bg);
+    min-height: 100vh;
+}
+
+/* Fix bottom spacing */
+#overview-tab {
+    margin-bottom: 0 !important;
+    padding-bottom: 20px;
+}
+
+.card-grid {
+    margin-bottom: 0 !important;
+}
+
+/* Enhanced button hover effects */
+.btn-modern:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.2) !important;
+    opacity: 0.9;
+}
+
+/* Ensure proper card spacing and equal heights */
+.dashboard-card {
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -1px rgb(0 0 0 / 0.06);
+    border-radius: 12px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+/* Make card body flex to push footer to bottom */
+.dashboard-card .card-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Ensure card footer sticks to bottom */
+.dashboard-card .card-footer {
+    margin-top: auto;
+}
+
+/* Header visibility improvements */
+.card-header {
+    padding: 16px 20px 12px 20px;
+}
+
+.card-title {
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.card-subtitle {
+    font-size: 14px;
+    opacity: 0.8;
+}
+
+/* Body spacing */
+.card-body {
+    padding: 20px;
+}
+
+/* Footer improvements */
+.card-footer {
+    text-align: center;
+}
+
+/* Header Section */
+.control-header {
+    background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%);
+    color: white;
+    padding: 32px;
+    border-radius: var(--radius-lg);
+    margin-bottom: 32px;
+    box-shadow: var(--shadow-lg);
+}
+
+.control-header h1 {
+    font-size: 2.5rem;
+    font-weight: 700;
+    margin: 0 0 8px 0;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.control-header .subtitle {
+    font-size: 1.125rem;
+    opacity: 0.9;
+    font-weight: 400;
+    margin: 0;
+}
+
+.header-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 24px;
+    margin-top: 24px;
+}
+
+.header-stat {
+    padding: 20px;
+    border-radius: var(--radius-md);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+    position: relative;
+    overflow: hidden;
+    transition: all 0.3s ease;
+}
+
+.header-stat:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.15);
+}
+
+.header-stat:nth-child(1) {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+}
+
+.header-stat:nth-child(2) {
+    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+    color: white;
+}
+
+.header-stat:nth-child(3) {
+    background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+    color: white;
+}
+
+.header-stat:nth-child(4) {
+    background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+    color: white;
+}
+
+.header-stat-value {
+    font-size: 2.5rem;
+    font-weight: 800;
+    margin: 0;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    position: relative;
+    z-index: 2;
+}
+
+.header-stat-label {
+    font-size: 0.875rem;
+    margin: 8px 0 0 0;
+    opacity: 0.9;
+    font-weight: 500;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+    position: relative;
+    z-index: 2;
+}
+
+/* Add subtle pattern overlay */
+.header-stat::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.05'%3E%3Ccircle cx='30' cy='30' r='2'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E") repeat;
+    z-index: 1;
+}
+
+/* Tab Navigation */
+.tab-navigation {
+    display: flex;
+    background: var(--card-bg);
+    border-radius: var(--radius-lg);
+    padding: 8px;
+    margin-bottom: 32px;
+    box-shadow: var(--shadow-sm);
+    overflow-x: auto;
+    gap: 4px;
+}
+
+.tab-button {
+    flex: 1;
+    min-width: 140px;
+    padding: 16px 24px;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    font-weight: 500;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    font-size: 0.875rem;
+}
+
+.tab-button:hover {
+    background: var(--light-bg);
+    color: var(--text-primary);
+}
+
+.tab-button.active {
+    background: var(--primary-color);
+    color: white;
+    box-shadow: var(--shadow-md);
+}
+
+.tab-button i {
+    font-size: 1rem;
+}
+
+/* Tab Content */
+.tab-content {
+    display: none;
+}
+
+.tab-content.active {
+    display: block;
+    animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* Card Layouts */
+.card-grid {
+    display: grid;
+    gap: 24px;
+    margin-bottom: 32px;
+}
+
+.card-grid-2 { grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); }
+.card-grid-3 { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+.card-grid-4 { grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); }
+
+/* Specific grid classes for monitoring */
+.grid-4 { 
+    display: grid;
+    grid-template-columns: repeat(4, 1fr) !important; 
+    gap: 20px;
+    width: 100%;
+    margin: 20px 0;
+}
+
+.grid-2 { 
+    display: grid;
+    grid-template-columns: repeat(2, 1fr) !important; 
+    gap: 20px;
+    width: 100%;
+    margin: 20px 0;
+}
+
+/* Special gradient cards for performance metrics */
+.dashboard-card.gradient-card-1 {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.dashboard-card.gradient-card-1 .card-header {
+    background: rgba(255, 255, 255, 0.1);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.dashboard-card.gradient-card-1 .card-title,
+.dashboard-card.gradient-card-1 .card-subtitle,
+.dashboard-card.gradient-card-1 .card-body {
+    color: white;
+}
+
+.dashboard-card.gradient-card-2 {
+    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+    color: white;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.dashboard-card.gradient-card-2 .card-header {
+    background: rgba(255, 255, 255, 0.1);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.dashboard-card.gradient-card-2 .card-title,
+.dashboard-card.gradient-card-2 .card-subtitle,
+.dashboard-card.gradient-card-2 .card-body {
+    color: white;
+}
+
+.dashboard-card.gradient-card-3 {
+    background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+    color: white;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.dashboard-card.gradient-card-3 .card-header {
+    background: rgba(255, 255, 255, 0.1);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.dashboard-card.gradient-card-3 .card-title,
+.dashboard-card.gradient-card-3 .card-subtitle,
+.dashboard-card.gradient-card-3 .card-body {
+    color: white;
+}
+
+.card-header {
+    padding: 24px 24px 16px 24px;
+    border-bottom: 1px solid var(--border-color);
+    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+}
+
+.card-title {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.card-subtitle {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    margin: 4px 0 0 0;
+}
+
+.card-body {
+    padding: 24px;
+}
+
+.card-footer {
+    padding: 16px 24px;
+    background: var(--light-bg);
+    border-top: 1px solid var(--border-color);
+}
+
+/* Buttons */
+.btn-modern {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 24px;
+    border: none;
+    border-radius: var(--radius-md);
+    font-weight: 500;
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-decoration: none;
+    line-height: 1;
+}
+
+.btn-primary {
+    background: var(--primary-color);
+    color: white;
+}
+
+.btn-primary:hover {
+    background: var(--primary-dark);
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-md);
+}
+
+.btn-secondary {
+    background: var(--light-bg);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+}
+
+.btn-success {
+    background: var(--success-color);
+    color: white;
+}
+
+.btn-warning {
+    background: var(--warning-color);
+    color: white;
+}
+
+.btn-danger {
+    background: var(--danger-color);
+    color: white;
+}
+
+.btn-info {
+    background: var(--info-color);
+    color: white;
+}
+
+/* Status Indicators */
+.status-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    border-radius: 9999px;
+    font-size: 0.875rem;
+    font-weight: 500;
+}
+
+.status-success {
+    background: rgba(16, 185, 129, 0.1);
+    color: var(--success-color);
+}
+
+.status-warning {
+    background: rgba(245, 158, 11, 0.1);
+    color: var(--warning-color);
+}
+
+.status-danger {
+    background: rgba(239, 68, 68, 0.1);
+    color: var(--danger-color);
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .control-center-container {
+        padding: 16px;
+    }
+    
+    .control-header {
+        padding: 24px;
+    }
+    
+    .control-header h1 {
+        font-size: 2rem;
+    }
+    
+    .header-stats {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 16px;
+    }
+    
+    .tab-navigation {
+        flex-direction: column;
+        gap: 8px;
+    }
+    
+    .tab-button {
+        min-width: auto;
+    }
+    
+    .card-grid-2,
+    .card-grid-3,
+    .card-grid-4 {
+        grid-template-columns: 1fr;
+    }
+    
+    /* Responsive monitoring grids */
+    .monitoring-grid-4,
+    .grid-4 {
+        grid-template-columns: repeat(2, 1fr) !important;
+    }
+    
+    .monitoring-grid-2,
+    .grid-2 {
+        grid-template-columns: 1fr !important;
+    }
+}
+
+/* Additional responsive breakpoint for monitoring grids */
+@media (max-width: 480px) {
+    .monitoring-grid-4,
+    .grid-4 {
+        grid-template-columns: 1fr !important;
+    }
+}
+
+.performance-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lg);
+}
+
+/* Alert Styles */
+.alert {
+    padding: 16px 20px;
+    border-radius: var(--radius-md);
+    margin: 16px 0;
+    font-weight: 500;
+    border: 1px solid transparent;
+}
+
+.alert-success {
+    background: #d4edda;
+    color: #155724;
+    border-color: #c3e6cb;
+}
+
+.alert-danger {
+    background: #f8d7da;
+    color: #721c24;
+    border-color: #f5c6cb;
+}
+
+.alert-warning {
+    background: #fff3cd;
+    color: #856404;
+    border-color: #ffeaa7;
+}
+
+.alert h5 {
+    margin: 0 0 8px 0;
+    font-weight: 600;
+}
+
+.alert p {
+    margin: 0;
+    line-height: 1.5;
+}
+
+/* Form Styles */
+.form-control {
+    padding: 10px 15px;
+    border: 2px solid var(--border-color);
+    border-radius: var(--radius-md);
+    font-size: 15px;
+    background: var(--card-bg);
+    transition: all 0.3s ease;
+}
+
+.form-control:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+/* Checkbox Styles */
+input[type="checkbox"] {
+    accent-color: var(--primary-color);
+    cursor: pointer;
+}
+
+/* Field Transition Effects */
+.form-control, input[type="number"], select {
+    transition: all 0.3s ease;
+}
+
+input[type="number"]:disabled, select:disabled {
+    background-color: #f1f3f4 !important;
+    color: #9aa0a6;
+    cursor: not-allowed;
+}
+
+input[type="checkbox"]:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+/* Disabled Field Styling */
+.field-disabled {
+    opacity: 0.5;
+    background: #f1f3f4 !important;
+    border-color: #dadce0 !important;
+    transition: all 0.3s ease;
+}
+
+.field-disabled label {
+    cursor: not-allowed;
+}
+
+/* Responsive Grid */
+@media (max-width: 768px) {
+    .header-stats {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    
+    .tab-navigation {
+        flex-direction: column;
+        gap: 8px;
+    }
+    
+    .tab-button {
+        text-align: center;
+    }
+}
+
+/* Grid container for equal height cards */
+.performance-cards-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+    gap: 20px;
+    margin: 20px 0;
+    align-items: stretch;
+}
+
+/* Monitoring Tab Specific Styles */
+.monitoring-buttons-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 20px;
+    margin-top: 20px;
+}
+
+.monitoring-button {
+    display: flex;
+    align-items: center;
+    padding: 24px;
+    background: white;
+    border: 2px solid var(--border-color);
+    border-radius: 12px;
+    text-decoration: none;
+    color: var(--text-primary);
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.monitoring-button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+    border-color: var(--primary-color);
+    text-decoration: none;
+    color: var(--text-primary);
+}
+
+.monitoring-button-icon {
+    width: 60px;
+    height: 60px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    margin-right: 20px;
+    flex-shrink: 0;
+}
+
+.monitoring-button.auto-sync .monitoring-button-icon {
+    background: linear-gradient(135deg, #06b6d4, #0891b2);
+    color: white;
+}
+
+.monitoring-button.system-health .monitoring-button-icon {
+    background: linear-gradient(135deg, #10b981, #059669);
+    color: white;
+}
+
+.monitoring-button.api-performance .monitoring-button-icon {
+    background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+    color: white;
+}
+
+.monitoring-button-content {
+    flex: 1;
+}
+
+.monitoring-button-content h4 {
+    margin: 0 0 8px 0;
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.monitoring-button-content p {
+    margin: 0 0 12px 0;
+    color: var(--text-secondary);
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+.monitoring-button-stats {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.stat-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    background: var(--light-bg);
+    padding: 4px 8px;
+    border-radius: 6px;
+}
+
+.stat-item i {
+    font-size: 10px;
+    opacity: 0.7;
+}
+
+.monitoring-button-arrow {
+    font-size: 20px;
+    color: var(--text-secondary);
+    margin-left: 20px;
+    transition: transform 0.3s ease;
+}
+
+.monitoring-button:hover .monitoring-button-arrow {
+    transform: translateX(4px);
+    color: var(--primary-color);
+}
+
+/* Metric Cards for Overview */
+.metric-card {
+    background: white;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 16px;
+    text-align: center;
+    transition: all 0.3s ease;
+}
+
+.metric-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.metric-header {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-bottom: 12px;
+    font-size: 14px;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.metric-value {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+}
+
+.metric-detail {
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+/* Stat Cards for Overview */
+.stat-card {
+    background: white;
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 20px;
+    display: flex;
+    align-items: center;
+    transition: all 0.3s ease;
+}
+
+.stat-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(0,0,0,0.1);
+}
+
+.stat-icon {
+    width: 50px;
+    height: 50px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    color: white;
+    margin-right: 16px;
+    flex-shrink: 0;
+}
+
+.stat-content {
+    flex: 1;
+}
+
+.stat-value {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+    line-height: 1;
+}
+
+.stat-label {
+    font-size: 14px;
+    color: var(--text-secondary);
+    font-weight: 500;
+    margin-bottom: 4px;
+}
+
+.stat-change {
+    font-size: 12px;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .monitoring-button {
+        flex-direction: column;
+        text-align: center;
+    }
+    
+    .monitoring-button-icon {
+        margin-right: 0;
+        margin-bottom: 16px;
+    }
+    
+    .monitoring-button-arrow {
+        margin-left: 0;
+        margin-top: 16px;
+    }
+    
+    .stat-card {
+        flex-direction: column;
+        text-align: center;
+    }
+    
+    .stat-icon {
+        margin-right: 0;
+        margin-bottom: 16px;
+    }
+}
+
+/* Full-width monitoring grid layouts */
+.monitoring-grid-4 { 
+    display: grid;
+    grid-template-columns: repeat(4, 1fr); 
+    gap: 20px;
+    width: 100%;
+    margin: 20px 0;
+}
+
+.monitoring-grid-2 { 
+    display: grid;
+    grid-template-columns: repeat(2, 1fr); 
+    gap: 20px;
+    width: 100%;
+    margin: 20px 0;
+}
+
+.monitoring-grid-1 { 
+    display: grid;
+    grid-template-columns: 1fr; 
+    gap: 20px;
+    width: 100%;
+    margin: 20px 0;
+}
+
+/* Hover Dropdown Menu for Monitoring Tab */
+.tab-navigation {
+    position: relative;
+    overflow: visible !important;
+}
+
+.tab-button {
+    position: relative;
+}
+
+.tab-dropdown {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    width: 100%;
+    background: white;
+    border-radius: 0 0 8px 8px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+    z-index: 9999;
+    padding: 4px 0;
+    border: 1px solid #e2e8f0;
+    border-top: none;
+    margin-top: 0;
+}
+
+.tab-button:hover .tab-dropdown,
+.tab-dropdown:hover {
+    display: block;
+}
+
+.tab-dropdown a {
+    display: block;
+    padding: 12px 20px;
+    text-decoration: none;
+    color: #2d3748;
+    transition: all 0.2s;
+    font-size: 14px;
+    font-weight: 500;
+    border-left: 3px solid transparent;
+}
+
+.tab-dropdown a:hover {
+    background: #f7fafc;
+    border-left-color: #667eea;
+    color: #667eea;
+}
+</style>
 
 <div class="control-center-container">
-    
-    <?php
-    // Display any loading errors to the admin
-    if (!empty($load_errors)) {
-        echo '<div class="alert alert-warning" style="margin-bottom: 24px; padding: 16px; background: #fff3cd; border: 1px solid #ffc107; border-radius: 8px;">';
-        echo '<h4 style="margin: 0 0 8px 0; color: #856404;"><i class="fas fa-exclamation-triangle"></i> Warning: Some Data Could Not Be Loaded</h4>';
-        echo '<ul style="margin: 8px 0 0 20px; color: #856404;">';
-        foreach ($load_errors as $error) {
-            echo '<li>' . htmlspecialchars($error) . '</li>';
-        }
-        echo '</ul>';
-        echo '<p style="margin: 8px 0 0 0; color: #856404; font-size: 14px;">The dashboard will display with available data. Check the Moodle error logs for details.</p>';
-        echo '</div>';
-    }
-    ?>
-    
     <!-- Header Section -->
     <div class="control-header">
         <h1>
@@ -214,7 +1100,7 @@ echo '<div style="position: fixed; top: 0; right: 0; background: #10b981; color:
             <div class="tab-dropdown" onclick="event.stopPropagation();">
                 <a href="monitoring_dashboard_new.php?tab=autosync">🔄 Data Sync Monitor</a>
                 <a href="monitoring_dashboard_new.php?tab=performance">⚡ API Monitor</a>
-                <a href="monitoring_dashboard_new.php?tab=security">🔒 Health Monitor</a>
+                <a href="monitoring_dashboard_new.php?tab=security">🔒 Security Monitor</a>
             </div>
         </button>
         <button class="tab-button" onclick="switchTab(event, 'settings')">
@@ -254,13 +1140,13 @@ echo '<div style="position: fixed; top: 0; right: 0; background: #10b981; color:
                             $success_rate = 100;
                             
                             // Only try to calculate detailed metrics if we have the necessary fields
-                            if ($DB->get_manager()->table_exists(\local_alx_report_api\constants::TABLE_LOGS)) {
-                                $table_info = $DB->get_columns(\local_alx_report_api\constants::TABLE_LOGS);
+                            if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
+                                $table_info = $DB->get_columns('local_alx_api_logs');
                                 
                                 // Check if we have response time tracking
                                 if (isset($table_info['response_time_ms'])) {
-                                    // Use standard Moodle field name
-                                    $time_field = 'timecreated';
+                                    // Use timeaccessed (new field) or fall back to timecreated (old field)
+                                    $time_field = isset($table_info['timeaccessed']) ? 'timeaccessed' : 'timecreated';
                                     $avg_response = $DB->get_field_sql("
                                         SELECT AVG(response_time_ms) 
                                         FROM {local_alx_api_logs} 
@@ -271,10 +1157,10 @@ echo '<div style="position: fixed; top: 0; right: 0; background: #10b981; color:
                                 
                                 // Check if we have error tracking
                                 if (isset($table_info['error_message'])) {
-                                    // Use standard Moodle field name
-                                    $time_field = 'timecreated';
-                                    $total_calls = $DB->count_records_select(\local_alx_report_api\constants::TABLE_LOGS, "{$time_field} >= ?", [time() - 86400]);
-                                    $error_calls = $DB->count_records_select(\local_alx_report_api\constants::TABLE_LOGS, 
+                                    // Use timeaccessed (new field) or fall back to timecreated (old field)
+                                    $time_field = isset($table_info['timeaccessed']) ? 'timeaccessed' : 'timecreated';
+                                    $total_calls = $DB->count_records_select('local_alx_api_logs', "{$time_field} >= ?", [time() - 86400]);
+                                    $error_calls = $DB->count_records_select('local_alx_api_logs', 
                                         "{$time_field} >= ? AND error_message IS NOT NULL AND error_message != ?", 
                                         [time() - 86400, '']
                                     );
@@ -362,12 +1248,12 @@ echo '<div style="position: fixed; top: 0; right: 0; background: #10b981; color:
                     <div class="card-body">
                         <?php
                         // Get sync status information
-                        if ($DB->get_manager()->table_exists(\local_alx_report_api\constants::TABLE_SYNC_STATUS)) {
-                            $total_sync_entries = $DB->count_records(\local_alx_report_api\constants::TABLE_SYNC_STATUS);
-                            $recent_syncs = $DB->count_records_select(\local_alx_report_api\constants::TABLE_SYNC_STATUS, 
+                        if ($DB->get_manager()->table_exists('local_alx_api_sync_status')) {
+                            $total_sync_entries = $DB->count_records('local_alx_api_sync_status');
+                            $recent_syncs = $DB->count_records_select('local_alx_api_sync_status', 
                                 'last_sync_timestamp > ?', [time() - 86400]);
                             // Fetch the most recent sync timestamp
-                            $last_sync_timestamp = $DB->get_field_sql('SELECT MAX(last_sync_timestamp) FROM {' . \local_alx_report_api\constants::TABLE_SYNC_STATUS . '}');
+                            $last_sync_timestamp = $DB->get_field_sql('SELECT MAX(last_sync_timestamp) FROM {local_alx_api_sync_status}');
                         } else {
                             $total_sync_entries = 0;
                             $recent_syncs = 0;
@@ -379,12 +1265,12 @@ echo '<div style="position: fixed; top: 0; right: 0; background: #10b981; color:
                         $company_chart_labels = [];
                         $company_chart_colors = ['#ef4444', '#3b82f6', '#10b981', '#fbbf24', '#ec4899', '#8b5cf6', '#f97316', '#06b6d4'];
                         
-                        if ($DB->get_manager()->table_exists(\local_alx_report_api\constants::TABLE_REPORTING)) {
+                        if ($DB->get_manager()->table_exists('local_alx_api_reporting')) {
                             $companies_list = local_alx_report_api_get_companies();
                             $color_index = 0;
                             
                             foreach ($companies_list as $comp) {
-                                $record_count = $DB->count_records(\local_alx_report_api\constants::TABLE_REPORTING, [
+                                $record_count = $DB->count_records('local_alx_api_reporting', [
                                     'companyid' => $comp->id,
                                     'is_deleted' => 0
                                 ]);
@@ -485,39 +1371,57 @@ echo '<div style="position: fixed; top: 0; right: 0; background: #10b981; color:
                     <div class="card-header" style="border-bottom: 1px solid rgba(31,41,55,0.1); background: rgba(255,255,255,0.1);">
                         <h3 class="card-title" style="color: #1f2937; margin: 0;">
                             <i class="fas fa-shield-alt" style="color: #10b981;"></i>
-                            Health Monitor
+                            Performance Status
                         </h3>
-                        <p class="card-subtitle" style="color: #6b7280; margin: 4px 0 0 0;">Real-time Health monitoring and access control</p>
+                        <p class="card-subtitle" style="color: #6b7280; margin: 4px 0 0 0;">API security and access control</p>
                     </div>
                     <div class="card-body">
                         <?php
-                        // Count actual violation EVENTS from alerts table (not just companies)
+                        // Calculate rate limit violations using company-specific limits (same logic as Security tab)
                         $violations_today = 0;
                         $users_today = 0;
                         $today_start = mktime(0, 0, 0);
                         $debug_info = [];
                         
                         try {
-                            // Count violation events from alerts table (each violation is logged as an alert)
-                            if ($DB->get_manager()->table_exists(\local_alx_report_api\constants::TABLE_ALERTS)) {
-                                $violations_today = $DB->count_records_select(\local_alx_report_api\constants::TABLE_ALERTS,
-                                    "alert_type = ? AND timecreated >= ?",
-                                    ['rate_limit_exceeded', $today_start]
-                                );
-                                $debug_info[] = "Violations from alerts table: $violations_today";
-                            }
-                            
-                            // Count active users today from logs
-                            if ($DB->get_manager()->table_exists(\local_alx_report_api\constants::TABLE_LOGS)) {
-                                // Use standard Moodle field name
-                                $time_field = 'timecreated';
+                            if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
+                                $table_info = $DB->get_columns('local_alx_api_logs');
+                                $time_field = isset($table_info['timeaccessed']) ? 'timeaccessed' : 'timecreated';
                                 
-                                // Count unique users who made API calls today
-                                $sql = "SELECT COUNT(DISTINCT userid) 
-                                        FROM {local_alx_api_logs} 
-                                        WHERE {$time_field} >= ?";
-                                $users_today = $DB->count_records_sql($sql, [$today_start]);
-                                $debug_info[] = "Active users today: $users_today";
+                                // Get all companies and check each one's usage against their specific limit
+                                $companies = local_alx_report_api_get_companies();
+                                $debug_info[] = "Found " . count($companies) . " companies";
+                                
+                                foreach ($companies as $company) {
+                                    // Get company-specific rate limit
+                                    $company_settings = local_alx_report_api_get_company_settings($company->id);
+                                    $company_rate_limit = isset($company_settings['rate_limit']) ? 
+                                        $company_settings['rate_limit'] : 
+                                        get_config('local_alx_report_api', 'rate_limit');
+                                    
+                                    if (empty($company_rate_limit)) {
+                                        $company_rate_limit = 100; // Default fallback
+                                    }
+                                    
+                                    // Count today's API calls for this company
+                                    $company_calls_today = $DB->count_records_select('local_alx_api_logs',
+                                        "{$time_field} >= ? AND company_shortname = ?",
+                                        [$today_start, $company->shortname]
+                                    );
+                                    
+                                    $debug_info[] = "Company: {$company->name} (shortname: {$company->shortname}) - Limit: {$company_rate_limit}, Calls: {$company_calls_today}";
+                                    
+                                    // Check if company exceeded their specific limit
+                                    if ($company_calls_today > $company_rate_limit) {
+                                        $violations_today++;
+                                        $debug_info[] = "  -> VIOLATION DETECTED!";
+                                    }
+                                    
+                                    // Count users with activity today
+                                    if ($company_calls_today > 0) {
+                                        $users_today++;
+                                    }
+                                }
                             }
                         } catch (Exception $e) {
                             error_log('Control Center rate limit calculation error: ' . $e->getMessage());
@@ -540,50 +1444,13 @@ echo '<div style="position: fixed; top: 0; right: 0; background: #10b981; color:
                         // 1. Rate Limiting Status - Check if rate limiting is configured and active
                         $rate_limit_global = get_config('local_alx_report_api', 'rate_limit');
                         $rate_limit_active = !empty($rate_limit_global) && $rate_limit_global > 0;
-                        
-                        // Count companies with rate limit configured
-                        $companies_with_limit = 0;
-                        $total_companies = 0;
-                        
-                        try {
-                            $companies = local_alx_report_api_get_companies();
-                            if (is_array($companies)) {
-                                $total_companies = count($companies);
-                                foreach ($companies as $company) {
-                                    $company_settings = local_alx_report_api_get_company_settings($company->id);
-                                    if (!empty($company_settings['rate_limit']) && $company_settings['rate_limit'] > 0) {
-                                        $companies_with_limit++;
-                                    }
-                                }
-                            }
-                        } catch (Exception $e) {
-                            error_log('Rate limit count error: ' . $e->getMessage());
-                        }
-                        
-                        // Build status display
-                        if ($total_companies > 0) {
-                            $rate_limit_status = "{$companies_with_limit}/{$total_companies}";
-                            $rate_limit_percentage = ($companies_with_limit / $total_companies) * 100;
-                            if ($rate_limit_percentage == 100) {
-                                $rate_limit_color = '#10b981'; // Green - all protected
-                            } elseif ($rate_limit_percentage >= 50) {
-                                $rate_limit_color = '#f59e0b'; // Yellow - some protected
-                            } else {
-                                $rate_limit_color = '#ef4444'; // Red - few protected
-                            }
-                        } else {
-                            $rate_limit_status = $rate_limit_active ? 'Active' : 'Disabled';
-                            $rate_limit_color = $rate_limit_active ? '#10b981' : '#ef4444';
-                        }
+                        $rate_limit_status = $rate_limit_active ? 'Active' : 'Disabled';
+                        $rate_limit_color = $rate_limit_active ? '#10b981' : '#ef4444';
                         
                         // 2. Token Security Status - Check for expired tokens and HTTPS
                         $token_security_status = 'Secure';
                         $token_security_color = '#10b981';
                         $token_issues = [];
-                        $valid_tokens = 0;
-                        $total_tokens = 0;
-                        $expiring_soon_tokens = 0;
-                        $expiring_soon_details = [];
                         
                         try {
                             // Check if HTTPS is enabled
@@ -592,7 +1459,7 @@ echo '<div style="position: fixed; top: 0; right: 0; background: #10b981; color:
                                 $token_issues[] = 'HTTP (not HTTPS)';
                             }
                             
-                            // Count tokens and check for expired ones
+                            // Check for expired tokens
                             if ($DB->get_manager()->table_exists('external_tokens')) {
                                 $service_id = $DB->get_field('external_services', 'id', ['shortname' => 'alx_report_api_custom']);
                                 if (!$service_id) {
@@ -600,76 +1467,21 @@ echo '<div style="position: fixed; top: 0; right: 0; background: #10b981; color:
                                 }
                                 
                                 if ($service_id) {
-                                    // Get all tokens for this service
-                                    $tokens = $DB->get_records('external_tokens', ['externalserviceid' => $service_id]);
-                                    if (is_array($tokens) || is_object($tokens)) {
-                                        $total_tokens = count($tokens);
-                                        
-                                        // Define expiring soon threshold (30 days)
-                                        $expiring_soon_threshold = time() + (30 * 86400); // 30 days from now
-                                        
-                                        foreach ($tokens as $token) {
-                                            // Check if token is valid (not expired or no expiry set)
-                                            if (empty($token->validuntil) || $token->validuntil > time()) {
-                                                $valid_tokens++;
-                                                
-                                                // Check if token is expiring soon (within 30 days)
-                                                if (!empty($token->validuntil) && $token->validuntil <= $expiring_soon_threshold) {
-                                                    $expiring_soon_tokens++;
-                                                    $days_until_expiry = ceil(($token->validuntil - time()) / 86400);
-                                                    
-                                                    // Get user info for the token
-                                                    $token_user = $DB->get_record('user', ['id' => $token->userid], 'id, username, firstname, lastname');
-                                                    $user_display = $token_user ? fullname($token_user) . ' (' . $token_user->username . ')' : 'User ID: ' . $token->userid;
-                                                    
-                                                    $expiring_soon_details[] = $user_display . ' - expires in ' . $days_until_expiry . ' day(s)';
-                                                }
-                                            }
-                                        }
-                                    }
+                                    $expired_tokens = $DB->count_records_select('external_tokens',
+                                        'externalserviceid = ? AND validuntil > 0 AND validuntil < ?',
+                                        [$service_id, time()]
+                                    );
                                     
-                                    // Count expired tokens for issues
-                                    $expired_tokens = $total_tokens - $valid_tokens;
                                     if ($expired_tokens > 0) {
                                         $token_issues[] = "{$expired_tokens} expired token(s)";
-                                    }
-                                    
-                                    // Add expiring soon to issues
-                                    if ($expiring_soon_tokens > 0) {
-                                        $token_issues[] = "{$expiring_soon_tokens} token(s) expiring within 30 days";
                                     }
                                 }
                             }
                             
-                            // Build status display
-                            if ($total_tokens > 0) {
-                                $token_security_status = "{$valid_tokens}/{$total_tokens}";
-                                $token_percentage = ($valid_tokens / $total_tokens) * 100;
-                                
-                                // Color logic with expiring soon check
-                                if ($expired_tokens > 0) {
-                                    // Red if any tokens are already expired
-                                    if ($token_percentage < 80) {
-                                        $token_security_color = '#ef4444'; // Red - many expired
-                                    } else {
-                                        $token_security_color = '#f59e0b'; // Yellow - some expired
-                                    }
-                                } elseif ($expiring_soon_tokens > 0) {
-                                    // Yellow if tokens are expiring soon (but none expired yet)
-                                    $token_security_color = '#f59e0b'; // Yellow - expiring soon warning
-                                } else {
-                                    // Green - all valid and none expiring soon
-                                    $token_security_color = '#10b981'; // Green - all good
-                                }
-                            } else {
-                                // No tokens found, show status based on issues
-                                if (count($token_issues) > 0) {
-                                    $token_security_status = 'Warning';
-                                    $token_security_color = '#f59e0b';
-                                } else {
-                                    $token_security_status = 'No Tokens';
-                                    $token_security_color = '#6b7280';
-                                }
+                            // Set status based on issues found
+                            if (count($token_issues) > 0) {
+                                $token_security_status = 'Warning';
+                                $token_security_color = '#f59e0b';
                             }
                         } catch (Exception $e) {
                             $token_security_status = 'Unknown';
@@ -746,7 +1558,7 @@ echo '<div style="position: fixed; top: 0; right: 0; background: #10b981; color:
                                 <canvas id="security-score-chart" width="120" height="120"></canvas>
                                 <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center;">
                                     <div style="font-size: 20px; font-weight: 700; color: #10b981;"><?php echo $security_score; ?></div>
-                                    <div style="font-size: 10px; color: #6b7280;">Health</div>
+                                    <div style="font-size: 10px; color: #6b7280;">Security Score</div>
                                 </div>
                             </div>
                         </div>
@@ -754,54 +1566,32 @@ echo '<div style="position: fixed; top: 0; right: 0; background: #10b981; color:
                         <!-- Rate Limiting Status -->
                         <div style="margin-bottom: 16px;">
                             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                                <strong style="color: #1f2937;">📊 Rate Limited API:</strong>
+                                <strong style="color: #1f2937;">Rate Limiting:</strong>
                                 <span style="background: <?php echo $rate_limit_color; ?>; color: white; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 600;">
                                     <?php echo $rate_limit_status; ?>
                                 </span>
-                            </div>
-                            <div style="font-size: 11px; color: #6b7280; margin-left: 4px;">
-                                (Companies with rate limit configured)
                             </div>
                         </div>
 
                         <!-- Token Security -->
                         <div style="margin-bottom: 16px;">
                             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                                <strong style="color: #1f2937;">🔑 Valid Tokens:</strong>
+                                <strong style="color: #1f2937;">Token Security:</strong>
                                 <span style="background: <?php echo $token_security_color; ?>; color: white; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 600;" 
-                                      title="<?php 
-                                          // Build detailed tooltip
-                                          $tooltip_parts = [];
-                                          if (!empty($token_issues)) {
-                                              $tooltip_parts[] = implode(', ', $token_issues);
-                                          }
-                                          if (!empty($expiring_soon_details)) {
-                                              $tooltip_parts[] = 'Expiring soon: ' . implode('; ', $expiring_soon_details);
-                                          }
-                                          if (empty($tooltip_parts)) {
-                                              $tooltip_parts[] = 'All tokens are valid and not expiring soon';
-                                          }
-                                          echo htmlspecialchars(implode(' | ', $tooltip_parts));
-                                      ?>">
+                                      title="<?php echo !empty($token_issues) ? implode(', ', $token_issues) : 'All tokens are secure'; ?>">
                                     <?php echo $token_security_status; ?>
                                 </span>
-                            </div>
-                            <div style="font-size: 11px; color: #6b7280; margin-left: 4px;">
-                                (Active tokens / Total tokens)
                             </div>
                         </div>
 
                         <!-- Access Control -->
                         <div style="margin-bottom: 20px;">
                             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                                <strong style="color: #1f2937;">🔐 REST API Access Control:</strong>
+                                <strong style="color: #1f2937;">Access Control:</strong>
                                 <span style="background: <?php echo $access_control_color; ?>; color: white; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 600;"
                                       title="<?php echo !empty($access_issues) ? implode(', ', $access_issues) : 'All access controls are enabled'; ?>">
                                     <?php echo $access_control_status; ?>
                                 </span>
-                            </div>
-                            <div style="font-size: 11px; color: #6b7280; margin-left: 4px;">
-                                (Web services status)
                             </div>
                         </div>
 
@@ -820,7 +1610,7 @@ echo '<div style="position: fixed; top: 0; right: 0; background: #10b981; color:
                     <div class="card-footer" style="border-top: 1px solid rgba(31,41,55,0.1); background: rgba(255,255,255,0.1); padding: 16px; text-align: center;">
                         <a href="<?php echo $CFG->wwwroot; ?>/local/alx_report_api/monitoring_dashboard_new.php?tab=security" class="btn-modern" style="background: #10b981; color: white; border: 2px solid #10b981; padding: 10px 20px; border-radius: 6px; text-decoration: none; display: inline-block; font-weight: 600; transition: all 0.3s ease; box-shadow: 0 2px 4px rgba(16,185,129,0.3);">
                             <i class="fas fa-shield-alt"></i>
-                            Health Monitor
+                            Security Monitor
                         </a>
                     </div>
                 </div>
@@ -883,7 +1673,7 @@ echo '<div style="position: fixed; top: 0; right: 0; background: #10b981; color:
                     try {
                         $field_settings = [
                             'field_userid', 'field_firstname', 'field_lastname', 'field_email',
-                            'field_username', 'field_coursename', 'field_timecompleted', 
+                            'field_courseid', 'field_coursename', 'field_timecompleted', 
                             'field_timecompleted_unix', 'field_timestarted', 'field_timestarted_unix',
                             'field_percentage', 'field_status'
                         ];
@@ -932,7 +1722,7 @@ echo '<div style="position: fixed; top: 0; right: 0; background: #10b981; color:
                                     }
                                 } else {
                                     // Empty value - delete the setting to use global default
-                                    $DB->delete_records(\local_alx_report_api\constants::TABLE_SETTINGS, [
+                                    $DB->delete_records('local_alx_api_settings', [
                                         'companyid' => $companyid,
                                         'setting_name' => 'rate_limit'
                                     ]);
@@ -999,7 +1789,7 @@ echo '<div style="position: fixed; top: 0; right: 0; background: #10b981; color:
                     $current_settings = local_alx_report_api_get_company_settings($companyid);
                     
                     // Check reporting data status
-                    $reporting_records = $DB->count_records(\local_alx_report_api\constants::TABLE_REPORTING, ['companyid' => $companyid, 'is_deleted' => 0]);
+                    $reporting_records = $DB->count_records('local_alx_api_reporting', ['companyid' => $companyid, 'is_deleted' => 0]);
                     ?>
                     
                     <!-- Company Settings Form -->
@@ -1048,7 +1838,7 @@ echo '<div style="position: fixed; top: 0; right: 0; background: #10b981; color:
                                         'field_firstname' => 'First Name', 
                                         'field_lastname' => 'Last Name',
                                         'field_email' => 'Email Address',
-                                        'field_username' => 'Username',
+                                        'field_courseid' => 'Course ID',
                                         'field_coursename' => 'Course Name',
                                         'field_timecompleted' => 'Time Completed (Readable)',
                                         'field_timecompleted_unix' => 'Time Completed (Unix)',
@@ -1165,14 +1955,10 @@ echo '<div style="position: fixed; top: 0; right: 0; background: #10b981; color:
                                     </div>
                                     
                                     <!-- Cache Enabled -->
-                                    <?php 
-                                    // Default to enabled (1) if not set, to match code behavior
-                                    $cache_enabled = isset($current_settings['cache_enabled']) ? $current_settings['cache_enabled'] : 1;
-                                    ?>
-                                    <div id="cache_enabled_field" style="background: #f8f9fa; padding: 20px; border-radius: 8px; border: 2px solid <?php echo $cache_enabled ? '#28a745' : '#e9ecef'; ?>;">
+                                    <div id="cache_enabled_field" style="background: #f8f9fa; padding: 20px; border-radius: 8px; border: 2px solid <?php echo (isset($current_settings['cache_enabled']) && $current_settings['cache_enabled']) ? '#28a745' : '#e9ecef'; ?>;">
                                         <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; margin: 0;">
                                             <input type="checkbox" name="cache_enabled" id="cache_enabled" value="1" 
-                                                   <?php echo $cache_enabled ? 'checked' : ''; ?>
+                                                   <?php echo (isset($current_settings['cache_enabled']) && $current_settings['cache_enabled']) ? 'checked' : ''; ?>
                                                    style="width: 18px; height: 18px;">
                                             <div>
                                                 <div style="font-weight: 600; color: #495057;">
@@ -1217,9 +2003,9 @@ echo '<div style="position: fixed; top: 0; right: 0; background: #10b981; color:
                                         <?php
                                         // Show current usage
                                         $today_start = mktime(0, 0, 0, date('n'), date('j'), date('Y'));
-                                        if ($DB->get_manager()->table_exists(\local_alx_report_api\constants::TABLE_LOGS)) {
-                                            // Use standard Moodle field name
-                                            $time_field = 'timecreated';
+                                        if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
+                                            $table_info = $DB->get_columns('local_alx_api_logs');
+                                            $time_field = isset($table_info['timeaccessed']) ? 'timeaccessed' : 'timecreated';
                                             
                                             // Get company users
                                             $company_users = $DB->get_records('company_users', ['companyid' => $companyid], '', 'userid');
@@ -1348,9 +2134,9 @@ echo '<div style="position: fixed; top: 0; right: 0; background: #10b981; color:
             
             // Get REAL cache statistics
             $cache_stats = [];
-            if ($DB->get_manager()->table_exists(\local_alx_report_api\constants::TABLE_CACHE)) {
-                $total_cache = $DB->count_records(\local_alx_report_api\constants::TABLE_CACHE);
-                $active_cache = $DB->count_records_select(\local_alx_report_api\constants::TABLE_CACHE, 'expires_at > ?', [time()]);
+            if ($DB->get_manager()->table_exists('local_alx_api_cache')) {
+                $total_cache = $DB->count_records('local_alx_api_cache');
+                $active_cache = $DB->count_records_select('local_alx_api_cache', 'expires_at > ?', [time()]);
                 $cache_stats['total_entries'] = $total_cache;
                 $cache_stats['active_entries'] = $active_cache;
                 // Calculate real hit rate
@@ -1361,10 +2147,10 @@ echo '<div style="position: fixed; top: 0; right: 0; background: #10b981; color:
             
             // Get REAL authentication statistics
             $auth_stats = [];
-            if ($DB->get_manager()->table_exists(\local_alx_report_api\constants::TABLE_LOGS)) {
+            if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
                 $today_start = mktime(0, 0, 0);
-                // Use standard Moodle field name
-                $time_field = 'timecreated';
+                $table_info = $DB->get_columns('local_alx_api_logs');
+                $time_field = isset($table_info['timeaccessed']) ? 'timeaccessed' : 'timecreated';
                 
                 // Get real unique users count
                 $auth_stats['unique_users'] = $DB->count_records_sql(
@@ -1376,7 +2162,7 @@ echo '<div style="position: fixed; top: 0; right: 0; background: #10b981; color:
                 $total_calls = $api_analytics['summary']['total_calls'] ?? 0;
                 $error_calls = 0;
                 if (isset($table_info['error_message'])) {
-                    $error_calls = $DB->count_records_select(\local_alx_report_api\constants::TABLE_LOGS, 
+                    $error_calls = $DB->count_records_select('local_alx_api_logs', 
                         "{$time_field} >= ? AND error_message IS NOT NULL", [$today_start]);
                 }
                 $auth_stats['success_rate'] = $total_calls > 0 ? round((($total_calls - $error_calls) / $total_calls) * 100, 1) : 100;
@@ -1386,9 +2172,9 @@ echo '<div style="position: fixed; top: 0; right: 0; background: #10b981; color:
             
             // Get REAL database performance
             $db_performance = [];
-            if ($DB->get_manager()->table_exists(\local_alx_report_api\constants::TABLE_REPORTING)) {
+            if ($DB->get_manager()->table_exists('local_alx_api_reporting')) {
                 $start_time = microtime(true);
-                $sample_query = $DB->get_records(\local_alx_report_api\constants::TABLE_REPORTING, [], '', 'id', 0, 1);
+                $sample_query = $DB->get_records('local_alx_api_reporting', [], '', 'id', 0, 1);
                 $db_performance['response_time'] = round((microtime(true) - $start_time) * 1000, 2);
                 $db_performance['status'] = $db_performance['response_time'] < 100 ? 'excellent' : 
                                           ($db_performance['response_time'] < 500 ? 'good' : 'slow');
@@ -1431,10 +2217,10 @@ echo '<div style="position: fixed; top: 0; right: 0; background: #10b981; color:
         $calls_per_hour = $hours_since_midnight > 0 ? round($total_calls_today / $hours_since_midnight, 1) : 0;
         
         // If we have recent calls (last hour), use that for more accurate rate
-        if ($DB->get_manager()->table_exists(\local_alx_report_api\constants::TABLE_LOGS)) {
-            // Use standard Moodle field name
-            $time_field = 'timecreated';
-            $last_hour_calls = $DB->count_records_select(\local_alx_report_api\constants::TABLE_LOGS, 
+        if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
+            $table_info = $DB->get_columns('local_alx_api_logs');
+            $time_field = isset($table_info['timeaccessed']) ? 'timeaccessed' : 'timecreated';
+            $last_hour_calls = $DB->count_records_select('local_alx_api_logs', 
                 "{$time_field} >= ?", [time() - 3600]);
             if ($last_hour_calls > 0) {
                 $calls_per_hour = $last_hour_calls; // Use last hour's actual count
@@ -1699,16 +2485,16 @@ echo '<div style="position: fixed; top: 0; right: 0; background: #10b981; color:
                     $hourly_data = [];
                     $today_start = mktime(0, 0, 0); // Start of today 00:00
                     
-                    if ($DB->get_manager()->table_exists(\local_alx_report_api\constants::TABLE_LOGS)) {
-                        // Use standard Moodle field name
-                        $time_field = 'timecreated';
+                    if ($DB->get_manager()->table_exists('local_alx_api_logs')) {
+                        $table_info = $DB->get_columns('local_alx_api_logs');
+                        $time_field = isset($table_info['timeaccessed']) ? 'timeaccessed' : 'timecreated';
                         
                         // Get REAL data for each hour (00:00 to 23:59)
                         for ($i = 0; $i < 24; $i++) {
                             $hour_start = $today_start + ($i * 3600); // Each hour
                             $hour_end = $hour_start + 3600; // Next hour
                             
-                            $count = $DB->count_records_select(\local_alx_report_api\constants::TABLE_LOGS, 
+                            $count = $DB->count_records_select('local_alx_api_logs', 
                                 "{$time_field} >= ? AND {$time_field} < ?", 
                                 [$hour_start, $hour_end]
                             );
@@ -2209,7 +2995,33 @@ echo '<div style="position: fixed; top: 0; right: 0; background: #10b981; color:
                     </div>
                 </div>
                 
-                <!-- Toggle Switch CSS moved to external file: styles/control-center.css -->
+                <!-- Toggle Switch CSS -->
+                <style>
+                /* Toggle Switch Styling */
+                .toggle-switch input:checked + .toggle-track {
+                    background-color: #667eea !important;
+                }
+                
+                .toggle-switch input:checked + .toggle-track + .toggle-thumb {
+                    transform: translateX(24px);
+                }
+                
+                .toggle-track {
+                    box-shadow: inset 0 1px 3px rgba(0,0,0,0.2);
+                }
+                
+                .toggle-thumb {
+                    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+                }
+                
+                .toggle-switch:hover .toggle-track {
+                    background-color: #bbb !important;
+                }
+                
+                .toggle-switch input:checked:hover + .toggle-track {
+                    background-color: #5568d3 !important;
+                }
+                </style>
             </div>
         </div>
     </div>
@@ -2841,6 +3653,104 @@ document.addEventListener('DOMContentLoaded', function() {
         }, 100); // Small delay to ensure page is fully loaded
     }
 });
+
+// Smart field enabling/disabling based on response mode
+function updateFieldStates() {
+    const responseMode = document.getElementById('response_mode').value;
+    
+    // Get all field elements
+    const incrementalWindowField = document.getElementById('incremental_window_field');
+    const incrementalWindow = document.getElementById('incremental_window');
+    const incrementalWindowHelp = document.getElementById('incremental_window_help');
+    
+    const initialWindowField = document.getElementById('initial_window_field');
+    const initialWindow = document.getElementById('initial_window');
+    const initialWindowHelp = document.getElementById('initial_window_help');
+    
+    const cacheEnabledField = document.getElementById('cache_enabled_field');
+    const cacheEnabled = document.getElementById('cache_enabled');
+    const cacheEnabledHelp = document.getElementById('cache_enabled_help');
+    
+    const cacheTtlField = document.getElementById('cache_ttl_field');
+    const cacheTtl = document.getElementById('cache_ttl');
+    const cacheTtlHelp = document.getElementById('cache_ttl_help');
+    
+    // Reset all fields to enabled state first
+    const allFields = [incrementalWindowField, initialWindowField, cacheEnabledField, cacheTtlField];
+    const allInputs = [incrementalWindow, initialWindow, cacheEnabled, cacheTtl];
+    
+    allFields.forEach(field => {
+        if (field) {
+            field.style.opacity = '1';
+            field.style.background = '#f8f9fa';
+            field.style.borderColor = '#e9ecef';
+        }
+    });
+    
+    allInputs.forEach(input => {
+        if (input) {
+            input.disabled = false;
+            input.style.opacity = '1';
+            input.style.cursor = 'default';
+        }
+    });
+    
+    // Apply mode-specific rules
+    switch(responseMode) {
+        case '0': // Auto (Intelligent)
+            // All fields enabled - no changes needed
+            incrementalWindowHelp.innerHTML = '<strong>Default: 24 hours</strong> - Used for incremental response decisions (1-168 hours)';
+            initialWindowHelp.innerHTML = '<strong>Default: 168 hours (7 days)</strong> - Used for first API call from new companies (1-720 hours)';
+            cacheEnabledHelp.innerHTML = '<strong>Default: Enabled</strong> - Cache API responses to improve performance';
+            cacheTtlHelp.innerHTML = '<strong>Default: 60 minutes</strong> - How long to cache responses (1-1440 minutes)';
+            break;
+            
+        case '1': // Always Incremental Response
+            // Disable Initial Response Window
+            disableField(initialWindowField, initialWindow);
+            incrementalWindowHelp.innerHTML = '<strong>Default: 24 hours</strong> - Always used for incremental responses (1-168 hours)';
+            initialWindowHelp.innerHTML = '<strong>Not used</strong> - Always Incremental mode doesn\'t use initial window';
+            cacheEnabledHelp.innerHTML = '<strong>Default: Enabled</strong> - Cache API responses to improve performance';
+            cacheTtlHelp.innerHTML = '<strong>Default: 60 minutes</strong> - How long to cache responses (1-1440 minutes)';
+            break;
+            
+        case '2': // Always Full Response
+            // Disable both window fields
+            disableField(incrementalWindowField, incrementalWindow);
+            disableField(initialWindowField, initialWindow);
+            incrementalWindowHelp.innerHTML = '<strong>Not used</strong> - Always Full Response mode returns all data';
+            initialWindowHelp.innerHTML = '<strong>Not used</strong> - Always Full Response mode returns all data';
+            cacheEnabledHelp.innerHTML = '<strong>Default: Enabled</strong> - Cache API responses to improve performance';
+            cacheTtlHelp.innerHTML = '<strong>Default: 60 minutes</strong> - How long to cache responses (1-1440 minutes)';
+            break;
+            
+        case '3': // Disabled
+            // Disable all fields
+            disableField(incrementalWindowField, incrementalWindow);
+            disableField(initialWindowField, initialWindow);
+            disableField(cacheEnabledField, cacheEnabled);
+            disableField(cacheTtlField, cacheTtl);
+            incrementalWindowHelp.innerHTML = '<strong>Not used</strong> - Response features are disabled';
+            initialWindowHelp.innerHTML = '<strong>Not used</strong> - Response features are disabled';
+            cacheEnabledHelp.innerHTML = '<strong>Not used</strong> - Response features are disabled';
+            cacheTtlHelp.innerHTML = '<strong>Not used</strong> - Response features are disabled';
+            break;
+    }
+}
+
+// Helper function to disable a field with visual feedback
+function disableField(fieldDiv, input) {
+    if (fieldDiv) {
+        fieldDiv.style.opacity = '0.5';
+        fieldDiv.style.background = '#f1f3f4';
+        fieldDiv.style.borderColor = '#dadce0';
+    }
+    if (input) {
+        input.disabled = true;
+        input.style.opacity = '0.6';
+        input.style.cursor = 'not-allowed';
+    }
+}
 </script>
 
 <?php

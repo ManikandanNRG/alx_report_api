@@ -14,7 +14,7 @@
         <FIELD NAME="record_count" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" COMMENT="Number of records returned"/>
         <FIELD NAME="error_message" TYPE="text" NOTNULL="false" COMMENT="Error message if request failed"/>
         <FIELD NAME="response_time_ms" TYPE="number" LENGTH="10" DECIMALS="2" NOTNULL="false" COMMENT="Response time in milliseconds"/>
-        <FIELD NAME="timeaccessed" TYPE="int" LENGTH="10" NOTNULL="true" COMMENT="Timestamp when the request was made"/>
+        <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" COMMENT="Timestamp when the log entry was created"/>
         <FIELD NAME="ip_address" TYPE="char" LENGTH="45" NOTNULL="false" COMMENT="IP address of the request"/>
         <FIELD NAME="user_agent" TYPE="text" NOTNULL="false" COMMENT="User agent string"/>
         <FIELD NAME="additional_data" TYPE="text" NOTNULL="false" COMMENT="Additional request data in JSON format"/>
@@ -26,7 +26,7 @@
         <INDEX NAME="userid" UNIQUE="false" FIELDS="userid"/>
         <INDEX NAME="company_shortname" UNIQUE="false" FIELDS="company_shortname"/>
         <INDEX NAME="endpoint" UNIQUE="false" FIELDS="endpoint"/>
-        <INDEX NAME="timeaccessed" UNIQUE="false" FIELDS="timeaccessed"/>
+        <INDEX NAME="timecreated" UNIQUE="false" FIELDS="timecreated"/>
         <INDEX NAME="response_time_ms" UNIQUE="false" FIELDS="response_time_ms"/>
       </INDEXES>
     </TABLE>
@@ -57,6 +57,7 @@
         <FIELD NAME="firstname" TYPE="char" LENGTH="100" NOTNULL="true" COMMENT="User first name"/>
         <FIELD NAME="lastname" TYPE="char" LENGTH="100" NOTNULL="true" COMMENT="User last name"/>
         <FIELD NAME="email" TYPE="char" LENGTH="100" NOTNULL="true" COMMENT="User email"/>
+        <FIELD NAME="username" TYPE="char" LENGTH="100" NOTNULL="true" COMMENT="Username"/>
         <FIELD NAME="coursename" TYPE="char" LENGTH="255" NOTNULL="true" COMMENT="Course full name"/>
         <FIELD NAME="timecompleted" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" COMMENT="Course completion timestamp"/>
         <FIELD NAME="timestarted" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" COMMENT="Course start timestamp"/>
@@ -64,8 +65,8 @@
         <FIELD NAME="status" TYPE="char" LENGTH="20" NOTNULL="true" DEFAULT="not_started" COMMENT="Course status"/>
         <FIELD NAME="last_updated" TYPE="int" LENGTH="10" NOTNULL="true" COMMENT="Last update timestamp for incremental sync"/>
         <FIELD NAME="is_deleted" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="0" COMMENT="Soft delete flag"/>
-        <FIELD NAME="created_at" TYPE="int" LENGTH="10" NOTNULL="true" COMMENT="Record creation timestamp"/>
-        <FIELD NAME="updated_at" TYPE="int" LENGTH="10" NOTNULL="true" COMMENT="Record modification timestamp"/>
+        <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" COMMENT="Timestamp when the record was created"/>
+        <FIELD NAME="timemodified" TYPE="int" LENGTH="10" NOTNULL="true" COMMENT="Timestamp when the record was last modified"/>
       </FIELDS>
       <KEYS>
         <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
@@ -78,6 +79,7 @@
         <INDEX NAME="timecompleted" UNIQUE="false" FIELDS="timecompleted"/>
         <INDEX NAME="status" UNIQUE="false" FIELDS="status"/>
         <INDEX NAME="is_deleted" UNIQUE="false" FIELDS="is_deleted"/>
+        <INDEX NAME="username" UNIQUE="false" FIELDS="username"/>
       </INDEXES>
     </TABLE>
     <TABLE NAME="local_alx_api_sync_status" COMMENT="Sync status tracking for incremental updates">
@@ -92,8 +94,8 @@
         <FIELD NAME="last_sync_status" TYPE="char" LENGTH="20" NOTNULL="true" DEFAULT="success" COMMENT="Last sync status"/>
         <FIELD NAME="last_sync_error" TYPE="text" NOTNULL="false" COMMENT="Last sync error message"/>
         <FIELD NAME="total_syncs" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" COMMENT="Total number of syncs"/>
-        <FIELD NAME="created_at" TYPE="int" LENGTH="10" NOTNULL="true" COMMENT="Record creation timestamp"/>
-        <FIELD NAME="updated_at" TYPE="int" LENGTH="10" NOTNULL="true" COMMENT="Record modification timestamp"/>
+        <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" COMMENT="Timestamp when the record was created"/>
+        <FIELD NAME="timemodified" TYPE="int" LENGTH="10" NOTNULL="true" COMMENT="Timestamp when the record was last modified"/>
       </FIELDS>
       <KEYS>
         <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
@@ -112,10 +114,10 @@
         <FIELD NAME="cache_key" TYPE="char" LENGTH="255" NOTNULL="true" COMMENT="Cache key identifier"/>
         <FIELD NAME="companyid" TYPE="int" LENGTH="10" NOTNULL="true" COMMENT="Company ID"/>
         <FIELD NAME="cache_data" TYPE="text" NOTNULL="true" COMMENT="Cached data (JSON)"/>
-        <FIELD NAME="cache_timestamp" TYPE="int" LENGTH="10" NOTNULL="true" COMMENT="Cache creation timestamp"/>
+        <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" COMMENT="Timestamp when the cache entry was created"/>
         <FIELD NAME="expires_at" TYPE="int" LENGTH="10" NOTNULL="true" COMMENT="Cache expiration timestamp"/>
         <FIELD NAME="hit_count" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" COMMENT="Number of cache hits"/>
-        <FIELD NAME="last_accessed" TYPE="int" LENGTH="10" NOTNULL="true" COMMENT="Last access timestamp"/>
+        <FIELD NAME="timeaccessed" TYPE="int" LENGTH="10" NOTNULL="true" COMMENT="Timestamp when the cache was last accessed"/>
       </FIELDS>
       <KEYS>
         <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
@@ -125,7 +127,7 @@
         <INDEX NAME="cache_key" UNIQUE="false" FIELDS="cache_key"/>
         <INDEX NAME="companyid" UNIQUE="false" FIELDS="companyid"/>
         <INDEX NAME="expires_at" UNIQUE="false" FIELDS="expires_at"/>
-        <INDEX NAME="cache_timestamp" UNIQUE="false" FIELDS="cache_timestamp"/>
+        <INDEX NAME="timecreated" UNIQUE="false" FIELDS="timecreated"/>
       </INDEXES>
     </TABLE>
     <TABLE NAME="local_alx_api_alerts" COMMENT="Alert system for monitoring API security and performance issues">

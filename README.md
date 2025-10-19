@@ -1,56 +1,72 @@
-# ALX Report API Plugin - Development Repository
+# ALX Report API - Tenant Reporting System
 
-This is the development repository for the ALX Report API Moodle plugin.
+A comprehensive Moodle plugin for multi-tenant course progress reporting and Power BI integration.
 
-## Repository Structure
+## Overview
+
+This repository contains the **ALX Report API** plugin for IOMAD Moodle, providing secure REST API access to course completion and progress data across multiple tenants/companies. The plugin is designed for enterprise-level reporting with Power BI integration.
+
+## Key Features
+
+- **Multi-tenant Security**: Company-isolated data access with token-based authentication
+- **REST API**: Secure endpoints for course progress and completion data
+- **Power BI Integration**: Optimized for Power BI data refresh and reporting
+- **Control Center Dashboard**: Unified interface for all plugin operations
+- **Real-time Monitoring**: System health, sync status, and performance metrics
+- **Data Synchronization**: Automated and manual sync capabilities
+- **Audit Logging**: Complete API access tracking
+- **Performance Optimized**: Separate reporting tables for fast queries
+
+## Project Structure
 
 ```
-alx_report_api_development/
-├── local_alx_report_api/          # Plugin source code
-├── releases/                      # Clean ZIP files for Moodle installation
-├── scripts/                       # Development helper scripts
-├── README.md                      # This file
-└── .gitignore                     # Git ignore rules
+tenantReport_NEW/
+└── local/
+    └── local_alx_report_api/     # Main plugin directory
+        ├── classes/              # Core classes and API logic
+        ├── db/                   # Database schema and upgrade scripts
+        ├── lang/                 # Language strings
+        ├── styles/               # CSS stylesheets
+        ├── archive/              # Archived files
+        ├── backup/               # Backup files
+        ├── version.php           # Plugin version information
+        ├── settings.php          # Plugin settings
+        ├── lib.php               # Core library functions
+        ├── externallib.php       # External API functions
+        └── README.md             # Plugin documentation
 ```
 
-## Development Workflow
+## Installation
 
-### 1. Make Changes
-Edit files in the `local_alx_report_api/` directory.
+1. Clone this repository to your Moodle installation
+2. Place the plugin in `[moodle_root]/local/alx_report_api/`
+3. Log in as admin and navigate to Site Administration → Notifications
+4. Follow the installation prompts
+5. Enable web services and REST protocol in Moodle
 
-### 2. Create Release
-Run the release script to create clean ZIP files:
-```bash
-./scripts/create_release.bat
-```
+For detailed installation and configuration instructions, see the [plugin README](local/local_alx_report_api/README.md).
 
-### 3. Install in Moodle
-Use the ZIP file from `releases/` directory to install in Moodle.
+## Requirements
 
-## Important Notes
+- Moodle 4.2.6 or higher
+- IOMAD (for multi-tenancy support)
+- PHP 7.4 or higher
+- MySQL/MariaDB database
 
-- **Never** install directly from this Git repository
-- **Always** use the clean ZIP files from `releases/` directory
-- The `releases/` directory contains ZIP files without .git folders
-- This ensures Moodle installation works correctly
+## Version
 
-## Git Commands
+Current version: **1.9.0**
 
-```bash
-# Commit changes
-git add .
-git commit -m "Your commit message"
+## Documentation
 
-# Push to remote
-git push origin main
+- [Plugin README](local/local_alx_report_api/README.md) - Detailed plugin documentation
+- [Manual Cleanup Guide](local/local_alx_report_api/MANUAL_CLEANUP.md) - Data cleanup procedures
+- [Uninstall Procedure](local/local_alx_report_api/PROPER_UNINSTALL_PROCEDURE.md) - Safe uninstallation steps
 
-# Create release
-./scripts/create_release.bat
-```
+## License
 
-## Plugin Information
+GNU GPL v3 or later
 
-- **Plugin Name**: ALX Report API
-- **Plugin Type**: local
-- **Moodle Compatibility**: 4.2+
-- **Features**: Multi-tenant API, Incremental Sync, Performance Optimization 
+## Copyright
+
+© 2024 ALX Report API Plugin

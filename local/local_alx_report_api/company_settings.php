@@ -48,7 +48,7 @@ if ($action === 'save' && $companyid && confirm_sesskey()) {
     try {
     $field_settings = [
         'field_userid', 'field_firstname', 'field_lastname', 'field_email',
-        'field_courseid', 'field_coursename', 'field_timecompleted', 
+        'field_username', 'field_coursename', 'field_timecompleted', 
         'field_timecompleted_unix', 'field_timestarted', 'field_timestarted_unix',
         'field_percentage', 'field_status'
     ];
@@ -135,271 +135,8 @@ if ($action === 'copy_template' && $companyid && confirm_sesskey()) {
 }
 
 // Start output
+echo '<link rel="stylesheet" href="' . new moodle_url('/local/alx_report_api/styles/company-settings.css') . '">';
 echo $OUTPUT->header();
-
-// Modern CSS styling for better UI
-echo '<style>
-.alx_report_api-container {
-    max-width: 1200px;
-    margin: 20px auto;
-    background: #fff;
-    border-radius: 12px;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.1);
-    overflow: hidden;
-}
-
-.alx_report_api-header {
-    background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
-    color: white;
-    padding: 30px;
-    text-align: center;
-}
-
-.alx_report_api-header h2 {
-    margin: 0;
-    font-size: 28px;
-    font-weight: 600;
-}
-
-.company-selector {
-    background: #f8f9fa;
-    padding: 25px 30px;
-    border-bottom: 1px solid #e9ecef;
-}
-
-.company-selector h3 {
-    color: #495057;
-    margin-bottom: 20px;
-    font-size: 20px;
-    font-weight: 600;
-}
-
-.form-inline {
-    display: flex;
-    align-items: center;
-    gap: 15px;
-    flex-wrap: wrap;
-}
-
-.form-inline label {
-    font-weight: 600;
-    color: #495057;
-    margin-bottom: 0;
-    font-size: 16px;
-}
-
-.form-inline select {
-    min-width: 250px;
-    padding: 10px 15px;
-    border: 2px solid #e9ecef;
-    border-radius: 8px;
-    font-size: 15px;
-    background: white;
-    transition: all 0.3s;
-}
-
-.form-inline select:focus {
-    border-color: #28a745;
-    box-shadow: 0 0 0 0.2rem rgba(40, 167, 69, 0.25);
-    outline: none;
-}
-
-.btn-primary {
-    background: #28a745;
-    border: 2px solid #28a745;
-    color: white;
-    padding: 10px 20px;
-    border-radius: 8px;
-    font-weight: 600;
-    transition: all 0.3s;
-    cursor: pointer;
-}
-
-.btn-primary:hover {
-    background: #218838;
-    border-color: #218838;
-    transform: translateY(-1px);
-}
-
-.company-settings {
-    padding: 30px;
-}
-
-.company-settings h3 {
-    color: #2c3e50;
-    font-size: 24px;
-    font-weight: 600;
-    margin-bottom: 25px;
-    padding-bottom: 15px;
-    border-bottom: 3px solid #28a745;
-}
-
-.section-title {
-    color: #495057;
-    font-size: 18px;
-    font-weight: 600;
-    margin: 30px 0 20px 0;
-    padding: 10px 0;
-    border-bottom: 2px solid #e9ecef;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-
-.checkbox-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    gap: 15px;
-    margin: 20px 0;
-}
-
-.checkbox-item {
-    background: #f8f9fa;
-    padding: 15px;
-    border-radius: 8px;
-    border: 2px solid #e9ecef;
-    transition: all 0.3s;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-}
-
-.checkbox-item:hover {
-    border-color: #28a745;
-    background: #f1f9f1;
-    transform: translateY(-1px);
-}
-
-.checkbox-item input[type="checkbox"] {
-    width: 20px;
-    height: 20px;
-    cursor: pointer;
-    accent-color: #28a745;
-}
-
-.checkbox-item label {
-    font-weight: 500;
-    color: #495057;
-    cursor: pointer;
-    margin: 0;
-    flex: 1;
-}
-
-.control-buttons {
-    text-align: center;
-    margin: 20px 0;
-    padding: 20px;
-    background: #f8f9fa;
-    border-radius: 8px;
-}
-
-.btn-outline {
-    background: white;
-    color: #6c757d;
-    border: 2px solid #6c757d;
-    padding: 8px 16px;
-    border-radius: 6px;
-    margin: 0 5px;
-    cursor: pointer;
-    font-weight: 500;
-    transition: all 0.3s;
-}
-
-.btn-outline:hover {
-    background: #6c757d;
-    color: white;
-    transform: translateY(-1px);
-}
-
-.form-actions {
-    background: #f8f9fa;
-    padding: 25px;
-    margin-top: 30px;
-    border-radius: 8px;
-    text-align: center;
-}
-
-.btn-success {
-    background: #28a745;
-    color: white;
-    border: none;
-    padding: 12px 30px;
-    border-radius: 8px;
-    font-weight: 600;
-    font-size: 16px;
-    cursor: pointer;
-    transition: all 0.3s;
-    margin: 0 10px;
-}
-
-.btn-success:hover {
-    background: #218838;
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(40, 167, 69, 0.3);
-}
-
-.btn-secondary {
-    background: #6c757d;
-    color: white;
-    border: none;
-    padding: 12px 30px;
-    border-radius: 8px;
-    font-weight: 600;
-    font-size: 16px;
-    cursor: pointer;
-    transition: all 0.3s;
-    margin: 0 10px;
-    text-decoration: none;
-    display: inline-block;
-}
-
-.btn-secondary:hover {
-    background: #545b62;
-    color: white;
-    text-decoration: none;
-    transform: translateY(-1px);
-}
-
-.alert {
-    padding: 15px 20px;
-    border-radius: 8px;
-    margin: 20px 0;
-    font-weight: 500;
-}
-
-.alert-warning {
-    background: #fff3cd;
-    color: #856404;
-    border: 1px solid #ffeaa7;
-}
-
-.alert-info {
-    background: #d1ecf1;
-    color: #0c5460;
-    border: 1px solid #bee5eb;
-}
-
-.text-muted {
-    color: #6c757d;
-    font-style: italic;
-    margin-bottom: 15px;
-}
-
-.quick-actions {
-    background: #e9ecef;
-    padding: 15px;
-    border-radius: 8px;
-    margin-top: 20px;
-    text-align: center;
-}
-
-.quick-actions small {
-    display: block;
-    color: #6c757d;
-    margin-bottom: 10px;
-    font-weight: 500;
-}
-</style>';
 
 echo '<div class="alx_report_api-container">';
 echo '<div class="alx_report_api-header">';
@@ -441,7 +178,7 @@ if ($companyid && isset($companies[$companyid])) {
     
     // Critical Warning about Historical Data Population
     global $DB;
-    $reporting_records = $DB->count_records('local_alx_api_reporting', ['companyid' => $companyid, 'is_deleted' => 0]);
+    $reporting_records = $DB->count_records(\local_alx_report_api\constants::TABLE_REPORTING, ['companyid' => $companyid, 'is_deleted' => 0]);
     if ($reporting_records === 0) {
         echo '<div class="alert" style="background: #f8d7da; color: #721c24; border: 2px solid #f5c6cb; padding: 20px; margin: 20px 0; border-radius: 8px;">';
         echo '<h4 style="margin: 0 0 15px 0; font-weight: bold;">🚨 CRITICAL: Historical Data Population Required</h4>';
@@ -472,7 +209,7 @@ if ($companyid && isset($companies[$companyid])) {
         'field_firstname' => get_string('field_firstname', 'local_alx_report_api'),
         'field_lastname' => get_string('field_lastname', 'local_alx_report_api'),
         'field_email' => get_string('field_email', 'local_alx_report_api'),
-        'field_courseid' => get_string('field_courseid', 'local_alx_report_api'),
+        'field_username' => get_string('field_username', 'local_alx_report_api'),
         'field_coursename' => get_string('field_coursename', 'local_alx_report_api'),
         'field_timecompleted' => get_string('field_timecompleted', 'local_alx_report_api'),
         'field_timecompleted_unix' => get_string('field_timecompleted_unix', 'local_alx_report_api'),
@@ -582,55 +319,7 @@ if ($companyid && isset($companies[$companyid])) {
     
     echo '</div>';
     
-    // Add CSS for sync settings
-    echo '<style>
-    .sync-settings-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-        gap: 20px;
-        margin: 20px 0;
-        padding: 20px;
-        background: #f8f9fa;
-        border-radius: 8px;
-        border: 2px solid #e9ecef;
-    }
-    
-    .setting-item {
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-    }
-    
-    .setting-item label {
-        font-weight: 600;
-        color: #495057;
-        margin-bottom: 5px;
-    }
-    
-    .setting-item input[type="checkbox"] {
-        width: auto;
-        margin-right: 10px;
-    }
-    
-    .setting-item input[type="checkbox"] + label {
-        display: flex;
-        align-items: center;
-        margin-bottom: 0;
-    }
-    
-    .setting-item .form-control {
-        padding: 8px 12px;
-        border: 1px solid #ced4da;
-        border-radius: 4px;
-        font-size: 14px;
-    }
-    
-    .setting-item .form-text {
-        font-size: 12px;
-        color: #6c757d;
-        margin-top: 5px;
-    }
-    </style>';
+
     
     // Action buttons
     echo '<div class="form-actions">';
