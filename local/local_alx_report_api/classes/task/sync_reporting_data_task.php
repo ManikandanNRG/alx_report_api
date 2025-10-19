@@ -28,6 +28,8 @@ defined('MOODLE_INTERNAL') || die();
 
 require_once($CFG->dirroot . '/local/alx_report_api/lib.php');
 
+use local_alx_report_api\constants;
+
 /**
  * Scheduled task to sync reporting data incrementally.
  */
@@ -57,6 +59,15 @@ class sync_reporting_data_task extends \core\task\scheduled_task {
         
         $this->log_message("Sync configuration: {$sync_hours} hours back, max execution time: {$max_execution_time} seconds");
         
+        // Check if another sync task is already running (prevent overlaps)
+        $lock_key = 'sync_task_lock';
+        $lock_timeout = 3600; // 1 hour max lock time
+        
+        if (!$this->acquire_lock($lock_key, $lock_timeout)) {
+            $this->log_message("Another sync task is already running. Skipping this execution to prevent overlap.");
+            return;
+        }
+        
         // Set execution time limit
         set_time_limit($max_execution_time);
         
@@ -75,14 +86,17 @@ class sync_reporting_data_task extends \core\task\scheduled_task {
             
             if (empty($companies)) {
                 $this->log_message("No companies found for sync");
+                $this->release_lock($lock_key);
                 return;
             }
             
             $this->log_message("Found " . count($companies) . " companies to process");
             
             foreach ($companies as $company) {
+                // Hard timeout check - stop gracefully before time limit
                 if (time() - $start_time > $max_execution_time - 30) {
-                    $this->log_message("Approaching execution time limit, stopping sync");
+                    $this->log_message("Approaching execution time limit ({$max_execution_time}s), stopping sync gracefully");
+                    $total_stats['timeout_reached'] = true;
                     break;
                 }
                 
@@ -91,7 +105,7 @@ class sync_reporting_data_task extends \core\task\scheduled_task {
                 
                 try {
                     // Check if company has API settings (indicates they use the API)
-                    $has_settings = $DB->record_exists('local_alx_api_settings', ['companyid' => $company->id]);
+                    $has_settings = $DB->record_exists(constants::TABLE_SETTINGS, ['companyid' => $company->id]);
                     
                     if (!$has_settings) {
                         $this->log_message("Company {$company->id} has no API settings, skipping");
@@ -99,7 +113,7 @@ class sync_reporting_data_task extends \core\task\scheduled_task {
                     }
                     
                     // Run incremental sync for this company
-                    $company_stats = $this->sync_company_changes($company->id, $sync_hours);
+                    $company_stats = $this->sync_company_changes($company->id, $sync_hours, $start_time, $max_execution_time);
                     
                     $total_stats['companies_processed']++;
                     $total_stats['total_users_updated'] += $company_stats['users_updated'];
@@ -140,6 +154,10 @@ class sync_reporting_data_task extends \core\task\scheduled_task {
             $this->log_message("Total records updated: {$total_stats['total_records_updated']}");
             $this->log_message("Total records created: {$total_stats['total_records_created']}");
             
+            if (isset($total_stats['timeout_reached']) && $total_stats['timeout_reached']) {
+                $this->log_message("WARNING: Sync stopped due to timeout. Some companies may not have been processed.");
+            }
+            
             if ($total_stats['total_errors'] > 0) {
                 $this->log_message("Total errors: {$total_stats['total_errors']}");
                 $this->log_message("Companies with errors: " . implode(', ', $total_stats['companies_with_errors']));
@@ -151,7 +169,13 @@ class sync_reporting_data_task extends \core\task\scheduled_task {
             
         } catch (\Exception $e) {
             $this->log_message("Critical sync error: " . $e->getMessage());
+            // Always release lock on error
+            $this->release_lock($lock_key);
             throw $e;
+        } finally {
+            // Always release lock when done (cleanup on exit)
+            $this->release_lock($lock_key);
+            $this->log_message("Sync task lock released");
         }
     }
 
@@ -160,9 +184,11 @@ class sync_reporting_data_task extends \core\task\scheduled_task {
      *
      * @param int $companyid Company ID
      * @param int $hours_back Hours to look back for changes (fallback if no last sync)
+     * @param int $start_time Task start time for timeout checking
+     * @param int $max_execution_time Maximum execution time in seconds
      * @return array Statistics
      */
-    private function sync_company_changes($companyid, $hours_back) {
+    private function sync_company_changes($companyid, $hours_back, $start_time, $max_execution_time) {
         global $DB;
         
         // Ensure performance debugging is off, as it can interfere with cursors.
@@ -170,7 +196,7 @@ class sync_reporting_data_task extends \core\task\scheduled_task {
         
         // Get the last sync timestamp for this company
         $cron_token = 'cron_task_' . $companyid;
-        $last_sync = $DB->get_field('local_alx_api_sync_status', 'last_sync_timestamp', [
+        $last_sync = $DB->get_field(constants::TABLE_SYNC_STATUS, 'last_sync_timestamp', [
             'companyid' => $companyid,
             'token_hash' => hash('sha256', $cron_token)
         ]);
@@ -237,9 +263,27 @@ class sync_reporting_data_task extends \core\task\scheduled_task {
         } catch (\Exception $e) {
             $stats['errors'][] = "Error querying enrollments: " . $e->getMessage();
         }
+        
+        // Find users with recent profile changes (firstname, lastname, email, username)
+        $user_profile_changes = [];
+        try {
+            $user_profile_sql = "
+                SELECT DISTINCT u.id as userid, r.courseid
+                FROM {user} u
+                JOIN {company_users} cu ON cu.userid = u.id
+                JOIN {local_alx_api_reporting} r ON r.userid = u.id AND r.companyid = cu.companyid
+                WHERE u.timemodified >= :cutoff_time
+                AND cu.companyid = :companyid
+                AND u.deleted = 0
+                AND u.suspended = 0
+                AND u.timemodified > r.last_updated";
+            $user_profile_changes = $DB->get_records_sql($user_profile_sql, $params);
+        } catch (\Exception $e) {
+            $stats['errors'][] = "Error querying user profile changes: " . $e->getMessage();
+        }
             
         // Combine all changes and get unique users/courses to update
-        $all_changes = array_merge($completion_changes, $module_changes, $enrollment_changes);
+        $all_changes = array_merge($completion_changes, $module_changes, $enrollment_changes, $user_profile_changes);
         
         if (empty($all_changes)) {
             return $stats;
@@ -254,6 +298,13 @@ class sync_reporting_data_task extends \core\task\scheduled_task {
         }
 
         foreach ($updates_to_process as $update) {
+            // Check timeout during processing
+            if (time() - $start_time > $max_execution_time - 60) {
+                $this->log_message("Timeout approaching during company {$companyid} processing, stopping early");
+                $stats['errors'][] = "Processing stopped early due to timeout";
+                break;
+            }
+            
             try {
                 $update_result = local_alx_report_api_update_reporting_record($update->userid, $companyid, $update->courseid);
                 
@@ -261,11 +312,78 @@ class sync_reporting_data_task extends \core\task\scheduled_task {
                     $stats['records_created']++;
                 } else if ($update_result['updated']) {
                     $stats['records_updated']++;
+                } else if (isset($update_result['deleted']) && $update_result['deleted']) {
+                    if (!isset($stats['records_deleted'])) {
+                        $stats['records_deleted'] = 0;
+                    }
+                    $stats['records_deleted']++;
                 }
             } catch (\Exception $e) {
                 $error_msg = "Error updating user {$update->userid}, course {$update->courseid}: " . $e->getMessage();
                 $stats['errors'][] = $error_msg;
             }
+        }
+        
+        // Detect and mark deleted/suspended users and unenrolled courses
+        try {
+            $deletion_sql = "
+                SELECT DISTINCT r.userid, r.courseid
+                FROM {local_alx_api_reporting} r
+                WHERE r.companyid = :companyid
+                AND r.is_deleted = 0
+                AND (
+                    -- User is deleted or suspended
+                    EXISTS (
+                        SELECT 1 FROM {user} u
+                        WHERE u.id = r.userid
+                        AND (u.deleted = 1 OR u.suspended = 1)
+                    )
+                    -- OR user no longer in company
+                    OR NOT EXISTS (
+                        SELECT 1 FROM {company_users} cu
+                        WHERE cu.userid = r.userid
+                        AND cu.companyid = :companyid2
+                    )
+                    -- OR user no longer enrolled in course
+                    OR NOT EXISTS (
+                        SELECT 1 FROM {user_enrolments} ue
+                        JOIN {enrol} e ON e.id = ue.enrolid
+                        WHERE ue.userid = r.userid
+                        AND e.courseid = r.courseid
+                    )
+                    -- OR course is hidden
+                    OR EXISTS (
+                        SELECT 1 FROM {course} c
+                        WHERE c.id = r.courseid
+                        AND c.visible = 0
+                    )
+                )";
+            
+            $records_to_delete = $DB->get_records_sql($deletion_sql, [
+                'companyid' => $companyid,
+                'companyid2' => $companyid
+            ]);
+            
+            if (!isset($stats['records_deleted'])) {
+                $stats['records_deleted'] = 0;
+            }
+            
+            foreach ($records_to_delete as $record) {
+                // Check timeout
+                if (time() - $start_time > $max_execution_time - 60) {
+                    break;
+                }
+                
+                try {
+                    if (local_alx_report_api_soft_delete_reporting_record($record->userid, $companyid, $record->courseid)) {
+                        $stats['records_deleted']++;
+                    }
+                } catch (\Exception $e) {
+                    $stats['errors'][] = "Error deleting user {$record->userid}, course {$record->courseid}: " . $e->getMessage();
+                }
+            }
+        } catch (\Exception $e) {
+            $stats['errors'][] = "Deletion detection error: " . $e->getMessage();
         }
         
         $updated_user_ids = array_unique(array_map(function($c) { return $c->userid; }, $updates_to_process));
@@ -275,6 +393,58 @@ class sync_reporting_data_task extends \core\task\scheduled_task {
     }
 
     /**
+     * Acquire a lock to prevent overlapping task executions.
+     *
+     * @param string $lock_key Lock identifier
+     * @param int $timeout Maximum lock age in seconds
+     * @return bool True if lock acquired, false if another task is running
+     */
+    private function acquire_lock($lock_key, $timeout) {
+        global $DB;
+        
+        try {
+            // Check for existing lock
+            $existing_lock = get_config('local_alx_report_api', $lock_key);
+            
+            if ($existing_lock) {
+                $lock_age = time() - $existing_lock;
+                
+                // If lock is older than timeout, it's stale - remove it
+                if ($lock_age > $timeout) {
+                    $this->log_message("Found stale lock (age: {$lock_age}s), removing it");
+                    unset_config($lock_key, 'local_alx_report_api');
+                } else {
+                    // Lock is still valid, another task is running
+                    $this->log_message("Active lock found (age: {$lock_age}s), another task is running");
+                    return false;
+                }
+            }
+            
+            // Acquire the lock
+            set_config($lock_key, time(), 'local_alx_report_api');
+            $this->log_message("Lock acquired successfully");
+            return true;
+            
+        } catch (\Exception $e) {
+            $this->log_message("Error acquiring lock: " . $e->getMessage());
+            return false;
+        }
+    }
+    
+    /**
+     * Release the task lock.
+     *
+     * @param string $lock_key Lock identifier
+     */
+    private function release_lock($lock_key) {
+        try {
+            unset_config($lock_key, 'local_alx_report_api');
+        } catch (\Exception $e) {
+            $this->log_message("Error releasing lock: " . $e->getMessage());
+        }
+    }
+    
+    /**
      * Clear cache entries for a company to ensure fresh data.
      *
      * @param int $companyid Company ID
@@ -283,7 +453,7 @@ class sync_reporting_data_task extends \core\task\scheduled_task {
         global $DB;
         
         try {
-            $deleted = $DB->delete_records('local_alx_api_cache', ['companyid' => $companyid]);
+            $deleted = $DB->delete_records(constants::TABLE_CACHE, ['companyid' => $companyid]);
             if ($deleted > 0) {
                 $this->log_message("Cleared {$deleted} cache entries for company {$companyid}");
             }

@@ -41,128 +41,38 @@ $companyid = optional_param('companyid', 0, PARAM_INT);
 $hours_back = optional_param('hours_back', 1, PARAM_INT);
 $confirm = optional_param('confirm', 0, PARAM_INT);
 
-// Process sync action
-if ($action && $confirm) {
+// Generate unique token for this sync request
+$sync_token = optional_param('sync_token', '', PARAM_ALPHANUMEXT);
+
+// Process sync action - only on POST and with valid token to prevent refresh from re-running
+if ($action && $confirm && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    // Check if this token was already processed
+    if (!empty($sync_token) && isset($_SESSION['processed_sync_tokens'][$sync_token])) {
+        // This sync was already processed, redirect to form
+        redirect(new moodle_url('/local/alx_report_api/sync_reporting_data.php'));
+        exit;
+    }
+    
+    // Mark this token as processed
+    if (!isset($_SESSION['processed_sync_tokens'])) {
+        $_SESSION['processed_sync_tokens'] = [];
+    }
+    if (!empty($sync_token)) {
+        $_SESSION['processed_sync_tokens'][$sync_token] = time();
+        
+        // Clean old tokens (older than 1 hour)
+        foreach ($_SESSION['processed_sync_tokens'] as $token => $timestamp) {
+            if (time() - $timestamp > 3600) {
+                unset($_SESSION['processed_sync_tokens'][$token]);
+            }
+        }
+    }
     echo $OUTPUT->header();
     
     // Modern UI styling
     echo '<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">';
     echo '<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">';
-    
-    echo '<style>
-    * { font-family: "Inter", sans-serif; }
-    .sync-container {
-        max-width: 1200px;
-        margin: 20px auto;
-        padding: 0 20px;
-    }
-    .sync-header {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        padding: 30px;
-        border-radius: 12px;
-        margin-bottom: 30px;
-        box-shadow: 0 10px 30px rgba(102, 126, 234, 0.3);
-    }
-    .progress-box {
-        background: #1a202c;
-        color: #e2e8f0;
-        padding: 20px;
-        border-radius: 10px;
-        font-family: "Courier New", monospace;
-        font-size: 14px;
-        line-height: 1.6;
-        max-height: 500px;
-        overflow-y: auto;
-        margin-bottom: 30px;
-        border: 1px solid #4a5568;
-    }
-    .results-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-        gap: 20px;
-        margin-bottom: 30px;
-    }
-    .result-card {
-        background: white;
-        border-radius: 12px;
-        padding: 24px;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-        border-left: 4px solid #667eea;
-    }
-    .result-card h3 {
-        margin: 0 0 16px 0;
-        color: #2d3748;
-        font-size: 18px;
-        font-weight: 600;
-    }
-    .stat-row {
-        display: flex;
-        justify-content: space-between;
-        padding: 8px 0;
-        border-bottom: 1px solid #e2e8f0;
-    }
-    .stat-row:last-child {
-        border-bottom: none;
-    }
-    .stat-label {
-        color: #64748b;
-        font-weight: 500;
-    }
-    .stat-value {
-        color: #1e293b;
-        font-weight: 600;
-    }
-    .data-table {
-        width: 100%;
-        background: white;
-        border-radius: 12px;
-        overflow: hidden;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-        margin-bottom: 20px;
-    }
-    .data-table table {
-        width: 100%;
-        border-collapse: collapse;
-    }
-    .data-table thead {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-    }
-    .data-table th {
-        padding: 16px;
-        text-align: left;
-        font-weight: 600;
-        font-size: 14px;
-    }
-    .data-table td {
-        padding: 14px 16px;
-        border-bottom: 1px solid #e2e8f0;
-        color: #2d3748;
-    }
-    .data-table tbody tr:hover {
-        background: #f8fafc;
-    }
-    .badge {
-        display: inline-block;
-        padding: 4px 12px;
-        border-radius: 12px;
-        font-size: 12px;
-        font-weight: 600;
-    }
-    .badge-success {
-        background: #d1fae5;
-        color: #065f46;
-    }
-    .badge-primary {
-        background: #dbeafe;
-        color: #1e40af;
-    }
-    .badge-warning {
-        background: #fef3c7;
-        color: #92400e;
-    }
-    </style>';
+    echo '<link rel="stylesheet" href="' . new moodle_url('/local/alx_report_api/styles/sync-reporting-data.css') . '">';
     
     echo '<div class="sync-container">';
     echo '<div class="sync-header">';
@@ -211,23 +121,23 @@ if ($action && $confirm) {
                 
                 // Track before state
                 if ($companyid > 0) {
-                    $before_count = $DB->count_records('local_alx_api_reporting', ['companyid' => $companyid]);
+                    $before_count = $DB->count_records(\local_alx_report_api\constants::TABLE_REPORTING, ['companyid' => $companyid]);
                 } else {
-                    $before_count = $DB->count_records('local_alx_api_reporting');
+                    $before_count = $DB->count_records(\local_alx_report_api\constants::TABLE_REPORTING);
                 }
                 
-                // Call sync function (false = no progress output to avoid JS errors)
-                echo "🔄 Calling sync function...\n";
+                // Call INCREMENTAL sync function (only processes recent changes)
+                echo "🔄 Calling incremental sync function for recent changes...\n";
                 flush();
-                $result = local_alx_report_api_populate_reporting_table($companyid, 1000, false);
+                $result = local_alx_report_api_sync_recent_changes($companyid, $hours_back);
                 echo "📊 Sync function returned: " . print_r($result, true) . "\n";
                 flush();
                 
                 // Track after state and get details
                 if ($companyid > 0) {
-                    $after_count = $DB->count_records('local_alx_api_reporting', ['companyid' => $companyid]);
+                    $after_count = $DB->count_records(\local_alx_report_api\constants::TABLE_REPORTING, ['companyid' => $companyid]);
                 } else {
-                    $after_count = $DB->count_records('local_alx_api_reporting');
+                    $after_count = $DB->count_records(\local_alx_report_api\constants::TABLE_REPORTING);
                 }
                 echo "📈 Before count: $before_count, After count: $after_count\n";
                 flush();
@@ -245,19 +155,21 @@ if ($action && $confirm) {
                 $course_sql .= " GROUP BY c.id, c.fullname ORDER BY record_count DESC LIMIT 10";
                 $sync_details['affected_courses'] = $DB->get_records_sql($course_sql, $course_params);
                 
-                // Get all affected users
-                $all_users_sql = "SELECT u.id, u.firstname, u.lastname, u.email, 
+                // Get all affected users - use reporting table email (same as API)
+                $all_users_sql = "SELECT r.userid as id, 
+                                        MAX(r.firstname) as firstname, 
+                                        MAX(r.lastname) as lastname, 
+                                        MAX(r.email) as email, 
                                         COUNT(r.id) as course_count,
-                                        MIN(r.created_at) as first_created
+                                        MIN(r.timecreated) as first_created
                                 FROM {local_alx_api_reporting} r
-                                JOIN {user} u ON u.id = r.userid
                                 WHERE r.last_updated >= ?";
                 $all_users_params = [$start_time];
                 if ($companyid > 0) {
                     $all_users_sql .= " AND r.companyid = ?";
                     $all_users_params[] = $companyid;
                 }
-                $all_users_sql .= " GROUP BY u.id, u.firstname, u.lastname, u.email ORDER BY course_count DESC";
+                $all_users_sql .= " GROUP BY r.userid ORDER BY course_count DESC";
                 $sync_details['affected_users'] = $DB->get_records_sql($all_users_sql, $all_users_params);
                 
                 $sync_details['created_records'] = max(0, $after_count - $before_count);
@@ -279,9 +191,9 @@ if ($action && $confirm) {
                     echo "Started at: " . date('Y-m-d H:i:s') . "\n\n";
                     flush();
                     
-                    $before_count = $DB->count_records('local_alx_api_reporting', ['companyid' => $companyid]);
+                    $before_count = $DB->count_records(\local_alx_report_api\constants::TABLE_REPORTING, ['companyid' => $companyid]);
                     $result = local_alx_report_api_populate_reporting_table($companyid, 1000, false);
-                    $after_count = $DB->count_records('local_alx_api_reporting', ['companyid' => $companyid]);
+                    $after_count = $DB->count_records(\local_alx_report_api\constants::TABLE_REPORTING, ['companyid' => $companyid]);
                     
                     // Get details (same as above)
                     $course_sql = "SELECT c.id, c.fullname, COUNT(r.id) as record_count
@@ -291,14 +203,16 @@ if ($action && $confirm) {
                                   GROUP BY c.id, c.fullname ORDER BY record_count DESC LIMIT 10";
                     $sync_details['affected_courses'] = $DB->get_records_sql($course_sql, [$companyid, $start_time]);
                     
-                    // Get all affected users
-                    $all_users_sql = "SELECT u.id, u.firstname, u.lastname, u.email, 
+                    // Get all affected users - use reporting table email (same as API)
+                    $all_users_sql = "SELECT r.userid as id, 
+                                            MAX(r.firstname) as firstname, 
+                                            MAX(r.lastname) as lastname, 
+                                            MAX(r.email) as email, 
                                             COUNT(r.id) as course_count,
-                                            MIN(r.created_at) as first_created
+                                            MIN(r.timecreated) as first_created
                                     FROM {local_alx_api_reporting} r
-                                    JOIN {user} u ON u.id = r.userid
                                     WHERE r.companyid = ? AND r.last_updated >= ?
-                                    GROUP BY u.id, u.firstname, u.lastname, u.email ORDER BY course_count DESC";
+                                    GROUP BY r.userid ORDER BY course_count DESC";
                     $sync_details['affected_users'] = $DB->get_records_sql($all_users_sql, [$companyid, $start_time]);
                     
                     $sync_details['created_records'] = max(0, $after_count - $before_count);
@@ -317,13 +231,29 @@ if ($action && $confirm) {
                 
             case 'cleanup':
                 echo "=== CLEANUP ORPHANED RECORDS ===\n";
-                echo "Company ID: " . ($companyid > 0 ? $companyid : 'All companies') . "\n";
+                if ($companyid > 0) {
+                    $sync_details['company_info'] = $DB->get_record('company', ['id' => $companyid], 'id, name, shortname');
+                    echo "Company: " . $sync_details['company_info']->name . " (ID: $companyid)\n";
+                } else {
+                    echo "Company: All Companies\n";
+                }
                 echo "Started at: " . date('Y-m-d H:i:s') . "\n\n";
                 flush();
                 
-                $deleted_count = 0;
-                $sql = "SELECT r.id FROM {local_alx_api_reporting} r
+                // Get detailed information about orphaned records BEFORE deleting
+                // IMPORTANT: Get email from user table (u.email), NOT from reporting table (r.email)
+                // The reporting table may have hashed emails, but user table has real emails
+                $sql = "SELECT r.id, r.userid, r.courseid, r.companyid,
+                               COALESCE(u.firstname, r.firstname) as firstname,
+                               COALESCE(u.lastname, r.lastname) as lastname,
+                               CASE WHEN u.email IS NOT NULL THEN u.email ELSE 'User Deleted' END as email,
+                               COALESCE(c.fullname, r.coursename) as coursename,
+                               comp.name as companyname
+                        FROM {local_alx_api_reporting} r
                         LEFT JOIN {company_users} cu ON cu.userid = r.userid AND cu.companyid = r.companyid
+                        LEFT JOIN {user} u ON u.id = r.userid AND u.deleted = 0
+                        LEFT JOIN {course} c ON c.id = r.courseid
+                        LEFT JOIN {company} comp ON comp.id = r.companyid
                         WHERE cu.id IS NULL AND r.is_deleted = 0";
                 $params = [];
                 if ($companyid > 0) {
@@ -331,16 +261,80 @@ if ($action && $confirm) {
                     $params[] = $companyid;
                 }
                 
+                echo "🔍 Searching for orphaned records...\n";
+                flush();
+                
                 $orphaned = $DB->get_records_sql($sql, $params);
-                foreach ($orphaned as $record) {
-                    $DB->set_field('local_alx_api_reporting', 'is_deleted', 1, ['id' => $record->id]);
-                    $deleted_count++;
+                $deleted_count = count($orphaned);
+                
+                if ($deleted_count > 0) {
+                    echo "Found $deleted_count orphaned record(s)\n";
+                    echo "🗑️ Permanently deleting records...\n";
+                    flush();
+                    
+                    // Store details for display
+                    $sync_details['deleted_users'] = [];
+                    $sync_details['deleted_by_company'] = [];
+                    $sync_details['deleted_courses'] = [];
+                    
+                    foreach ($orphaned as $record) {
+                        // Hard delete - physically remove the record
+                        $DB->delete_records(\local_alx_report_api\constants::TABLE_REPORTING, ['id' => $record->id]);
+                        
+                        // Track user details
+                        $user_key = $record->userid;
+                        if (!isset($sync_details['deleted_users'][$user_key])) {
+                            $sync_details['deleted_users'][$user_key] = (object)[
+                                'userid' => $record->userid,
+                                'firstname' => $record->firstname ?: 'Unknown',
+                                'lastname' => $record->lastname ?: 'User',
+                                'email' => $record->email ?: 'N/A',
+                                'record_count' => 0
+                            ];
+                        }
+                        $sync_details['deleted_users'][$user_key]->record_count++;
+                        
+                        // Track by company
+                        if (!isset($sync_details['deleted_by_company'][$record->companyid])) {
+                            $sync_details['deleted_by_company'][$record->companyid] = (object)[
+                                'companyid' => $record->companyid,
+                                'companyname' => $record->companyname ?: 'Unknown Company',
+                                'count' => 0
+                            ];
+                        }
+                        $sync_details['deleted_by_company'][$record->companyid]->count++;
+                        
+                        // Track courses
+                        $course_key = $record->courseid;
+                        if (!isset($sync_details['deleted_courses'][$course_key])) {
+                            $sync_details['deleted_courses'][$course_key] = (object)[
+                                'courseid' => $record->courseid,
+                                'fullname' => $record->coursename ?: 'Unknown Course',
+                                'record_count' => 0
+                            ];
+                        }
+                        $sync_details['deleted_courses'][$course_key]->record_count++;
+                    }
+                    
+                    echo "✅ Successfully marked $deleted_count record(s) as deleted\n";
+                } else {
+                    echo "✅ No orphaned records found - database is clean!\n";
                 }
                 
-                echo "\n✅ Cleanup completed!\n";
                 echo "\n=== SUMMARY ===\n";
                 echo "Orphaned records marked deleted: $deleted_count\n";
-                $result = ['deleted' => $deleted_count];
+                if (!empty($sync_details['deleted_by_company'])) {
+                    echo "\nBy Company:\n";
+                    foreach ($sync_details['deleted_by_company'] as $comp) {
+                        echo "  - {$comp->companyname}: {$comp->count} record(s)\n";
+                    }
+                }
+                
+                $result = [
+                    'success' => true,
+                    'deleted' => $deleted_count,
+                    'total_processed' => $deleted_count
+                ];
                 break;
                 
             default:
@@ -362,7 +356,96 @@ if ($action && $confirm) {
     echo '</div>'; // Close progress-box
     
     // Display detailed results
-    if ($action !== 'cleanup') {
+    if ($action === 'cleanup') {
+        // Cleanup-specific results display
+        echo '<div class="results-grid">';
+        
+        // Company Information Card
+        if ($sync_details['company_info']) {
+            echo '<div class="result-card">';
+            echo '<h3><i class="fas fa-building"></i> Company Information</h3>';
+            echo '<div class="stat-row"><span class="stat-label">Company Name:</span><span class="stat-value">' . htmlspecialchars($sync_details['company_info']->name) . '</span></div>';
+            echo '<div class="stat-row"><span class="stat-label">Company ID:</span><span class="stat-value">' . $companyid . '</span></div>';
+            echo '</div>';
+        }
+        
+        // Cleanup Statistics Card
+        echo '<div class="result-card">';
+        echo '<h3><i class="fas fa-trash-alt"></i> Cleanup Statistics</h3>';
+        echo '<div class="stat-row"><span class="stat-label">Orphaned Records Found:</span><span class="stat-value" style="color: #ef4444;">' . $result['deleted'] . '</span></div>';
+        echo '<div class="stat-row"><span class="stat-label">Records Marked Deleted:</span><span class="stat-value" style="color: #10b981;">' . $result['deleted'] . '</span></div>';
+        echo '<div class="stat-row"><span class="stat-label">Duration:</span><span class="stat-value">' . $duration . ' seconds</span></div>';
+        echo '</div>';
+        
+        echo '</div>'; // Close results-grid
+        
+        // Deleted Records by Company
+        if (!empty($sync_details['deleted_by_company'])) {
+            echo '<h2 style="margin: 30px 0 20px 0; color: #2d3748; font-size: 24px; font-weight: 600;"><i class="fas fa-building"></i> Deleted Records by Company</h2>';
+            echo '<div class="data-table">';
+            echo '<table>';
+            echo '<thead><tr><th>Company Name</th><th>Records Deleted</th><th>Status</th></tr></thead>';
+            echo '<tbody>';
+            foreach ($sync_details['deleted_by_company'] as $comp) {
+                echo '<tr>';
+                echo '<td>' . htmlspecialchars($comp->companyname) . '</td>';
+                echo '<td>' . $comp->count . '</td>';
+                echo '<td><span class="badge badge-danger">✓ Cleaned</span></td>';
+                echo '</tr>';
+            }
+            echo '</tbody></table></div>';
+        }
+        
+        // Affected Courses
+        if (!empty($sync_details['deleted_courses'])) {
+            echo '<h2 style="margin: 30px 0 20px 0; color: #2d3748; font-size: 24px; font-weight: 600;"><i class="fas fa-book"></i> Affected Courses</h2>';
+            echo '<div class="data-table">';
+            echo '<table>';
+            echo '<thead><tr><th>Course Name</th><th>Records Deleted</th><th>Status</th></tr></thead>';
+            echo '<tbody>';
+            foreach ($sync_details['deleted_courses'] as $course) {
+                echo '<tr>';
+                echo '<td>' . htmlspecialchars($course->fullname) . '</td>';
+                echo '<td>' . $course->record_count . '</td>';
+                echo '<td><span class="badge badge-danger">✓ Cleaned</span></td>';
+                echo '</tr>';
+            }
+            echo '</tbody></table></div>';
+        }
+        
+        // Affected Users
+        if (!empty($sync_details['deleted_users'])) {
+            $deleted_users_array = array_values($sync_details['deleted_users']);
+            $total_users = count($deleted_users_array);
+            
+            echo '<h2 style="margin: 30px 0 20px 0; color: #2d3748; font-size: 24px; font-weight: 600;"><i class="fas fa-users"></i> Affected Users (' . $total_users . ')</h2>';
+            echo '<div class="data-table">';
+            echo '<table>';
+            echo '<thead><tr><th>User Name</th><th>Email</th><th>Records Deleted</th><th>Status</th></tr></thead>';
+            echo '<tbody>';
+            
+            foreach ($deleted_users_array as $user) {
+                echo '<tr>';
+                echo '<td>' . htmlspecialchars($user->firstname . ' ' . $user->lastname) . '</td>';
+                echo '<td>' . htmlspecialchars($user->email) . '</td>';
+                echo '<td>' . $user->record_count . '</td>';
+                echo '<td><span class="badge badge-danger">✓ Removed</span></td>';
+                echo '</tr>';
+            }
+            
+            echo '</tbody></table></div>';
+        }
+        
+        // No orphaned records message
+        if ($result['deleted'] == 0) {
+            echo '<div style="background: white; padding: 40px; text-align: center; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-top: 30px;">';
+            echo '<div style="font-size: 48px; margin-bottom: 20px;">✨</div>';
+            echo '<h3 style="color: #10b981; margin-bottom: 10px;">Database is Clean!</h3>';
+            echo '<p style="color: #64748b; margin: 0;">No orphaned records were found. Your reporting table is in good shape.</p>';
+            echo '</div>';
+        }
+        
+    } else if ($action !== 'cleanup') {
         echo '<div class="results-grid">';
         
         // Company Information Card
@@ -592,7 +675,7 @@ echo '<style>
 </style>';
 
 // Check if reporting table exists
-if (!$DB->get_manager()->table_exists('local_alx_api_reporting')) {
+if (!$DB->get_manager()->table_exists(\local_alx_report_api\constants::TABLE_REPORTING)) {
     echo '<div class="sync-container">';
     echo '<div class="alert alert-danger">Reporting table does not exist. Please upgrade the plugin first.</div>';
     echo '</div>';
@@ -601,8 +684,8 @@ if (!$DB->get_manager()->table_exists('local_alx_api_reporting')) {
 }
 
 $companies = local_alx_report_api_get_companies();
-$total_records = $DB->count_records('local_alx_api_reporting');
-$last_update = $DB->get_field_select('local_alx_api_reporting', 'MAX(last_updated)', '1=1');
+$total_records = $DB->count_records(\local_alx_report_api\constants::TABLE_REPORTING);
+$last_update = $DB->get_field_select(\local_alx_report_api\constants::TABLE_REPORTING, 'MAX(last_updated)', '1=1');
 
 echo '<div class="sync-container">';
 
@@ -645,6 +728,7 @@ echo '</div>';
 echo '<div class="card-body">';
 echo '<form method="post">';
 echo '<input type="hidden" name="action" value="sync_changes">';
+echo '<input type="hidden" name="sync_token" value="' . md5(uniqid(rand(), true)) . '">';
 echo '<div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px;">';
 echo '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 15px;">';
 echo '<div>';
@@ -680,6 +764,7 @@ echo '</div>';
 echo '<div class="card-body">';
 echo '<form method="post">';
 echo '<input type="hidden" name="action" value="sync_full">';
+echo '<input type="hidden" name="sync_token" value="' . md5(uniqid(rand(), true)) . '">';
 echo '<div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px;">';
 echo '<div style="margin-bottom: 15px;">';
 echo '<label style="display: block; margin-bottom: 8px; font-weight: 600; color: #495057;">Company (Required):</label>';
@@ -709,6 +794,7 @@ echo '</div>';
 echo '<div class="card-body">';
 echo '<form method="post">';
 echo '<input type="hidden" name="action" value="cleanup">';
+echo '<input type="hidden" name="sync_token" value="' . md5(uniqid(rand(), true)) . '">';
 echo '<div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px;">';
 echo '<div style="margin-bottom: 15px;">';
 echo '<label style="display: block; margin-bottom: 8px; font-weight: 600; color: #495057;">Company:</label>';

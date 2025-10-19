@@ -74,9 +74,11 @@ $string['field_lastname_desc'] = 'Include the user\'s last name in the response'
 $string['field_email'] = 'Email Address';
 $string['field_email_desc'] = 'Include the user\'s email address in the response';
 
+// User fields (continued).
+$string['field_username'] = 'Username';
+$string['field_username_desc'] = 'Include the user\'s username in the response';
+
 // Course fields.
-$string['field_courseid'] = 'Course ID';
-$string['field_courseid_desc'] = 'Include the numeric course ID in the response';
 $string['field_coursename'] = 'Course Name';
 $string['field_coursename_desc'] = 'Include the course name in the response';
 
