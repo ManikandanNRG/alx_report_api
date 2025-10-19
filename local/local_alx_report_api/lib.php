@@ -602,13 +602,27 @@ function local_alx_report_api_populate_reporting_table($companyid = 0, $batch_si
                         CASE 
                             WHEN cc.timecompleted > 0 THEN 100.0
                             ELSE COALESCE(
-                                (SELECT AVG(CASE WHEN cmc.completionstate = 1 THEN 100.0 ELSE 0.0 END)
-                                 FROM {course_modules_completion} cmc
-                                 JOIN {course_modules} cm ON cm.id = cmc.coursemoduleid
-                                 WHERE cm.course = c.id AND cmc.userid = u.id), 0.0)
+                                (SELECT 
+                                    CASE 
+                                        WHEN COUNT(cm.id) = 0 THEN 0.0
+                                        ELSE (COUNT(CASE WHEN cmc.completionstate = 1 THEN 1 END) * 100.0 / COUNT(cm.id))
+                                    END
+                                 FROM {course_modules} cm
+                                 LEFT JOIN {course_modules_completion} cmc ON cmc.coursemoduleid = cm.id AND cmc.userid = u.id
+                                 WHERE cm.course = c.id AND cm.completion > 0), 0.0)
                         END, 0.0) as percentage,
                     CASE 
                         WHEN cc.timecompleted > 0 THEN 'completed'
+                        WHEN (
+                            SELECT 
+                                CASE 
+                                    WHEN COUNT(cm.id) = 0 THEN 0.0
+                                    ELSE (COUNT(CASE WHEN cmc.completionstate = 1 THEN 1 END) * 100.0 / COUNT(cm.id))
+                                END
+                            FROM {course_modules} cm
+                            LEFT JOIN {course_modules_completion} cmc ON cmc.coursemoduleid = cm.id AND cmc.userid = u.id
+                            WHERE cm.course = c.id AND cm.completion > 0
+                        ) >= 100.0 THEN 'completed'
                         WHEN EXISTS(
                             SELECT 1 FROM {course_modules_completion} cmc
                             JOIN {course_modules} cm ON cm.id = cmc.coursemoduleid
@@ -791,13 +805,27 @@ function local_alx_report_api_update_reporting_record($userid, $companyid, $cour
                     CASE 
                         WHEN cc.timecompleted > 0 THEN 100.0
                         ELSE COALESCE(
-                            (SELECT AVG(CASE WHEN cmc.completionstate = 1 THEN 100.0 ELSE 0.0 END)
-                             FROM {course_modules_completion} cmc
-                             JOIN {course_modules} cm ON cm.id = cmc.coursemoduleid
-                             WHERE cm.course = c.id AND cmc.userid = u.id), 0.0)
+                            (SELECT 
+                                CASE 
+                                    WHEN COUNT(cm.id) = 0 THEN 0.0
+                                    ELSE (COUNT(CASE WHEN cmc.completionstate = 1 THEN 1 END) * 100.0 / COUNT(cm.id))
+                                END
+                             FROM {course_modules} cm
+                             LEFT JOIN {course_modules_completion} cmc ON cmc.coursemoduleid = cm.id AND cmc.userid = u.id
+                             WHERE cm.course = c.id AND cm.completion > 0), 0.0)
                     END, 0.0) as percentage,
                 CASE 
                     WHEN cc.timecompleted > 0 THEN 'completed'
+                    WHEN (
+                        SELECT 
+                            CASE 
+                                WHEN COUNT(cm.id) = 0 THEN 0.0
+                                ELSE (COUNT(CASE WHEN cmc.completionstate = 1 THEN 1 END) * 100.0 / COUNT(cm.id))
+                            END
+                        FROM {course_modules} cm
+                        LEFT JOIN {course_modules_completion} cmc ON cmc.coursemoduleid = cm.id AND cmc.userid = u.id
+                        WHERE cm.course = c.id AND cm.completion > 0
+                    ) >= 100.0 THEN 'completed'
                     WHEN EXISTS(
                         SELECT 1 FROM {course_modules_completion} cmc
                         JOIN {course_modules} cm ON cm.id = cmc.coursemoduleid
