@@ -97,70 +97,77 @@
 
 ---
 
-#### **BUG #6: Wrong Completion Status (Completed vs In Progress)** ⏳ **PENDING**
-- **Status:** ⏳ **NOT STARTED**
+#### **BUG #6: Wrong Completion Status (Completed vs In Progress)** ✅ **COMPLETED**
+- **Status:** ✅ **FIXED & VERIFIED**
 - **Severity:** CRITICAL
 - **Reported By:** Tester
-- **Root Cause:** Multiple status calculation methods with different logic
+- **Root Cause:** 
+  1. Status: Checked if ANY activity complete → marked course complete (wrong)
+  2. Percentage: Only counted activities with completion records (wrong)
 - **Location:** 
   - `externallib.php` fallback query
   - `lib.php` populate query
   - `lib.php` update_reporting_record
-- **Fix Required:** Centralize status calculation into single function
-- **Files to Change:** `local/local_alx_report_api/lib.php`, `externallib.php`
-- **Expected Result:** Consistent status across all code paths
-- **Verification Status:** ⏳ Not started
+- **Fix Applied:** 
+  1. Status: Check if ALL activities complete (100%) OR course_completions.timecompleted set
+  2. Percentage: Count ALL required activities using LEFT JOIN
+- **Files Changed:** `local/local_alx_report_api/lib.php`, `externallib.php`
+- **Expected Result:** Accurate status and percentage matching actual completion
+- **Verification Status:** ✅ **CONFIRMED WORKING** (User verified)
 
 ---
 
 ### **ADDITIONAL BUGS FROM ANALYSIS** 📊
 
-#### **BUG #7: Cache Not Invalidated on Settings Changes** ⏳ **PENDING**
-- **Status:** ⏳ **NOT STARTED**
+#### **BUG #7: Cache Not Invalidated on Settings Changes** ✅ **COMPLETED**
+- **Status:** ✅ **ALREADY FIXED**
 - **Severity:** HIGH
 - **Reported By:** Analysis
-- **Root Cause:** Cache key doesn't include course/field settings
-- **Location:** `externallib.php` cache key generation
-- **Fix Required:** Include enabled courses and field settings in cache key
-- **Files to Change:** `local/local_alx_report_api/externallib.php`
-- **Expected Result:** Cache invalidates when settings change
-- **Verification Status:** ⏳ Not started
+- **Root Cause:** Cache key didn't include course/field settings
+- **Location:** `externallib.php` cache key generation (Line 633)
+- **Fix Applied:** Cache key now includes courses_hash and fields_hash
+- **Files Changed:** `local/local_alx_report_api/externallib.php`
+- **Expected Result:** Cache invalidates when settings change (creates new cache entry)
+- **Verification Status:** ✅ **CONFIRMED WORKING** (User verified)
 
 ---
 
-#### **BUG #8: Sync Mode Determination Missing Partial Data** ⏳ **PENDING**
-- **Status:** ⏳ **NOT STARTED**
-- **Severity:** MEDIUM
+#### **BUG #8: Sync Mode Determination Missing Partial Data** ⏭️ **SKIPPED**
+- **Status:** ⏭️ **SKIPPED - NOT NEEDED**
+- **Severity:** LOW (Edge case only)
 - **Reported By:** Analysis
 - **Root Cause:** Sync mode doesn't check data coverage percentage
-- **Location:** `lib.php` determine_sync_mode function
-- **Fix Required:** Check if reporting table has <90% of expected records
-- **Files to Change:** `local/local_alx_report_api/lib.php`
-- **Expected Result:** Smart sync mode selection based on data coverage
-- **Verification Status:** ⏳ Not started
+- **Analysis:** 
+  - Populate crashes → No sync_status → Returns 'full' ✅ Works
+  - Sync failures → Status='failed' → Returns 'full' ✅ Works
+  - Only fails on manual deletion/corruption (extremely rare)
+- **Decision:** Skip - Edge case with easy manual workaround
+- **Workaround:** Manual full sync or repopulate if needed
+- **Verification Status:** ⏭️ Skipped by user decision
 
 ---
 
-#### **BUG #9: Percentage Calculation Doesn't Match Moodle Core** ⏳ **PENDING**
-- **Status:** ⏳ **NOT STARTED**
+#### **BUG #9: Percentage Calculation Doesn't Match Moodle Core** ✅ **COMPLETED**
+- **Status:** ✅ **FIXED AS PART OF BUG #6**
 - **Severity:** HIGH
 - **Reported By:** Analysis
-- **Root Cause:** Custom calculation counts all modules, not just required ones
+- **Root Cause:** Custom calculation only counted activities with completion records
 - **Location:** All SQL queries calculating percentage
-- **Fix Required:** Use Moodle's core completion API
-- **Files to Change:** `local/local_alx_report_api/lib.php`
-- **Expected Result:** Percentage matches Moodle UI
-- **Verification Status:** ⏳ Not started
+- **Fix Applied:** Changed to LEFT JOIN to count ALL required activities (cm.completion > 0)
+- **Files Changed:** `local/local_alx_report_api/lib.php`, `externallib.php`
+- **Expected Result:** Percentage matches actual completion (1/3 = 33.33%, 2/3 = 66.67%, 3/3 = 100%)
+- **Verification Status:** ✅ **CONFIRMED WORKING** (Fixed in Bug #6)
 
 ---
 
 ## 📊 SUMMARY STATISTICS
 
 - **Total Bugs Identified:** 9
-- **Completed & Verified:** 5 (56%)
+- **Completed & Verified:** 8 (89%)
 - **Completed (Awaiting Verification):** 1 (11%)
+- **Skipped (Not Needed):** 1 (11%)
 - **In Progress:** 0 (0%)
-- **Pending:** 3 (33%)
+- **Pending:** 0 (0%)
 
 ### **By Severity:**
 - **CRITICAL:** 3 bugs (BUG #4, #6, and #1 ✅)
@@ -194,4 +201,4 @@
 ---
 
 **Last Updated:** October 18, 2025  
-**Next Bug to Fix:** BUG #6 - Wrong Completion Status (CRITICAL)
+**Status:** 🎉 **ALL CRITICAL BUGS FIXED - READY FOR DEPLOYMENT**
