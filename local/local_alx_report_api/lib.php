@@ -1124,7 +1124,7 @@ function local_alx_report_api_sync_recent_changes($companyid = 0, $hours_back = 
             // 5. Detect and mark deleted/suspended users and unenrolled courses
             try {
                 $deletion_sql = "
-                    SELECT DISTINCT r.userid, r.courseid
+                    SELECT DISTINCT CONCAT(r.userid, '-', r.courseid) as id, r.userid, r.courseid
                     FROM {local_alx_api_reporting} r
                     WHERE r.companyid = :companyid
                     AND r.is_deleted = 0

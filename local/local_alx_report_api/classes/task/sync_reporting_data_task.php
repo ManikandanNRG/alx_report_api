@@ -76,6 +76,7 @@ class sync_reporting_data_task extends \core\task\scheduled_task {
             'total_users_updated' => 0,
             'total_records_updated' => 0,
             'total_records_created' => 0,
+            'total_records_deleted' => 0,
             'total_errors' => 0,
             'companies_with_errors' => []
         ];
@@ -119,6 +120,9 @@ class sync_reporting_data_task extends \core\task\scheduled_task {
                     $total_stats['total_users_updated'] += $company_stats['users_updated'];
                     $total_stats['total_records_updated'] += $company_stats['records_updated'];
                     $total_stats['total_records_created'] += $company_stats['records_created'];
+                    if (isset($company_stats['records_deleted'])) {
+                        $total_stats['total_records_deleted'] += $company_stats['records_deleted'];
+                    }
                     
                     if (!empty($company_stats['errors'])) {
                         $total_stats['total_errors'] += count($company_stats['errors']);
@@ -153,6 +157,9 @@ class sync_reporting_data_task extends \core\task\scheduled_task {
             $this->log_message("Total users updated: {$total_stats['total_users_updated']}");
             $this->log_message("Total records updated: {$total_stats['total_records_updated']}");
             $this->log_message("Total records created: {$total_stats['total_records_created']}");
+            if (isset($total_stats['total_records_deleted']) && $total_stats['total_records_deleted'] > 0) {
+                $this->log_message("Total records deleted: {$total_stats['total_records_deleted']}");
+            }
             
             if (isset($total_stats['timeout_reached']) && $total_stats['timeout_reached']) {
                 $this->log_message("WARNING: Sync stopped due to timeout. Some companies may not have been processed.");
@@ -369,7 +376,7 @@ class sync_reporting_data_task extends \core\task\scheduled_task {
         // Detect and mark deleted/suspended users and unenrolled courses
         try {
             $deletion_sql = "
-                SELECT DISTINCT r.userid, r.courseid
+                SELECT DISTINCT CONCAT(r.userid, '-', r.courseid) as id, r.userid, r.courseid
                 FROM {local_alx_api_reporting} r
                 WHERE r.companyid = :companyid
                 AND r.is_deleted = 0
@@ -406,6 +413,14 @@ class sync_reporting_data_task extends \core\task\scheduled_task {
                 'companyid2' => $companyid
             ]);
             
+            // DEBUG: Log deletion detection results
+            $this->log_message("DEBUG: Deletion detection - Found " . count($records_to_delete) . " records to delete");
+            if (!empty($records_to_delete)) {
+                foreach ($records_to_delete as $rec) {
+                    $this->log_message("DEBUG: Deletion candidate - User {$rec->userid}, Course {$rec->courseid}");
+                }
+            }
+            
             if (!isset($stats['records_deleted'])) {
                 $stats['records_deleted'] = 0;
             }
@@ -413,17 +428,25 @@ class sync_reporting_data_task extends \core\task\scheduled_task {
             foreach ($records_to_delete as $record) {
                 // Check timeout
                 if (time() - $start_time > $max_execution_time - 60) {
+                    $this->log_message("DEBUG: Deletion loop - Timeout approaching, breaking");
                     break;
                 }
                 
                 try {
+                    $this->log_message("DEBUG: Attempting to delete - User {$record->userid}, Course {$record->courseid}");
                     if (local_alx_report_api_soft_delete_reporting_record($record->userid, $companyid, $record->courseid)) {
                         $stats['records_deleted']++;
+                        $this->log_message("DEBUG: Successfully deleted - User {$record->userid}, Course {$record->courseid}");
+                    } else {
+                        $this->log_message("DEBUG: Delete returned false - User {$record->userid}, Course {$record->courseid}");
                     }
                 } catch (\Exception $e) {
                     $stats['errors'][] = "Error deleting user {$record->userid}, course {$record->courseid}: " . $e->getMessage();
+                    $this->log_message("DEBUG: Delete exception - User {$record->userid}, Course {$record->courseid}: " . $e->getMessage());
                 }
             }
+            
+            $this->log_message("DEBUG: Deletion complete - Total deleted: " . $stats['records_deleted']);
         } catch (\Exception $e) {
             $stats['errors'][] = "Deletion detection error: " . $e->getMessage();
         }
