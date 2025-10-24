@@ -580,157 +580,87 @@ function local_alx_report_api_populate_reporting_table($companyid = 0, $batch_si
             error_log("DEBUG populate_reporting_table: Processing company {$company->id} ({$company->name})");
             error_log("DEBUG populate_reporting_table: Enabled courses: " . implode(', ', $enabled_courses));
             
-            // Build the complex query to get all user-course data
+            // BUG FIX: Use 2-step approach to ensure ALL enrollments are fetched (same as sync functions)
+            // Step 1: Get all user-course combinations for this company
             list($course_sql, $course_params) = $DB->get_in_or_equal($enabled_courses, SQL_PARAMS_NAMED, 'course');
             
-            $sql = "
-                SELECT DISTINCT
-                    u.id as userid,
-                    u.firstname,
-                    u.lastname,
-                    u.email,
-                    u.username,
-                    c.id as courseid,
-                    c.fullname as coursename,
-                    COALESCE(cc.timecompleted, 
-                        (SELECT MAX(cmc.timemodified) 
-                         FROM {course_modules_completion} cmc
-                         JOIN {course_modules} cm ON cm.id = cmc.coursemoduleid
-                         WHERE cm.course = c.id AND cmc.userid = u.id AND cmc.completionstate = 1), 0) as timecompleted,
-                    COALESCE(cc.timestarted, ue.timecreated, 0) as timestarted,
-                    COALESCE(
-                        CASE 
-                            WHEN cc.timecompleted > 0 THEN 100.0
-                            ELSE COALESCE(
-                                (SELECT 
-                                    CASE 
-                                        WHEN COUNT(cm.id) = 0 THEN 0.0
-                                        ELSE (COUNT(CASE WHEN cmc.completionstate = 1 THEN 1 END) * 100.0 / COUNT(cm.id))
-                                    END
-                                 FROM {course_modules} cm
-                                 LEFT JOIN {course_modules_completion} cmc ON cmc.coursemoduleid = cm.id AND cmc.userid = u.id
-                                 WHERE cm.course = c.id AND cm.completion > 0), 0.0)
-                        END, 0.0) as percentage,
-                    CASE 
-                        WHEN cc.timecompleted > 0 THEN 'completed'
-                        WHEN (
-                            SELECT 
-                                CASE 
-                                    WHEN COUNT(cm.id) = 0 THEN 0.0
-                                    ELSE (COUNT(CASE WHEN cmc.completionstate = 1 THEN 1 END) * 100.0 / COUNT(cm.id))
-                                END
-                            FROM {course_modules} cm
-                            LEFT JOIN {course_modules_completion} cmc ON cmc.coursemoduleid = cm.id AND cmc.userid = u.id
-                            WHERE cm.course = c.id AND cm.completion > 0
-                        ) >= 100.0 THEN 'completed'
-                        WHEN EXISTS(
-                            SELECT 1 FROM {course_modules_completion} cmc
-                            JOIN {course_modules} cm ON cm.id = cmc.coursemoduleid
-                            WHERE cm.course = c.id AND cmc.userid = u.id AND cmc.completionstate > 0
-                        ) THEN 'in_progress'
-                        WHEN ue.id IS NOT NULL THEN 'not_started'
-                        ELSE 'not_enrolled'
-                    END as status
-                FROM {user} u
-                JOIN {company_users} cu ON cu.userid = u.id
-                JOIN {user_enrolments} ue ON ue.userid = u.id
+            $enrollment_sql = "
+                SELECT DISTINCT CONCAT(ue.userid, '-', e.courseid) as id, ue.userid, e.courseid
+                FROM {user_enrolments} ue
                 JOIN {enrol} e ON e.id = ue.enrolid
-                JOIN {course} c ON c.id = e.courseid
-                LEFT JOIN {course_completions} cc ON cc.userid = u.id AND cc.course = c.id
-                JOIN {role_assignments} ra ON ra.userid = u.id
-                JOIN {context} ctx ON ctx.id = ra.contextid AND ctx.contextlevel = 50 AND ctx.instanceid = c.id
+                JOIN {company_users} cu ON cu.userid = ue.userid
+                JOIN {context} ctx ON ctx.contextlevel = 50 AND ctx.instanceid = e.courseid
+                JOIN {role_assignments} ra ON ra.userid = ue.userid AND ra.contextid = ctx.id
                 JOIN {role} r ON r.id = ra.roleid AND r.shortname = 'student'
+                JOIN {user} u ON u.id = ue.userid
                 WHERE cu.companyid = :companyid
-                    AND u.deleted = 0
-                    AND u.suspended = 0
-                    AND c.visible = 1
-                    AND c.id $course_sql
-                    AND ue.status = 0
-                ORDER BY u.id, c.id";
+                AND e.courseid $course_sql
+                AND ue.status = 0
+                AND u.deleted = 0
+                AND u.suspended = 0
+                ORDER BY ue.userid, e.courseid";
             
             $params = array_merge(['companyid' => $company->id], $course_params);
             
             // DEBUG: Log SQL query
             error_log("DEBUG populate_reporting_table: SQL query params - " . print_r($params, true));
             
-            // Process in batches
-            $offset = 0;
+            // Get all user-course combinations
+            $user_course_combinations = $DB->get_records_sql($enrollment_sql, $params);
+            
+            error_log("DEBUG populate_reporting_table: Found " . count($user_course_combinations) . " user-course combinations");
+            
+            if (empty($user_course_combinations)) {
+                error_log("DEBUG populate_reporting_table: No enrollments found for company {$company->id}");
+                continue;
+            }
+            
+            // Step 2: Process each user-course combination using the update function
             $batch_count = 0;
-            while (true) {
-                $records = $DB->get_records_sql($sql, $params, $offset, $batch_size);
-                $batch_count++;
-                error_log("DEBUG populate_reporting_table: Batch $batch_count - Fetched " . count($records) . " records at offset $offset");
+            $batch_inserted = 0;
+            $batch_updated = 0;
+            $processed_count = 0;
+            
+            foreach ($user_course_combinations as $combination) {
+                $processed_count++;
                 
-                if (empty($records)) {
-                    error_log("DEBUG populate_reporting_table: No more records, breaking loop");
-                    break;
+                // Use the existing update function to populate/update the record
+                $result = local_alx_report_api_update_reporting_record(
+                    $combination->userid,
+                    $company->id,
+                    $combination->courseid
+                );
+                
+                if ($result['created']) {
+                    $batch_inserted++;
+                    $company_inserted++;
+                } elseif ($result['updated']) {
+                    $batch_updated++;
                 }
                 
-                $batch_inserted = 0;
-                $batch_updated = 0;
-                $current_time = time();
-                
-                foreach ($records as $record) {
-                    // Check if record already exists
-                    $existing = $DB->get_record(\local_alx_report_api\constants::TABLE_REPORTING, [
-                        'userid' => $record->userid,
-                        'courseid' => $record->courseid,
-                        'companyid' => $company->id
-                    ]);
+                // Log progress every batch_size records
+                if ($processed_count % $batch_size == 0) {
+                    $batch_count++;
+                    error_log("DEBUG populate_reporting_table: Batch $batch_count - Processed: $processed_count, Inserted: $batch_inserted, Updated: $batch_updated");
                     
-                    if (!$existing) {
-                        // Insert new record
-                        error_log("DEBUG populate_reporting_table: INSERTING new record - User {$record->userid}, Course {$record->courseid}");
-                        $reporting_record = new stdClass();
-                        $reporting_record->userid = $record->userid;
-                        $reporting_record->companyid = $company->id;
-                        $reporting_record->courseid = $record->courseid;
-                        $reporting_record->firstname = $record->firstname;
-                        $reporting_record->lastname = $record->lastname;
-                        $reporting_record->email = $record->email;
-                        $reporting_record->username = $record->username;
-                        $reporting_record->coursename = $record->coursename;
-                        $reporting_record->timecompleted = $record->timecompleted;
-                        $reporting_record->timestarted = $record->timestarted;
-                        $reporting_record->percentage = $record->percentage;
-                        $reporting_record->status = $record->status;
-                        $reporting_record->last_updated = $current_time;
-                        $reporting_record->is_deleted = 0;
-                        $reporting_record->timecreated = $current_time;
-                        $reporting_record->timemodified = $current_time;
-                        
-                        $DB->insert_record(\local_alx_report_api\constants::TABLE_REPORTING, $reporting_record);
-                        $batch_inserted++;
-                        $company_inserted++;
-                    } else {
-                        // Update existing record
-                        error_log("DEBUG populate_reporting_table: UPDATING existing record - User {$record->userid}, Course {$record->courseid}");
-                        $existing->firstname = $record->firstname;
-                        $existing->lastname = $record->lastname;
-                        $existing->email = $record->email;
-                        $existing->username = $record->username;
-                        $existing->coursename = $record->coursename;
-                        $existing->timecompleted = $record->timecompleted;
-                        $existing->timestarted = $record->timestarted;
-                        $existing->percentage = $record->percentage;
-                        $existing->status = $record->status;
-                        $existing->last_updated = $current_time;
-                        $existing->timemodified = $current_time;
-                        
-                        $DB->update_record(\local_alx_report_api\constants::TABLE_REPORTING, $existing);
-                        $batch_updated++;
+                    // Output progress for web interface
+                    if ($output_progress && !defined('CLI_SCRIPT')) {
+                        $is_cli = (php_sapi_name() === 'cli');
+                        if (!$is_cli) {
+                            $percentage = round(($current_company / $total_companies) * 100);
+                            echo '<script>updateProgress(' . ($total_processed + $processed_count) . ', ' . ($total_inserted + $company_inserted) . ', ' . $companies_processed . ', ' . $percentage . ');</script>';
+                            flush();
+                        }
                     }
                 }
                 
-                error_log("DEBUG populate_reporting_table: Batch complete - Inserted: $batch_inserted, Updated: $batch_updated");
-                
-                $company_processed += count($records);
-                $offset += $batch_size;
-                
-                // Break if we got fewer records than batch size (end of data)
-                if (count($records) < $batch_size) {
-                    break;
-                }
+                $company_processed++;
+            }
+            
+            // Final batch log
+            if ($processed_count % $batch_size != 0) {
+                $batch_count++;
+                error_log("DEBUG populate_reporting_table: Final batch $batch_count - Processed: $processed_count, Inserted: $batch_inserted, Updated: $batch_updated");
             }
             
             $total_processed += $company_processed;
@@ -840,8 +770,8 @@ function local_alx_report_api_update_reporting_record($userid, $companyid, $cour
             LEFT JOIN {enrol} e ON e.id = ue.enrolid AND e.courseid = :courseid
             JOIN {course} c ON c.id = :courseid2
             LEFT JOIN {course_completions} cc ON cc.userid = u.id AND cc.course = c.id
-            JOIN {role_assignments} ra ON ra.userid = u.id
-            JOIN {context} ctx ON ctx.id = ra.contextid AND ctx.contextlevel = 50 AND ctx.instanceid = c.id
+            JOIN {context} ctx ON ctx.contextlevel = 50 AND ctx.instanceid = c.id
+            JOIN {role_assignments} ra ON ra.userid = u.id AND ra.contextid = ctx.id
             JOIN {role} r ON r.id = ra.roleid AND r.shortname = 'student'
             WHERE u.id = :userid
                 AND cu.companyid = :companyid
@@ -1019,8 +949,8 @@ function local_alx_report_api_sync_recent_changes($companyid = 0, $hours_back = 
                     SELECT DISTINCT CONCAT(cc.userid, '-', cc.course) as id, cc.userid, cc.course as courseid
                     FROM {course_completions} cc
                     JOIN {company_users} cu ON cu.userid = cc.userid
-                    JOIN {role_assignments} ra ON ra.userid = cc.userid
-                    JOIN {context} ctx ON ctx.id = ra.contextid AND ctx.contextlevel = 50 AND ctx.instanceid = cc.course
+                    JOIN {context} ctx ON ctx.contextlevel = 50 AND ctx.instanceid = cc.course
+                    JOIN {role_assignments} ra ON ra.userid = cc.userid AND ra.contextid = ctx.id
                     JOIN {role} r ON r.id = ra.roleid AND r.shortname = 'student'
                     WHERE cc.timecompleted > :cutoff_time 
                     AND cu.companyid = :companyid
@@ -1057,8 +987,8 @@ function local_alx_report_api_sync_recent_changes($companyid = 0, $hours_back = 
                     FROM {course_modules_completion} cmc
                     JOIN {course_modules} cm ON cm.id = cmc.coursemoduleid
                     JOIN {company_users} cu ON cu.userid = cmc.userid
-                    JOIN {role_assignments} ra ON ra.userid = cmc.userid
-                    JOIN {context} ctx ON ctx.id = ra.contextid AND ctx.contextlevel = 50 AND ctx.instanceid = cm.course
+                    JOIN {context} ctx ON ctx.contextlevel = 50 AND ctx.instanceid = cm.course
+                    JOIN {role_assignments} ra ON ra.userid = cmc.userid AND ra.contextid = ctx.id
                     JOIN {role} r ON r.id = ra.roleid AND r.shortname = 'student'
                     WHERE cmc.timemodified > :cutoff_time 
                     AND cu.companyid = :companyid
@@ -1115,8 +1045,8 @@ function local_alx_report_api_sync_recent_changes($companyid = 0, $hours_back = 
                         FROM {user_enrolments} ue
                         JOIN {enrol} e ON e.id = ue.enrolid
                         JOIN {company_users} cu ON cu.userid = ue.userid
-                        JOIN {role_assignments} ra ON ra.userid = ue.userid
-                        JOIN {context} ctx ON ctx.id = ra.contextid AND ctx.contextlevel = 50 AND ctx.instanceid = e.courseid
+                        JOIN {context} ctx ON ctx.contextlevel = 50 AND ctx.instanceid = e.courseid
+                        JOIN {role_assignments} ra ON ra.userid = ue.userid AND ra.contextid = ctx.id
                         JOIN {role} r ON r.id = ra.roleid AND r.shortname = 'student'
                         WHERE ue.userid $user_sql
                         AND cu.companyid = :companyid
@@ -1138,8 +1068,8 @@ function local_alx_report_api_sync_recent_changes($companyid = 0, $hours_back = 
                     FROM {user} u
                     JOIN {company_users} cu ON cu.userid = u.id
                     JOIN {local_alx_api_reporting} r ON r.userid = u.id AND r.companyid = cu.companyid
-                    JOIN {role_assignments} ra ON ra.userid = u.id
-                    JOIN {context} ctx ON ctx.id = ra.contextid AND ctx.contextlevel = 50 AND ctx.instanceid = r.courseid
+                    JOIN {context} ctx ON ctx.contextlevel = 50 AND ctx.instanceid = r.courseid
+                    JOIN {role_assignments} ra ON ra.userid = u.id AND ra.contextid = ctx.id
                     JOIN {role} r2 ON r2.id = ra.roleid AND r2.shortname = 'student'
                     WHERE u.timemodified > :cutoff_time
                     AND cu.companyid = :companyid

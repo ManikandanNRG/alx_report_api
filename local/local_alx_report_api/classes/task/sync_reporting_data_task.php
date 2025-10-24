@@ -269,9 +269,12 @@ class sync_reporting_data_task extends \core\task\scheduled_task {
                 list($user_sql, $user_params) = $DB->get_in_or_equal($user_ids, SQL_PARAMS_NAMED, 'user');
                 
                 $all_enrollments_sql = "
-                    SELECT DISTINCT ue.userid, e.courseid
+                    SELECT DISTINCT CONCAT(ue.userid, '-', e.courseid) as id, ue.userid, e.courseid
                     FROM {user_enrolments} ue
                     JOIN {enrol} e ON e.id = ue.enrolid
+                    JOIN {context} ctx ON ctx.contextlevel = 50 AND ctx.instanceid = e.courseid
+                    JOIN {role_assignments} ra ON ra.userid = ue.userid AND ra.contextid = ctx.id
+                    JOIN {role} r ON r.id = ra.roleid AND r.shortname = 'student'
                     WHERE ue.userid $user_sql 
                     AND ue.status = 0
                     AND EXISTS (
