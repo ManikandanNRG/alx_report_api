@@ -254,7 +254,7 @@ class sync_reporting_data_task extends \core\task\scheduled_task {
         try {
             // Step 1: Find users who have recent enrollment changes
             $users_with_enrollment_changes_sql = "
-                SELECT DISTINCT ue.userid
+                SELECT DISTINCT ue.userid as id
                 FROM {user_enrolments} ue
                 JOIN {enrol} e ON e.id = ue.enrolid
                 WHERE ue.timemodified > :cutoff_time AND EXISTS (
@@ -262,6 +262,12 @@ class sync_reporting_data_task extends \core\task\scheduled_task {
                     WHERE cu.userid = ue.userid AND cu.companyid = :companyid
                 )";
             $users_with_changes = $DB->get_records_sql($users_with_enrollment_changes_sql, $params);
+            
+            // DEBUG: Log Step 1 results
+            $this->log_message("DEBUG: Step 1 - Found " . count($users_with_changes) . " users with enrollment changes");
+            if (!empty($users_with_changes)) {
+                $this->log_message("DEBUG: Step 1 - User IDs: " . implode(', ', array_keys($users_with_changes)));
+            }
             
             // Step 2: For each user with enrollment changes, get ALL their course enrollments
             if (!empty($users_with_changes)) {
@@ -284,11 +290,20 @@ class sync_reporting_data_task extends \core\task\scheduled_task {
                 
                 $all_params = array_merge($user_params, ['companyid' => $companyid]);
                 $enrollment_changes = $DB->get_records_sql($all_enrollments_sql, $all_params);
+                
+                // DEBUG: Log Step 2 results
+                $this->log_message("DEBUG: Step 2 - Found " . count($enrollment_changes) . " total enrollments for these users");
+                if (!empty($enrollment_changes)) {
+                    foreach ($enrollment_changes as $enr) {
+                        $this->log_message("DEBUG: Step 2 - Enrollment: User {$enr->userid}, Course {$enr->courseid}");
+                    }
+                }
             } else {
                 $enrollment_changes = [];
             }
         } catch (\Exception $e) {
             $stats['errors'][] = "Error querying enrollments: " . $e->getMessage();
+            $this->log_message("DEBUG: Exception in enrollment query: " . $e->getMessage());
         }
         
         // Find users with recent profile changes (firstname, lastname, email, username)
