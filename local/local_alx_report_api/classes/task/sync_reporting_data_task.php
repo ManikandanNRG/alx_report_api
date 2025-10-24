@@ -221,7 +221,7 @@ class sync_reporting_data_task extends \core\task\scheduled_task {
             $completion_sql = "
                 SELECT DISTINCT cc.userid, cc.course as courseid
                 FROM {course_completions} cc
-                WHERE cc.timecompleted >= :cutoff_time AND EXISTS (
+                WHERE cc.timecompleted > :cutoff_time AND EXISTS (
                     SELECT 1 FROM {company_users} cu
                     WHERE cu.userid = cc.userid AND cu.companyid = :companyid
                 )";
@@ -240,7 +240,7 @@ class sync_reporting_data_task extends \core\task\scheduled_task {
                 SELECT DISTINCT cmc.userid, cm.course as courseid
                 FROM {course_modules_completion} cmc
                 JOIN {course_modules} cm ON cm.id = cmc.coursemoduleid
-                WHERE cmc.timemodified >= :cutoff_time AND EXISTS (
+                WHERE cmc.timemodified > :cutoff_time AND EXISTS (
                     SELECT 1 FROM {company_users} cu
                     WHERE cu.userid = cmc.userid AND cu.companyid = :companyid
                 )";
@@ -250,16 +250,40 @@ class sync_reporting_data_task extends \core\task\scheduled_task {
         }
             
             // Find users with recent enrollment changes
+        // BUG FIX #12: When a user has ANY enrollment change, sync ALL their courses
         try {
-            $enrollment_sql = "
-                SELECT DISTINCT ue.userid, e.courseid
+            // Step 1: Find users who have recent enrollment changes
+            $users_with_enrollment_changes_sql = "
+                SELECT DISTINCT ue.userid
                 FROM {user_enrolments} ue
                 JOIN {enrol} e ON e.id = ue.enrolid
-                WHERE ue.timemodified >= :cutoff_time AND EXISTS (
+                WHERE ue.timemodified > :cutoff_time AND EXISTS (
                     SELECT 1 FROM {company_users} cu
                     WHERE cu.userid = ue.userid AND cu.companyid = :companyid
                 )";
-            $enrollment_changes = $DB->get_records_sql($enrollment_sql, $params);
+            $users_with_changes = $DB->get_records_sql($users_with_enrollment_changes_sql, $params);
+            
+            // Step 2: For each user with enrollment changes, get ALL their course enrollments
+            if (!empty($users_with_changes)) {
+                $user_ids = array_keys($users_with_changes);
+                list($user_sql, $user_params) = $DB->get_in_or_equal($user_ids, SQL_PARAMS_NAMED, 'user');
+                
+                $all_enrollments_sql = "
+                    SELECT DISTINCT ue.userid, e.courseid
+                    FROM {user_enrolments} ue
+                    JOIN {enrol} e ON e.id = ue.enrolid
+                    WHERE ue.userid $user_sql 
+                    AND ue.status = 0
+                    AND EXISTS (
+                        SELECT 1 FROM {company_users} cu
+                        WHERE cu.userid = ue.userid AND cu.companyid = :companyid
+                    )";
+                
+                $all_params = array_merge($user_params, ['companyid' => $companyid]);
+                $enrollment_changes = $DB->get_records_sql($all_enrollments_sql, $all_params);
+            } else {
+                $enrollment_changes = [];
+            }
         } catch (\Exception $e) {
             $stats['errors'][] = "Error querying enrollments: " . $e->getMessage();
         }
@@ -272,7 +296,7 @@ class sync_reporting_data_task extends \core\task\scheduled_task {
                 FROM {user} u
                 JOIN {company_users} cu ON cu.userid = u.id
                 JOIN {local_alx_api_reporting} r ON r.userid = u.id AND r.companyid = cu.companyid
-                WHERE u.timemodified >= :cutoff_time
+                WHERE u.timemodified > :cutoff_time
                 AND cu.companyid = :companyid
                 AND u.deleted = 0
                 AND u.suspended = 0
@@ -285,42 +309,42 @@ class sync_reporting_data_task extends \core\task\scheduled_task {
         // Combine all changes and get unique users/courses to update
         $all_changes = array_merge($completion_changes, $module_changes, $enrollment_changes, $user_profile_changes);
         
-        if (empty($all_changes)) {
-            return $stats;
-        }
-
-        $updates_to_process = [];
-        foreach ($all_changes as $change) {
-            $key = "{$change->userid}-{$change->courseid}";
-            if (!isset($updates_to_process[$key])) {
-                $updates_to_process[$key] = $change;
-            }
-        }
-
-        foreach ($updates_to_process as $update) {
-            // Check timeout during processing
-            if (time() - $start_time > $max_execution_time - 60) {
-                $this->log_message("Timeout approaching during company {$companyid} processing, stopping early");
-                $stats['errors'][] = "Processing stopped early due to timeout";
-                break;
-            }
-            
-            try {
-                $update_result = local_alx_report_api_update_reporting_record($update->userid, $companyid, $update->courseid);
-                
-                if ($update_result['created']) {
-                    $stats['records_created']++;
-                } else if ($update_result['updated']) {
-                    $stats['records_updated']++;
-                } else if (isset($update_result['deleted']) && $update_result['deleted']) {
-                    if (!isset($stats['records_deleted'])) {
-                        $stats['records_deleted'] = 0;
-                    }
-                    $stats['records_deleted']++;
+        // BUG FIX #11: Don't return early - always run deletion detection even if no updates
+        // Process updates only if there are changes
+        if (!empty($all_changes)) {
+            $updates_to_process = [];
+            foreach ($all_changes as $change) {
+                $key = "{$change->userid}-{$change->courseid}";
+                if (!isset($updates_to_process[$key])) {
+                    $updates_to_process[$key] = $change;
                 }
-            } catch (\Exception $e) {
-                $error_msg = "Error updating user {$update->userid}, course {$update->courseid}: " . $e->getMessage();
-                $stats['errors'][] = $error_msg;
+            }
+
+            foreach ($updates_to_process as $update) {
+                // Check timeout during processing
+                if (time() - $start_time > $max_execution_time - 60) {
+                    $this->log_message("Timeout approaching during company {$companyid} processing, stopping early");
+                    $stats['errors'][] = "Processing stopped early due to timeout";
+                    break;
+                }
+                
+                try {
+                    $update_result = local_alx_report_api_update_reporting_record($update->userid, $companyid, $update->courseid);
+                    
+                    if ($update_result['created']) {
+                        $stats['records_created']++;
+                    } else if ($update_result['updated']) {
+                        $stats['records_updated']++;
+                    } else if (isset($update_result['deleted']) && $update_result['deleted']) {
+                        if (!isset($stats['records_deleted'])) {
+                            $stats['records_deleted'] = 0;
+                        }
+                        $stats['records_deleted']++;
+                    }
+                } catch (\Exception $e) {
+                    $error_msg = "Error updating user {$update->userid}, course {$update->courseid}: " . $e->getMessage();
+                    $stats['errors'][] = $error_msg;
+                }
             }
         }
         
@@ -386,8 +410,13 @@ class sync_reporting_data_task extends \core\task\scheduled_task {
             $stats['errors'][] = "Deletion detection error: " . $e->getMessage();
         }
         
-        $updated_user_ids = array_unique(array_map(function($c) { return $c->userid; }, $updates_to_process));
-        $stats['users_updated'] = count($updated_user_ids);
+        // Calculate users updated (only if updates were processed)
+        if (!empty($all_changes)) {
+            $updated_user_ids = array_unique(array_map(function($c) { return $c->userid; }, $updates_to_process));
+            $stats['users_updated'] = count($updated_user_ids);
+        } else {
+            $stats['users_updated'] = 0;
+        }
         
         return $stats;
     }

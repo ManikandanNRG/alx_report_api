@@ -180,6 +180,7 @@ if ($action && $confirm && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 echo "Total processed: " . $result['total_processed'] . "\n";
                 echo "Records created: " . $sync_details['created_records'] . "\n";
                 echo "Records updated: " . $sync_details['updated_records'] . "\n";
+                echo "Records deleted: " . (isset($result['records_deleted']) ? $result['records_deleted'] : 0) . "\n";
                 echo "Companies processed: " . $result['companies_processed'] . "\n";
                 break;
                 
@@ -223,6 +224,7 @@ if ($action && $confirm && $_SERVER['REQUEST_METHOD'] === 'POST') {
                     echo "Total processed: " . $result['total_processed'] . "\n";
                     echo "Records created: " . $sync_details['created_records'] . "\n";
                     echo "Records updated: " . $sync_details['updated_records'] . "\n";
+                    echo "Records deleted: " . (isset($result['records_deleted']) ? $result['records_deleted'] : 0) . "\n";
                 } else {
                     echo "ERROR: Full sync requires a specific company\n";
                     $result = ['errors' => ['Full sync requires a specific company']];
@@ -469,9 +471,11 @@ if ($action && $confirm && $_SERVER['REQUEST_METHOD'] === 'POST') {
         echo '<!-- DEBUG result: ' . htmlspecialchars(print_r($result, true)) . ' -->';
         echo '<!-- DEBUG sync_details: ' . htmlspecialchars(print_r($sync_details, true)) . ' -->';
         $total_processed_value = isset($result['total_processed']) ? $result['total_processed'] : 0;
+        $records_deleted_value = isset($result['records_deleted']) ? $result['records_deleted'] : 0;
         echo '<div class="stat-row"><span class="stat-label">Records Processed:</span><span class="stat-value">' . $total_processed_value . '</span></div>';
         echo '<div class="stat-row"><span class="stat-label">Records Created:</span><span class="stat-value" style="color: #10b981;">' . $sync_details['created_records'] . '</span></div>';
         echo '<div class="stat-row"><span class="stat-label">Records Updated:</span><span class="stat-value" style="color: #3b82f6;">' . $sync_details['updated_records'] . '</span></div>';
+        echo '<div class="stat-row"><span class="stat-label">Records Deleted:</span><span class="stat-value" style="color: #ef4444;">' . $records_deleted_value . '</span></div>';
         echo '<div class="stat-row"><span class="stat-label">Duration:</span><span class="stat-value">' . $duration . ' seconds</span></div>';
         echo '</div>';
         

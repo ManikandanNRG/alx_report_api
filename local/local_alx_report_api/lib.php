@@ -847,7 +847,8 @@ function local_alx_report_api_update_reporting_record($userid, $companyid, $cour
                 AND cu.companyid = :companyid
                 AND u.deleted = 0
                 AND u.suspended = 0
-                AND c.visible = 1";
+                AND c.visible = 1
+                AND (ue.status = 0 OR ue.status IS NULL)";
         
         $params = [
             'userid' => $userid,
@@ -975,7 +976,6 @@ function local_alx_report_api_sync_recent_changes($companyid = 0, $hours_back = 
     global $DB;
     
     $start_time = time();
-    $cutoff_time = $start_time - ($hours_back * 3600);
     
     $stats = [
         'success' => true,
@@ -999,6 +999,18 @@ function local_alx_report_api_sync_recent_changes($companyid = 0, $hours_back = 
             if (!$company) continue;
             
             $stats['companies_processed']++;
+            
+            // BUG FIX #10: Check for last sync timestamp to avoid time overlap with auto sync
+            // Use a different token for manual sync to track separately from auto sync
+            $manual_token = 'manual_sync_' . $company->id;
+            $last_sync = $DB->get_field(\local_alx_report_api\constants::TABLE_SYNC_STATUS, 'last_sync_timestamp', [
+                'companyid' => $company->id,
+                'token_hash' => hash('sha256', $manual_token)
+            ]);
+            
+            // If no last sync found, use the hours_back parameter
+            $cutoff_time = $last_sync ? $last_sync : ($start_time - ($hours_back * 3600));
+            
             $company_changes = [];
             
             // 1. Find users with recent course completion changes
@@ -1010,7 +1022,7 @@ function local_alx_report_api_sync_recent_changes($companyid = 0, $hours_back = 
                     JOIN {role_assignments} ra ON ra.userid = cc.userid
                     JOIN {context} ctx ON ctx.id = ra.contextid AND ctx.contextlevel = 50 AND ctx.instanceid = cc.course
                     JOIN {role} r ON r.id = ra.roleid AND r.shortname = 'student'
-                    WHERE cc.timecompleted >= :cutoff_time 
+                    WHERE cc.timecompleted > :cutoff_time 
                     AND cu.companyid = :companyid
                     AND (
                         NOT EXISTS (
@@ -1048,7 +1060,7 @@ function local_alx_report_api_sync_recent_changes($companyid = 0, $hours_back = 
                     JOIN {role_assignments} ra ON ra.userid = cmc.userid
                     JOIN {context} ctx ON ctx.id = ra.contextid AND ctx.contextlevel = 50 AND ctx.instanceid = cm.course
                     JOIN {role} r ON r.id = ra.roleid AND r.shortname = 'student'
-                    WHERE cmc.timemodified >= :cutoff_time 
+                    WHERE cmc.timemodified > :cutoff_time 
                     AND cu.companyid = :companyid
                     AND (
                         NOT EXISTS (
@@ -1077,39 +1089,44 @@ function local_alx_report_api_sync_recent_changes($companyid = 0, $hours_back = 
             }
             
             // 3. Find users with recent enrollment changes
+            // BUG FIX #12: When a user has ANY enrollment change, sync ALL their courses
             try {
-                $enrollment_sql = "
-                    SELECT DISTINCT CONCAT(ue.userid, '-', e.courseid) as id, ue.userid, e.courseid
+                // Step 1: Find users who have recent enrollment changes
+                $users_with_enrollment_changes_sql = "
+                    SELECT DISTINCT ue.userid
                     FROM {user_enrolments} ue
                     JOIN {enrol} e ON e.id = ue.enrolid
                     JOIN {company_users} cu ON cu.userid = ue.userid
-                    JOIN {role_assignments} ra ON ra.userid = ue.userid
-                    JOIN {context} ctx ON ctx.id = ra.contextid AND ctx.contextlevel = 50 AND ctx.instanceid = e.courseid
-                    JOIN {role} r ON r.id = ra.roleid AND r.shortname = 'student'
-                    WHERE ue.timemodified >= :cutoff_time 
-                    AND cu.companyid = :companyid
-                    AND (
-                        NOT EXISTS (
-                            SELECT 1 FROM {local_alx_api_reporting} r
-                            WHERE r.userid = ue.userid 
-                            AND r.courseid = e.courseid
-                            AND r.companyid = cu.companyid
-                        )
-                        OR EXISTS (
-                            SELECT 1 FROM {local_alx_api_reporting} r
-                            WHERE r.userid = ue.userid 
-                            AND r.courseid = e.courseid
-                            AND r.companyid = cu.companyid
-                            AND ue.timemodified > r.last_updated
-                        )
-                    )";
+                    WHERE ue.timemodified > :cutoff_time 
+                    AND cu.companyid = :companyid";
                 
-                $enrollment_changes = $DB->get_records_sql($enrollment_sql, [
+                $users_with_changes = $DB->get_records_sql($users_with_enrollment_changes_sql, [
                     'cutoff_time' => $cutoff_time,
                     'companyid' => $company->id
                 ]);
                 
-                $company_changes = array_merge($company_changes, $enrollment_changes);
+                // Step 2: For each user with enrollment changes, get ALL their course enrollments
+                if (!empty($users_with_changes)) {
+                    $user_ids = array_keys($users_with_changes);
+                    list($user_sql, $user_params) = $DB->get_in_or_equal($user_ids, SQL_PARAMS_NAMED, 'user');
+                    
+                    $all_enrollments_sql = "
+                        SELECT DISTINCT CONCAT(ue.userid, '-', e.courseid) as id, ue.userid, e.courseid
+                        FROM {user_enrolments} ue
+                        JOIN {enrol} e ON e.id = ue.enrolid
+                        JOIN {company_users} cu ON cu.userid = ue.userid
+                        JOIN {role_assignments} ra ON ra.userid = ue.userid
+                        JOIN {context} ctx ON ctx.id = ra.contextid AND ctx.contextlevel = 50 AND ctx.instanceid = e.courseid
+                        JOIN {role} r ON r.id = ra.roleid AND r.shortname = 'student'
+                        WHERE ue.userid $user_sql
+                        AND cu.companyid = :companyid
+                        AND ue.status = 0";
+                    
+                    $all_params = array_merge($user_params, ['companyid' => $company->id]);
+                    $enrollment_changes = $DB->get_records_sql($all_enrollments_sql, $all_params);
+                    
+                    $company_changes = array_merge($company_changes, $enrollment_changes);
+                }
             } catch (Exception $e) {
                 $stats['errors'][] = "Company {$company->id} enrollment query error: " . $e->getMessage();
             }
@@ -1124,7 +1141,7 @@ function local_alx_report_api_sync_recent_changes($companyid = 0, $hours_back = 
                     JOIN {role_assignments} ra ON ra.userid = u.id
                     JOIN {context} ctx ON ctx.id = ra.contextid AND ctx.contextlevel = 50 AND ctx.instanceid = r.courseid
                     JOIN {role} r2 ON r2.id = ra.roleid AND r2.shortname = 'student'
-                    WHERE u.timemodified >= :cutoff_time
+                    WHERE u.timemodified > :cutoff_time
                     AND cu.companyid = :companyid
                     AND u.deleted = 0
                     AND u.suspended = 0
@@ -1227,6 +1244,19 @@ function local_alx_report_api_sync_recent_changes($companyid = 0, $hours_back = 
             } catch (Exception $e) {
                 $stats['errors'][] = "Company {$company->id} deletion detection error: " . $e->getMessage();
             }
+            
+            // BUG FIX #10: Update sync status for manual sync to track last sync time
+            // This prevents time overlap when running manual sync after auto sync
+            $manual_token = 'manual_sync_' . $company->id;
+            $sync_status = empty($stats['errors']) ? 'success' : 'failed';
+            $error_message = empty($stats['errors']) ? null : implode('; ', $stats['errors']);
+            local_alx_report_api_update_sync_status(
+                $company->id,
+                $manual_token,
+                $stats['total_processed'],
+                $sync_status,
+                $error_message
+            );
         }
         
         $stats['duration_seconds'] = time() - $start_time;
